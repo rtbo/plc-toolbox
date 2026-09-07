@@ -1,0 +1,2 @@
+Build on Windows require a Visual Studio environment and LIBCLANG_PATH defined where libclang.dll can be found.
+This environment is setup with vsenv.bat

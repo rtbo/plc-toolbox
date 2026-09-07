@@ -1,7 +1,11 @@
 <script setup lang="ts">
-import HelloWorld from './components/HelloWorld.vue'
+import AddressBar from './components/AddressBar.vue';
+
+function handleBrowse(url: string) {
+  console.log('Browsing to:', url);
+}
 </script>
 
 <template>
-  <HelloWorld />
+  <AddressBar @browse="handleBrowse" />
 </template>
