@@ -38,10 +38,8 @@ async fn main() -> std::process::ExitCode {
 
 async fn run() -> Result<(), Error> {
     let client = AsyncClient::new("opc.tcp://192.168.1.110:4840")?;
-    let nid_nsarray = ua::NodeId::ns0(open62541_sys::UA_NS0ID_SERVER_NAMESPACEARRAY);
-    let nid_ns = ua::NodeId::ns0(open62541_sys::UA_NS0ID_SERVER_NAMESPACES);
-    browse(&client, &nid_nsarray).await?;
-    browse(&client, &nid_ns).await?;
+    let root = ua::NodeId::ns0(open62541_sys::UA_NS0ID_ROOTFOLDER);
+    browse(&client, &root).await?;
     Ok(())
 }
 

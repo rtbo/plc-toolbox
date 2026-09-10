@@ -1,9 +1,4 @@
-[package]
-name = "plc-toolbox"
-version = "0.1.0"
-edition = "2024"
+[workspace]
+resolver = "3"
+members = ["ua-browser/src-tauri", "ua-cat"]
 
-[dependencies]
-open62541 = "0.12.0"
-open62541-sys = "0.6.2"
-tokio = { version = "1.53.1", features = ["full"] }
