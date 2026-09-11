@@ -1,10 +1,10 @@
 [package]
-name = "app"
+name = "ua-browser"
 version = "0.1.0"
-description = "A Tauri App"
-authors = ["you"]
-license = ""
-repository = ""
+description = "A browser for OPC/UA devices"
+authors = ["Rémi Thebault"]
+license = "MIT"
+repository = "https://github.com/rtbo/plc-toolbox"
 edition = "2021"
 rust-version = "1.77.2"
 
