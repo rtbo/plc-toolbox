@@ -4,9 +4,18 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>ua-browser</title>
+    <title>UA Browser</title>
+    <script language="javascript">
+        const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+        document.documentElement.classList.toggle(
+            "dark",
+            localStorage.theme === "dark" ||
+            localStorage.theme === "system" && prefersDark ||
+            (!("theme" in localStorage) && prefersDark),
+        );
+    </script>
   </head>
-  <body>
+  <body class="bg-background text-content">
     <div id="app"></div>
     <script type="module" src="/src/main.ts"></script>
   </body>
