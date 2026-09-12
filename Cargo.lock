@@ -3789,6 +3789,8 @@ name = "ua-browser"
 version = "0.1.0"
 dependencies = [
  "log",
+ "open62541",
+ "open62541-sys",
  "serde",
  "serde_json",
  "tauri",

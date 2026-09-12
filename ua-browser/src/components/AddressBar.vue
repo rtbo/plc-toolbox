@@ -15,6 +15,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   (e: "connect", url: string): void;
   (e: "disconnect"): void;
+  (e: "reset-error"): void;
 }>();
 
 const address = ref("192.168.0.1");
@@ -112,6 +113,7 @@ function capitalize(str: string) {
       >
         <span class="mr-2">opc.tcp://</span>
         <input
+          @input="$emit('reset-error')"
           class="bg-surface w-50 px-2"
           :disabled="!canEdit"
           type="text"
@@ -121,6 +123,7 @@ function capitalize(str: string) {
         <span class="mx-1">:</span>
 
         <input
+          @input="$emit('reset-error')"
           type="number"
           class="bg-surface w-18"
           v-model="port"
