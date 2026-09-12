@@ -37,16 +37,30 @@ async fn main() -> std::process::ExitCode {
 }
 
 async fn run() -> Result<(), Error> {
-    let client = AsyncClient::new("opc.tcp://192.168.1.110:4840")?;
+    let client = AsyncClient::new("opc.tcp://192.168.0.1:4840")?;
     let root = ua::NodeId::ns0(open62541_sys::UA_NS0ID_ROOTFOLDER);
-    browse(&client, &root).await?;
+    browse(&client, &root, 0).await?;
     Ok(())
 }
 
-async fn browse(client: &AsyncClient, node_id: &ua::NodeId) -> Result<(), Error> {
+async fn browse(client: &AsyncClient, node_id: &ua::NodeId, indent: usize) -> Result<(), Error> {
+    for _ in 0..indent {
+        print!("  ");
+    }
+    print!("{}", node_id);
+    let display_name = client.read_attribute(node_id, &ua::AttributeId::DISPLAYNAME).await?;
+    if let Some(display_name) = display_name.scalar_value() {
+        let dname = display_name.to_value();
+        if let open62541::VariantValue::Scalar(open62541::ScalarValue::LocalizedText(lt)) = dname {
+            print!("     {}", lt.text());
+        }
+    }
+    println!();
+
     let browse_desc = ua::BrowseDescription::default().with_node_id(node_id);
-    let (refs, continuation) = client.browse(&browse_desc).await?;
-    println!("References: {:?}", refs);
-    println!("Continuation: {:?}", continuation);
+    let (refs, _) = client.browse(&browse_desc).await?;
+    for r in refs {
+        Box::pin(browse(client, &r.node_id().node_id(), indent + 1)).await?;
+    }
     Ok(())
 }

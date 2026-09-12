@@ -1,4 +1,3 @@
 [workspace]
 resolver = "3"
-members = ["ua-browser/src-tauri", "ua-cat"]
-
+members = ["ua-browser/src-tauri", "ua-cat", "tests/plc-mock"]

@@ -11,7 +11,6 @@
   "dependencies": {
     "@mdi/js": "^7.4.47",
     "@tauri-apps/api": "^2.11.1",
-    "mdi-vue": "^3.0.13",
     "vue": "^3.5.42"
   },
   "devDependencies": {

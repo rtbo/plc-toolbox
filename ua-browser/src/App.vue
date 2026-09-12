@@ -1,16 +1,17 @@
 <script setup lang="ts">
-import AddressBar from "./components/AddressBar.vue";
 import { ref } from "vue";
-import { invoke } from '@tauri-apps/api/core';
+import { invoke } from "@tauri-apps/api/core";
+import AddressBar from "./components/AddressBar.vue";
+import type { ConnectionState } from "./ua";
 
-
-const state = ref<"connected" | "disconnected" | "connecting" | "error">("disconnected");
+const state = ref<ConnectionState>("disconnected");
 
 async function handleConnect(url: string) {
   state.value = "connecting";
   try {
     await invoke("connect", { url });
     state.value = "connected";
+    await invoke("browse", { nodeId: "i=84" });
   } catch {
     state.value = "error";
   }

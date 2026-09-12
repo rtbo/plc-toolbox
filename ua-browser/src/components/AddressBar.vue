@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
+import type { ConnectionState } from "../ua";
 import {
   mdiLanConnect,
   mdiLanDisconnect,
@@ -10,7 +11,7 @@ import {
 import Icon from "./Icon.vue";
 
 const props = defineProps<{
-  state: "connected" | "disconnected" | "connecting" | "error";
+  state: ConnectionState;
 }>();
 const emit = defineEmits<{
   (e: "connect", url: string): void;
@@ -18,8 +19,10 @@ const emit = defineEmits<{
   (e: "reset-error"): void;
 }>();
 
-const address = ref("192.168.0.1");
-const port = ref(4840);
+const defaultAddress = import.meta.env.VITE_DEFAULT_ADDRESS || "192.168.0.1";
+const defaultPort = import.meta.env.VITE_DEFAULT_PORT || 4840;
+const address = ref(defaultAddress);
+const port = ref(defaultPort);
 
 function connect() {
   const url = `opc.tcp://${address.value}:${port.value}`;
@@ -91,7 +94,6 @@ function capitalize(str: string) {
 <template>
   <div class="address-bar w-full px-4 py-4">
     <div class="mx-auto flex max-w-4xl items-center">
-
       <!-- Icon indicating connection state -->
       <div class="flex items-center">
         <Icon
@@ -117,6 +119,7 @@ function capitalize(str: string) {
         <span class="mr-2">opc.tcp://</span>
         <input
           @input="$emit('reset-error')"
+          @keyup.enter="connect"
           class="bg-surface w-50 px-2"
           :disabled="!canEdit"
           type="text"
@@ -126,7 +129,8 @@ function capitalize(str: string) {
         <span class="mx-1">:</span>
 
         <input
-          @input="$emit('reset-error');"
+          @input="$emit('reset-error')"
+          @keyup.enter="connect"
           min="1"
           max="65535"
           pattern="[1-9][0-9]{0,4}"
@@ -134,7 +138,7 @@ function capitalize(str: string) {
           type="number"
           inputmode="numeric"
           class="port-input bg-surface w-18"
-          v-model="port" 
+          v-model="port"
           :disabled="!canEdit"
         />
         <button
