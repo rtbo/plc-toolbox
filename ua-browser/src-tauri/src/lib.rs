@@ -7,6 +7,15 @@ struct AppState {
   client: Option<AsyncClient>,
 }
 
+impl Drop for AppState {
+    fn drop(&mut self) {
+        if let Some(client) = self.client.take() {
+            // Disconnect the client when the AppState is dropped
+            tauri::async_runtime::block_on(client.disconnect());
+        }
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
   tauri::Builder::default()
