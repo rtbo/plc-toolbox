@@ -90,7 +90,9 @@ function capitalize(str: string) {
 
 <template>
   <div class="address-bar w-full px-4 py-4">
-    <div class="mx-auto max-w-4xl flex items-center">
+    <div class="mx-auto flex max-w-4xl items-center">
+
+      <!-- Icon indicating connection state -->
       <div class="flex items-center">
         <Icon
           :pathData="iconPath"
@@ -107,6 +109,7 @@ function capitalize(str: string) {
         />
       </div>
 
+      <!-- Address and port input fields -->
       <div
         class="mx-auto flex items-center rounded-lg border px-2 py-1"
         :class="addressClass"
@@ -123,10 +126,15 @@ function capitalize(str: string) {
         <span class="mx-1">:</span>
 
         <input
-          @input="$emit('reset-error')"
+          @input="$emit('reset-error');"
+          min="1"
+          max="65535"
+          pattern="[1-9][0-9]{0,4}"
+          step="1"
           type="number"
-          class="bg-surface w-18"
-          v-model="port"
+          inputmode="numeric"
+          class="port-input bg-surface w-18"
+          v-model="port" 
           :disabled="!canEdit"
         />
         <button
@@ -142,6 +150,7 @@ function capitalize(str: string) {
         </button>
       </div>
 
+      <!-- Connect/Disconnect button -->
       <div class="mx-2 flex w-36 items-center justify-center">
         <button
           v-if="props.state !== 'connected'"
@@ -171,3 +180,15 @@ function capitalize(str: string) {
     </div>
   </div>
 </template>
+
+<style lang="css" scoped>
+.port-input::-webkit-inner-spin-button,
+.port-input::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+.port-input {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+</style>
