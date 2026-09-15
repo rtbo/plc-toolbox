@@ -3,16 +3,26 @@ import { ref } from "vue";
 import { invoke } from "@tauri-apps/api/core";
 import AddressBar from "./components/AddressBar.vue";
 import type { ConnectionState } from "./ua";
+import { uaBrowse, uaReadAttribute } from "./ua";
 
 const state = ref<ConnectionState>("disconnected");
+
+const typeDefs: Map<string, any> = new Map();
 
 async function handleConnect(url: string) {
   state.value = "connecting";
   try {
     await invoke("connect", { url });
     state.value = "connected";
-    await invoke("browse", { nodeId: "i=84" });
-  } catch {
+    let refs = await uaBrowse("i=84");
+    for (const refDesc of refs) {
+      if (!typeDefs.has(refDesc.typeDefinition)) {
+        const td = await uaReadAttribute(refDesc.typeDefinition, "browse-name");
+        typeDefs.set(refDesc.typeDefinition, td);
+      }
+    }
+  } catch (e) {
+    console.error(e);
     state.value = "error";
   }
 }
