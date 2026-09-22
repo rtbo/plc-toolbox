@@ -1,13 +1,9 @@
-use open62541_sys::{
-    UA_Client, UA_Client_connectAsync, UA_Client_delete, UA_Client_disconnect, UA_Client_getConfig,
-    UA_Client_getState, UA_Client_new, UA_Client_run_iterate, UA_ClientConfig_setDefault,
-    UA_SessionState,
-};
 use std::ffi::CString;
 use std::ptr;
+
 use tokio::sync::{mpsc, oneshot, watch};
 
-use crate::{StatusCode, error::Error};
+use crate::{StatusCode, ffi, status_code};
 
 mod browse;
 
@@ -18,47 +14,52 @@ pub struct Client {
 }
 
 impl Client {
-    pub async fn connect(endpoint_url: &str) -> Result<Self, Error> {
+    pub fn new() -> Self {
         let (sender, receiver) = mpsc::channel(32);
-        let (state_tx, mut state_rx) = watch::channel(ConnectionState::Disconnected);
+        let (state_tx, state_rx) = watch::channel(ConnectionState::Disconnected);
 
-        let endpoint_url_c = CString::new(endpoint_url)
-            .map_err(|_| Error::from(StatusCode::BadInvalidArgument))?;
+        let mut actor = ClientActor::new(receiver, state_tx);
 
-        let client_ptr = unsafe {
-            let client_ptr = UA_Client_new();
-            UA_ClientConfig_setDefault(UA_Client_getConfig(client_ptr));
-
-            let retval: StatusCode = UA_Client_connectAsync(client_ptr, endpoint_url_c.as_ptr()).into();
-            retval.check()?;
-
-            client_ptr
-        };
-
-        let mut actor = ClientActor {
-            client_ptr,
-            receiver,
-            state_tx,
-        };
         tokio::spawn(async move {
             actor.run().await;
         });
 
-        let state = loop {
+        Client { sender, state_rx }
+    }
+
+    pub async fn connect(&self, url: impl Into<String>) -> status_code::Result<()> {
+        self.sender
+            .send(ClientCommand::Connect { url: url.into() })
+            .await
+            .expect("actor should be receptive");
+
+        self.expect_connection_state(ConnectionState::Connected)
+            .await
+    }
+
+    pub async fn disconnect(&self) -> status_code::Result<()> {
+        self.sender
+            .send(ClientCommand::Disconnect)
+            .await
+            .expect("actor should be receptive");
+
+        self.expect_connection_state(ConnectionState::Disconnected)
+            .await
+    }
+
+    async fn expect_connection_state(&self, expected: ConnectionState) -> status_code::Result<()> {
+        let mut state_rx = self.state_rx.clone();
+        loop {
             state_rx
                 .changed()
                 .await
                 .expect("state receiver should be valid");
-            match *state_rx.borrow() {
-                ConnectionState::Disconnected | ConnectionState::Connecting => continue,
-                state => break state,
-            }
-        };
 
-        match state {
-            ConnectionState::Connected => Ok(Client { sender, state_rx }),
-            ConnectionState::Error(status) => Err(Error::from(status)),
-            _ => unreachable!(),
+            match *state_rx.borrow() {
+                state if state == expected => return Ok(()),
+                ConnectionState::Error(status) => return Err(status),
+                _ => continue,
+            }
         }
     }
 
@@ -66,16 +67,7 @@ impl Client {
         self.state_rx.clone()
     }
 
-    pub async fn disconnect(&self) -> Result<(), Error> {
-        let (responder, receiver) = oneshot::channel();
-        self.sender
-            .send(ClientCommand::Disconnect { responder })
-            .await
-            .map_err(|_| Error::NotConnected)?;
-        receiver.await.map_err(|_| Error::NotConnected)?
-    }
-
-    pub async fn browse(&self, node_id: impl Into<String>) -> Result<(), Error> {
+    pub async fn browse(&self, node_id: impl Into<String>) -> status_code::Result<()> {
         let (responder, receiver) = oneshot::channel();
         self.sender
             .send(ClientCommand::Browse {
@@ -83,16 +75,9 @@ impl Client {
                 responder,
             })
             .await
-            .map_err(|_| Error::NotConnected)?;
-        receiver.await.map_err(|_| Error::NotConnected)?
-    }
-}
-
-impl Drop for Client {
-    fn drop(&mut self) {
-        if !self.sender.is_closed() {
-            let _ = self.sender.send(ClientCommand::Drop);
-        }
+            .expect("actor should be receptive");
+        receiver.await.expect("response should be received")?;
+        Ok(())
     }
 }
 
@@ -104,13 +89,13 @@ pub enum ConnectionState {
     Error(StatusCode),
 }
 
-impl From<(StatusCode, UA_SessionState)> for ConnectionState {
-    fn from((status, session_state): (StatusCode, UA_SessionState)) -> Self {
+impl From<(StatusCode, ffi::UA_SessionState)> for ConnectionState {
+    fn from((status, session_state): (StatusCode, ffi::UA_SessionState)) -> Self {
         match (status, session_state) {
-            (StatusCode::Good, UA_SessionState::UA_SESSIONSTATE_CLOSED) => {
+            (StatusCode::Good, ffi::UA_SessionState::UA_SESSIONSTATE_CLOSED) => {
                 ConnectionState::Disconnected
             }
-            (StatusCode::Good, UA_SessionState::UA_SESSIONSTATE_ACTIVATED) => {
+            (StatusCode::Good, ffi::UA_SessionState::UA_SESSIONSTATE_ACTIVATED) => {
                 ConnectionState::Connected
             }
             (StatusCode::Good, _) => ConnectionState::Connecting,
@@ -120,18 +105,18 @@ impl From<(StatusCode, UA_SessionState)> for ConnectionState {
 }
 
 enum ClientCommand {
+    Connect {
+        url: String,
+    },
+    Disconnect,
     Browse {
         node_id: String,
-        responder: oneshot::Sender<Result<(), Error>>,
+        responder: oneshot::Sender<status_code::Result<()>>,
     },
-    Disconnect {
-        responder: oneshot::Sender<Result<(), Error>>,
-    },
-    Drop,
 }
 
 struct ClientActor {
-    client_ptr: *mut UA_Client,
+    client_ptr: *mut ffi::UA_Client,
     receiver: mpsc::Receiver<ClientCommand>,
     state_tx: watch::Sender<ConnectionState>,
 }
@@ -139,11 +124,37 @@ struct ClientActor {
 unsafe impl Send for ClientActor {}
 
 impl ClientActor {
+    fn new(
+        receiver: mpsc::Receiver<ClientCommand>,
+        state_tx: watch::Sender<ConnectionState>,
+    ) -> Self {
+        let client_ptr = unsafe { ffi::UA_Client_new() };
+        unsafe {
+            ffi::UA_ClientConfig_setDefault(ffi::UA_Client_getConfig(client_ptr));
+        }
+
+        Self {
+            client_ptr,
+            receiver,
+            state_tx,
+        }
+    }
+}
+
+impl Drop for ClientActor {
+    fn drop(&mut self) {
+        unsafe {
+            ffi::UA_Client_delete(self.client_ptr);
+        }
+    }
+}
+
+impl ClientActor {
     async fn run(&mut self) {
         let mut last_state = ConnectionState::Disconnected;
-        let mut disconnecting: Option<oneshot::Sender<Result<(), Error>>> = None;
+        let mut last_sleep = std::time::Instant::now();
 
-        loop {
+        'main: loop {
             let state = self.state();
             if state != last_state {
                 last_state = state;
@@ -153,58 +164,31 @@ impl ClientActor {
                 }
             }
 
-            if disconnecting.is_some() {
-                match state {
-                    ConnectionState::Disconnected => {
-                        let responder = disconnecting.take().unwrap();
-                        let _ = responder.send(Ok(()));
-                        break;
-                    }
-                    ConnectionState::Error(err) => {
-                        let responder = disconnecting.take().unwrap();
-                        let _ = responder.send(Err(err.into()));
-                        break;
-                    }
-                    _ => {}
-                }
-            }
-
-            while let Ok(command) = self.receiver.try_recv() {
-                match command {
-                    ClientCommand::Disconnect { responder } => {
-                        disconnecting = Some(responder);
-                        if let Err(err) = self.handle_disconnect() {
-                            let responder = disconnecting.take().unwrap();
-                            let _ = responder.send(Err(err));
-                            break;
-                        }
-                    }
-                    ClientCommand::Drop => {
-                        break;
-                    }
-                    _ => {
-                        self.handle_command(command);
-                    }
+            loop {
+                match self.receiver.try_recv() {
+                    Ok(command) => self.handle_command(command),
+                    Err(mpsc::error::TryRecvError::Empty) => break,
+                    Err(mpsc::error::TryRecvError::Disconnected) => break 'main,
                 }
             }
 
             unsafe {
-                UA_Client_run_iterate(self.client_ptr, 0);
+                ffi::UA_Client_run_iterate(self.client_ptr, 0);
             }
 
-            tokio::time::sleep(std::time::Duration::from_millis(50)).await;
-        }
-
-        unsafe {
-            UA_Client_delete(self.client_ptr);
+            let now = std::time::Instant::now();
+            let elapsed = now.duration_since(last_sleep);
+            last_sleep = now;
+            let sleep_dur = std::time::Duration::from_millis(50).saturating_sub(elapsed);
+            tokio::time::sleep(sleep_dur).await;
         }
     }
 
     fn state(&self) -> ConnectionState {
-        let mut state = open62541_sys::UA_STATUSCODE_BAD;
-        let mut session_state: UA_SessionState = UA_SessionState::UA_SESSIONSTATE_CLOSED;
+        let mut state = ffi::UA_STATUSCODE_BAD;
+        let mut session_state = ffi::UA_SessionState::UA_SESSIONSTATE_CLOSED;
         unsafe {
-            UA_Client_getState(
+            ffi::UA_Client_getState(
                 self.client_ptr,
                 ptr::null_mut(),
                 &mut session_state,
@@ -216,20 +200,30 @@ impl ClientActor {
 
     fn handle_command(&mut self, command: ClientCommand) {
         match command {
+            ClientCommand::Connect { url } => {
+                let _ = self.handle_connect(&url);
+            }
             ClientCommand::Browse { node_id, responder } => {
-                // Implement the browse logic here
-                let result = Ok(()); // Placeholder
-                let _ = responder.send(result);
+                self.handle_browse(node_id, responder);
             }
             _ => unreachable!(),
         }
     }
 
-    fn handle_disconnect(&mut self) -> Result<(), Error> {
+    fn handle_connect(&mut self, url: &str) {
+        let url_c = CString::new(url).expect("URL should not contain null bytes");
+
         unsafe {
-            let retval: StatusCode = UA_Client_disconnect(self.client_ptr).into();
-            retval.check()?;
+            let code: StatusCode =
+                ffi::UA_Client_connectAsync(self.client_ptr, url_c.as_ptr()).into();
+            code.expect_good("UA_Client_connectAsync should return good status");
         }
-        Ok(())
+    }
+
+    fn handle_disconnect(&mut self) {
+        unsafe {
+            let code: StatusCode = ffi::UA_Client_disconnect(self.client_ptr).into();
+            code.expect_good("UA_Client_disconnect should return good status");
+        }
     }
 }

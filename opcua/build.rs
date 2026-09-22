@@ -94,7 +94,12 @@ fn generate_status_code_rs(codes: &[StatusCode], output_path: &str) {
     writeln!(rs, "    pub fn name(&self) -> &'static str {{").unwrap();
     writeln!(rs, "        match self {{").unwrap();
     for status in codes {
-        writeln!(rs, "            StatusCode::{} => \"{}\",", status.name, status.name).unwrap();
+        writeln!(
+            rs,
+            "            StatusCode::{} => \"{}\",",
+            status.name, status.name
+        )
+        .unwrap();
     }
     writeln!(rs, "        }}").unwrap();
     writeln!(rs, "    }}").unwrap();
@@ -102,7 +107,12 @@ fn generate_status_code_rs(codes: &[StatusCode], output_path: &str) {
     writeln!(rs, "    pub fn explanation(&self) -> &'static str {{").unwrap();
     writeln!(rs, "        match self {{").unwrap();
     for status in codes {
-        writeln!(rs, "            StatusCode::{} => \"{}\",", status.name, status.explanation).unwrap();
+        writeln!(
+            rs,
+            "            StatusCode::{} => \"{}\",",
+            status.name, status.explanation
+        )
+        .unwrap();
     }
     writeln!(rs, "        }}").unwrap();
     writeln!(rs, "    }}").unwrap();
@@ -113,9 +123,18 @@ fn generate_status_code_rs(codes: &[StatusCode], output_path: &str) {
     writeln!(rs, "    fn from(code: u32) -> Self {{").unwrap();
     writeln!(rs, "        match code {{").unwrap();
     for status in codes {
-        writeln!(rs, "            0x{:08X} => StatusCode::{},", status.value, status.name).unwrap();
+        writeln!(
+            rs,
+            "            0x{:08X} => StatusCode::{},",
+            status.value, status.name
+        )
+        .unwrap();
     }
-    writeln!(rs, "            _ => panic!(\"Unknown status code: 0x{{:08X}}\", code),").unwrap();
+    writeln!(
+        rs,
+        "            _ => panic!(\"Unknown status code: 0x{{:08X}}\", code),"
+    )
+    .unwrap();
     writeln!(rs, "        }}").unwrap();
     writeln!(rs, "    }}").unwrap();
     writeln!(rs, "}}").unwrap();

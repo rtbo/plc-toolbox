@@ -30,16 +30,19 @@
 async fn main() -> std::process::ExitCode {
     if let Err(e) = run().await {
         eprintln!("Error: {}", e);
+        eprintln!("{}", e.explanation());
         std::process::ExitCode::FAILURE
     } else {
         std::process::ExitCode::SUCCESS
     }
 }
 
-async fn run() -> Result<(), opcua::Error> {
-    let _client = opcua::Client::connect("opc.tcp://localhost:4840").await?;
+async fn run() -> opcua::status_code::Result<()> {
+    let client = opcua::Client::new();
+    client.connect("opc.tcp://localhost:4840").await?;
 
-    // let root = ua::NodeId::ns0(open62541_sys::UA_NS0ID_ROOTFOLDER);
+    // let root = "i=84";
+    // client.browse(root.to_string()).await?;
     // browse(&client, &root, 0).await?;
     Ok(())
 }

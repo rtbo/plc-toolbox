@@ -1,4 +1,4 @@
-use open62541::{ua, DataType};
+use open62541::{DataType, ua};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "kebab-case")]
@@ -54,7 +54,9 @@ impl From<ua::AttributeId> for AttributeId {
             UA_AttributeId::UA_ATTRIBUTEID_ARRAYDIMENSIONS => AttributeId::ArrayDimensions,
             UA_AttributeId::UA_ATTRIBUTEID_ACCESSLEVEL => AttributeId::AccessLevel,
             UA_AttributeId::UA_ATTRIBUTEID_USERACCESSLEVEL => AttributeId::UserAccessLevel,
-            UA_AttributeId::UA_ATTRIBUTEID_MINIMUMSAMPLINGINTERVAL => AttributeId::MinimumSamplingInterval,
+            UA_AttributeId::UA_ATTRIBUTEID_MINIMUMSAMPLINGINTERVAL => {
+                AttributeId::MinimumSamplingInterval
+            }
             UA_AttributeId::UA_ATTRIBUTEID_HISTORIZING => AttributeId::Historizing,
             UA_AttributeId::UA_ATTRIBUTEID_EXECUTABLE => AttributeId::Executable,
             UA_AttributeId::UA_ATTRIBUTEID_USEREXECUTABLE => AttributeId::UserExecutable,
@@ -70,7 +72,6 @@ impl From<ua::AttributeId> for AttributeId {
 
 impl From<AttributeId> for ua::AttributeId {
     fn from(value: AttributeId) -> Self {
-        
         match value {
             AttributeId::NodeId => ua::AttributeId::NODEID,
             AttributeId::NodeClass => ua::AttributeId::NODECLASS,
@@ -101,7 +102,7 @@ impl From<AttributeId> for ua::AttributeId {
             AttributeId::AccessLevelEx => ua::AttributeId::ACCESSLEVELEX,
         }
     }
-}   
+}
 
 #[cfg(test)]
 mod tests {
@@ -109,7 +110,7 @@ mod tests {
 
     #[test]
     fn test_attribute_id() {
-        let id : AttributeId = ua::AttributeId::DATATYPE.into();
+        let id: AttributeId = ua::AttributeId::DATATYPE.into();
         assert_eq!(id, AttributeId::DataType);
         let json = serde_json::to_string(&id).unwrap();
         assert_eq!(json, "\"data-type\"");

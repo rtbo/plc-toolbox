@@ -1,4 +1,4 @@
-use open62541::{ua, AsyncClient};
+use open62541::{AsyncClient, ua};
 use tauri::async_runtime::Mutex;
 use tauri::{self, Manager, State};
 
@@ -59,7 +59,10 @@ async fn read_attribute(
     node_id: String,
     attribute_id: uajs::AttributeId,
 ) -> Result<uajs::Variant, String> {
-    println!("Reading attribute: node_id={}, attribute_id={:?}", node_id, attribute_id);
+    println!(
+        "Reading attribute: node_id={}, attribute_id={:?}",
+        node_id, attribute_id
+    );
     let node_id: ua::NodeId = node_id
         .parse()
         .map_err(|e: open62541::Error| e.to_string())?;
@@ -76,14 +79,16 @@ async fn read_attribute(
     let value = value.value();
     if let Some(value) = value {
         Ok(value.into())
-    }
-    else {
+    } else {
         Err("Attribute not found".to_string())
     }
 }
 
 #[tauri::command]
-async fn browse(state: State<'_, Mutex<AppState>>, node_id: Option<String>) -> Result<Vec<uajs::ReferenceDescription>, String> {
+async fn browse(
+    state: State<'_, Mutex<AppState>>,
+    node_id: Option<String>,
+) -> Result<Vec<uajs::ReferenceDescription>, String> {
     let node_id: ua::NodeId = match node_id {
         Some(id) => id.parse().map_err(|e: open62541::Error| e.to_string())?,
         None => ua::NodeId::ns0(open62541_sys::UA_NS0ID_ROOTFOLDER),
@@ -99,5 +104,8 @@ async fn browse(state: State<'_, Mutex<AppState>>, node_id: Option<String>) -> R
         .map_err(|e| e.to_string())?;
     println!("Children: {:?}", children);
 
-    Ok(children.into_iter().map(uajs::ReferenceDescription::from).collect::<Vec<_>>())
+    Ok(children
+        .into_iter()
+        .map(uajs::ReferenceDescription::from)
+        .collect::<Vec<_>>())
 }
