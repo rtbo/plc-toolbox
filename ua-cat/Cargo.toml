@@ -1,0 +1,14 @@
+[package]
+name = "ua-cat"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+repository.workspace = true
+license.workspace = true
+
+[dependencies]
+opcua.workspace = true
+# open62541.workspace = true
+# open62541-sys.workspace = true
+tokio = { version = "1.53.1", features = ["full"] }
+

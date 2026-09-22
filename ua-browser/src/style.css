@@ -1,0 +1,33 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme inline {
+    --color-background: var(--app-background);
+    --color-surface: var(--app-surface);
+    --color-content: var(--app-content);
+    --color-primary: var(--app-primary);
+    --color-primary-hover: var(--app-primary-hover);
+    --color-primary-active: var(--app-primary-active);
+    --color-error: var(--app-error);
+}
+
+:root {
+    --app-background: theme("colors.white");
+    --app-surface: theme("colors.slate.100");
+    --app-content: theme("colors.slate.950");
+    --app-primary: theme("colors.blue.500");
+    --app-primary-hover: theme("colors.blue.600");
+    --app-primary-active: theme("colors.blue.700");
+    --app-error: theme("colors.red.400");
+}
+
+.dark {
+    --app-background: theme("colors.slate.950");
+    --app-surface: theme("colors.slate.800");
+    --app-content: theme("colors.slate.50");
+    --app-primary: theme("colors.sky.500");
+    --app-primary-hover: theme("colors.sky.400");
+    --app-primary-active: theme("colors.sky.300");
+    --app-error: theme("colors.red.400");
+}

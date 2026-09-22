@@ -1,0 +1,14 @@
+[package]
+name = "opcua"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+repository.workspace = true
+license.workspace = true
+
+[build]
+rustc = "build.rs"
+
+[dependencies]
+open62541-sys.workspace = true
+tokio.workspace = true

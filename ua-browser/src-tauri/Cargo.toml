@@ -1,0 +1,29 @@
+[package]
+name = "ua-browser"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+repository.workspace = true
+license.workspace = true
+description = "A browser for OPC/UA devices"
+rust-version = "1.85.0"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[lib]
+name = "app_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2.6.3", features = [] }
+
+[dev-dependencies]
+serde_json = "1.0"
+
+[dependencies]
+log.workspace = true
+open62541.workspace = true
+open62541-sys.workspace = true
+serde = { version = "1.0", features = ["derive"] }
+tauri = { version = "2.11.3", features = [] }
+tauri-plugin-log = "2"
