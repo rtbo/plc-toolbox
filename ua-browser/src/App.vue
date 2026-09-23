@@ -16,9 +16,11 @@ async function handleConnect(url: string) {
     state.value = "connected";
     let refs = await uaBrowse("i=84");
     for (const refDesc of refs) {
-      if (!typeDefs.has(refDesc.typeDefinition)) {
-        const td = await uaReadAttribute(refDesc.typeDefinition, "browse-name");
-        typeDefs.set(refDesc.typeDefinition, td);
+      console.log("Ref:", refs);
+      if (!typeDefs.has(refDesc.ReferenceTypeId)) {
+        const td = await uaReadAttribute(refDesc.ReferenceTypeId, "browse-name");
+        console.log(`Read type definition for ${refDesc.ReferenceTypeId}:`, td);
+        typeDefs.set(refDesc.ReferenceTypeId, td);
       }
     }
   } catch (e) {

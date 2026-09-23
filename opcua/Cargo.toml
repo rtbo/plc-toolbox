@@ -5,10 +5,12 @@ edition.workspace = true
 authors.workspace = true
 repository.workspace = true
 license.workspace = true
-
-[build]
-rustc = "build.rs"
+build = "build/main.rs"
 
 [dependencies]
 open62541-sys.workspace = true
 tokio.workspace = true
+serde.workspace = true
+
+[build-dependencies]
+quick-xml = "0.42.0"

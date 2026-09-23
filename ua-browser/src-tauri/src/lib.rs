@@ -1,6 +1,8 @@
+use std::f32::consts::E;
+
 use open62541::{AsyncClient, ua};
 use tauri::async_runtime::Mutex;
-use tauri::{self, Manager, State};
+use tauri::{self, Manager, State, ipc};
 
 mod uajs;
 
@@ -53,12 +55,43 @@ async fn disconnect(state: State<'_, Mutex<AppState>>) -> Result<(), ()> {
     Ok(())
 }
 
+fn encode_json<T: open62541::DataType>(value: &T, out_buf: &mut Vec<u8>) -> Result<(), String> {
+    let mut options = open62541_sys::UA_EncodeJsonOptions::default();
+    options.stringNodeIds = true;
+    let size = unsafe {
+        open62541_sys::UA_calcSizeJson(value.as_ptr() as _, T::data_type(), &mut options as _)
+    };
+    if size == 0 {
+        return Err("Failed to calculate JSON size".to_string());
+    }
+
+    let start = out_buf.len();
+    out_buf.extend(std::iter::repeat(0u8).take(size));
+
+    let mut bs = open62541_sys::UA_ByteString {
+        length: size as _,
+        data: out_buf[start..].as_mut_ptr() as _,
+    };
+
+    unsafe {
+        open62541_sys::UA_encodeJson(
+            value.as_ptr() as _,
+            T::data_type(),
+            &mut bs as _,
+            &mut options,
+        );
+    }
+
+    Ok(())
+}
+
+
 #[tauri::command]
 async fn read_attribute(
     state: State<'_, Mutex<AppState>>,
     node_id: String,
     attribute_id: uajs::AttributeId,
-) -> Result<uajs::Variant, String> {
+) -> Result<ipc::Response, String> {
     println!(
         "Reading attribute: node_id={}, attribute_id={:?}",
         node_id, attribute_id
@@ -76,19 +109,28 @@ async fn read_attribute(
         .await
         .map_err(|e| e.to_string())?;
 
-    let value = value.value();
-    if let Some(value) = value {
-        Ok(value.into())
+    let var: open62541_sys::UA_Variant;
+
+    println!("Read attribute value: {:?}", value);
+    let json = if let Some(value) = value.into_value() {
+        println!("Variant value: {:?}", value);
+        let mut out_buf = Vec::new();
+        encode_json(&value, &mut out_buf)?;
+        String::from_utf8(out_buf).map_err(|e| e.to_string())?
     } else {
-        Err("Attribute not found".to_string())
-    }
+        "null".to_string()
+    };
+    println!("Resulting JSON: {}", json);
+    let response = ipc::InvokeResponseBody::Json(json);
+    Ok(ipc::Response::new(response))
 }
+
 
 #[tauri::command]
 async fn browse(
     state: State<'_, Mutex<AppState>>,
     node_id: Option<String>,
-) -> Result<Vec<uajs::ReferenceDescription>, String> {
+) -> Result<ipc::Response, String> {
     let node_id: ua::NodeId = match node_id {
         Some(id) => id.parse().map_err(|e: open62541::Error| e.to_string())?,
         None => ua::NodeId::ns0(open62541_sys::UA_NS0ID_ROOTFOLDER),
@@ -97,15 +139,36 @@ async fn browse(
     let Some(client) = &state.client else {
         return Err("No client connected".to_string());
     };
+
     let browse_desc = ua::BrowseDescription::default().with_node_id(&node_id);
-    let (children, _) = client
+
+    let (mut children, mut next) = client
         .browse(&browse_desc)
         .await
         .map_err(|e| e.to_string())?;
-    println!("Children: {:?}", children);
 
-    Ok(children
-        .into_iter()
-        .map(uajs::ReferenceDescription::from)
-        .collect::<Vec<_>>())
+    while let Some(ref n) = next {
+        let n = std::slice::from_ref(n);
+        let res = client.browse_next(&n).await.map_err(|e| e.to_string())?;
+        for res in res {
+            let Ok((more_children, more_next)) = res else {
+                continue;
+            };
+            children.extend(more_children);
+            next = more_next;
+        }
+    }
+
+    let mut out_buf = b"[".to_vec();
+    for (i, child) in children.iter().enumerate() {
+        if i > 0 {
+            out_buf.push(b',');
+        }
+        encode_json(child, &mut out_buf)?;
+    }
+    out_buf.push(b']');
+
+    let result = String::from_utf8(out_buf).map_err(|e| e.to_string())?;
+    let response = ipc::InvokeResponseBody::Json(result);
+    Ok(ipc::Response::new(response))
 }

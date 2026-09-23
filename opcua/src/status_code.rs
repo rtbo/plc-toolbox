@@ -6,13 +6,6 @@ include!(concat!(env!("OUT_DIR"), "/status_code.rs"));
 
 pub type Result<T> = std::result::Result<T, StatusCode>;
 
-pub(crate) fn check(code: ffi::UA_StatusCode) -> Result<()> {
-    if code == ffi::UA_STATUSCODE_GOOD {
-        Ok(())
-    } else {
-        Err(StatusCode::from(code))
-    }
-}
 
 impl StatusCode {
     pub fn check(&self) -> Result<()> {
@@ -36,5 +29,19 @@ impl fmt::Display for StatusCode {
 impl fmt::Debug for StatusCode {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{:?}", self)
+    }
+}
+
+pub(crate) fn check(code: ffi::UA_StatusCode) -> Result<()> {
+    if code == ffi::UA_STATUSCODE_GOOD {
+        Ok(())
+    } else {
+        Err(StatusCode::from(code))
+    }
+}
+
+pub(crate) fn expect_good(code: ffi::UA_StatusCode) {
+    if code != ffi::UA_STATUSCODE_GOOD {
+        panic!("Expected good status code, got {:?}", StatusCode::from(code));
     }
 }

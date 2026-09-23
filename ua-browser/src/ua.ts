@@ -43,13 +43,13 @@ export type AttributeId =
   | "access-level-ex";
 
 export interface ReferenceDescription {
-  nodeId: string;
-  browseName: string;
-  displayName: string;
-  typeDefinition: string;
-  nodeClass: string;
-  isForward: boolean;
-  referenceTypeId: string;
+  NodeId: string;
+  BrowseName: string;
+  DisplayName: string;
+  TypeDefinition: string;
+  NodeClass: string;
+  IsForward: boolean;
+  ReferenceTypeId: string;
 }
 
 export async function uaBrowse(nodeId: string): Promise<ReferenceDescription[]> {
@@ -66,5 +66,6 @@ export type VariantScalar =
   | string;
   
 export async function uaReadAttribute(nodeId: string, attributeId: AttributeId): Promise<Variant> {
+  console.log(`Reading attribute: nodeId=${nodeId}, attributeId=${attributeId}`);
   return invoke<Variant>("read_attribute", { nodeId, attributeId });
 }
