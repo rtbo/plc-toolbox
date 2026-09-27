@@ -68,3 +68,29 @@ impl serde::Serialize for String {
         serializer.serialize_str(s)
     }
 }
+
+impl<'de> serde::de::Deserialize<'de> for String {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        struct Visitor;
+
+        impl<'de> serde::de::Visitor<'de> for Visitor {
+            type Value = String;
+
+            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+                formatter.write_str("a UTF-8 encoded string")
+            }
+
+            fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
+            where
+                E: serde::de::Error,
+            {
+                Ok(String::new(v))
+            }
+        }
+
+        deserializer.deserialize_str(Visitor)
+    }
+}

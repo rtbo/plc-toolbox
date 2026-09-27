@@ -3817,7 +3817,7 @@ name = "ua-browser"
 version = "0.1.0"
 dependencies = [
  "log",
- "open62541",
+ "opcua",
  "open62541-sys",
  "serde",
  "serde_json",

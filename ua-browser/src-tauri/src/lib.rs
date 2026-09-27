@@ -1,14 +1,10 @@
-use std::f32::consts::E;
-
-use open62541::{AsyncClient, ua};
+use opcua::ua;
 use tauri::async_runtime::Mutex;
 use tauri::{self, Manager, State, ipc};
 
-mod uajs;
-
 #[derive(Debug, Default)]
 struct AppState {
-    client: Option<AsyncClient>,
+    client: Option<opcua::Client>,
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -28,7 +24,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             connect,
             disconnect,
-            read_attribute,
+            // read_attribute,
             browse
         ])
         .run(tauri::generate_context!())
@@ -37,10 +33,9 @@ pub fn run() {
 
 #[tauri::command]
 async fn connect(state: State<'_, Mutex<AppState>>, url: String) -> Result<(), String> {
-    let root_id = ua::NodeId::ns0(open62541_sys::UA_NS0ID_ROOTFOLDER);
-    println!("Root ID: {}", root_id);
+    let client = opcua::Client::new();
+    client.connect(&url).await.map_err(|e| e.to_string())?;
 
-    let client = AsyncClient::new(&url).map_err(|e| e.to_string())?;
     let mut state = state.lock().await;
     state.client = Some(client);
     Ok(())
@@ -50,97 +45,95 @@ async fn connect(state: State<'_, Mutex<AppState>>, url: String) -> Result<(), S
 async fn disconnect(state: State<'_, Mutex<AppState>>) -> Result<(), ()> {
     let mut state = state.lock().await;
     if let Some(client) = state.client.take() {
-        client.disconnect().await;
+        let _ = client.disconnect().await;
     }
     Ok(())
 }
 
-fn encode_json<T: open62541::DataType>(value: &T, out_buf: &mut Vec<u8>) -> Result<(), String> {
-    let mut options = open62541_sys::UA_EncodeJsonOptions::default();
-    options.stringNodeIds = true;
-    let size = unsafe {
-        open62541_sys::UA_calcSizeJson(value.as_ptr() as _, T::data_type(), &mut options as _)
-    };
-    if size == 0 {
-        return Err("Failed to calculate JSON size".to_string());
-    }
+// fn encode_json<T: open62541::DataType>(value: &T, out_buf: &mut Vec<u8>) -> Result<(), String> {
+//     let mut options = open62541_sys::UA_EncodeJsonOptions::default();
+//     options.stringNodeIds = true;
+//     let size = unsafe {
+//         open62541_sys::UA_calcSizeJson(value.as_ptr() as _, T::data_type(), &mut options as _)
+//     };
+//     if size == 0 {
+//         return Err("Failed to calculate JSON size".to_string());
+//     }
 
-    let start = out_buf.len();
-    out_buf.extend(std::iter::repeat(0u8).take(size));
+//     let start = out_buf.len();
+//     out_buf.extend(std::iter::repeat(0u8).take(size));
 
-    let mut bs = open62541_sys::UA_ByteString {
-        length: size as _,
-        data: out_buf[start..].as_mut_ptr() as _,
-    };
+//     let mut bs = open62541_sys::UA_ByteString {
+//         length: size as _,
+//         data: out_buf[start..].as_mut_ptr() as _,
+//     };
 
-    unsafe {
-        open62541_sys::UA_encodeJson(
-            value.as_ptr() as _,
-            T::data_type(),
-            &mut bs as _,
-            &mut options,
-        );
-    }
+//     unsafe {
+//         open62541_sys::UA_encodeJson(
+//             value.as_ptr() as _,
+//             T::data_type(),
+//             &mut bs as _,
+//             &mut options,
+//         );
+//     }
 
-    Ok(())
-}
+//     Ok(())
+// }
 
+// #[tauri::command]
+// async fn read_attribute(
+//     state: State<'_, Mutex<AppState>>,
+//     node_id: String,
+//     attribute_id: uajs::AttributeId,
+// ) -> Result<ipc::Response, String> {
+//     println!(
+//         "Reading attribute: node_id={}, attribute_id={:?}",
+//         node_id, attribute_id
+//     );
+//     let node_id: ua::NodeId = node_id
+//         .parse()
+//         .map_err(|e: open62541::Error| e.to_string())?;
+//     let state = state.lock().await;
+//     let Some(client) = &state.client else {
+//         return Err("No client connected".to_string());
+//     };
+//     let attribute_id: ua::AttributeId = attribute_id.into();
+//     let value = client
+//         .read_attribute(&node_id, &attribute_id)
+//         .await
+//         .map_err(|e| e.to_string())?;
 
-#[tauri::command]
-async fn read_attribute(
-    state: State<'_, Mutex<AppState>>,
-    node_id: String,
-    attribute_id: uajs::AttributeId,
-) -> Result<ipc::Response, String> {
-    println!(
-        "Reading attribute: node_id={}, attribute_id={:?}",
-        node_id, attribute_id
-    );
-    let node_id: ua::NodeId = node_id
-        .parse()
-        .map_err(|e: open62541::Error| e.to_string())?;
-    let state = state.lock().await;
-    let Some(client) = &state.client else {
-        return Err("No client connected".to_string());
-    };
-    let attribute_id: ua::AttributeId = attribute_id.into();
-    let value = client
-        .read_attribute(&node_id, &attribute_id)
-        .await
-        .map_err(|e| e.to_string())?;
+//     let var: open62541_sys::UA_Variant;
 
-    let var: open62541_sys::UA_Variant;
-
-    println!("Read attribute value: {:?}", value);
-    let json = if let Some(value) = value.into_value() {
-        println!("Variant value: {:?}", value);
-        let mut out_buf = Vec::new();
-        encode_json(&value, &mut out_buf)?;
-        String::from_utf8(out_buf).map_err(|e| e.to_string())?
-    } else {
-        "null".to_string()
-    };
-    println!("Resulting JSON: {}", json);
-    let response = ipc::InvokeResponseBody::Json(json);
-    Ok(ipc::Response::new(response))
-}
-
+//     println!("Read attribute value: {:?}", value);
+//     let json = if let Some(value) = value.into_value() {
+//         println!("Variant value: {:?}", value);
+//         let mut out_buf = Vec::new();
+//         encode_json(&value, &mut out_buf)?;
+//         String::from_utf8(out_buf).map_err(|e| e.to_string())?
+//     } else {
+//         "null".to_string()
+//     };
+//     println!("Resulting JSON: {}", json);
+//     let response = ipc::InvokeResponseBody::Json(json);
+//     Ok(ipc::Response::new(response))
+// }
 
 #[tauri::command]
 async fn browse(
     state: State<'_, Mutex<AppState>>,
-    node_id: Option<String>,
-) -> Result<ipc::Response, String> {
-    let node_id: ua::NodeId = match node_id {
-        Some(id) => id.parse().map_err(|e: open62541::Error| e.to_string())?,
-        None => ua::NodeId::ns0(open62541_sys::UA_NS0ID_ROOTFOLDER),
-    };
+    node_id: Option<ua::NodeId>,
+) -> Result<Vec<ua::ReferenceDescription>, String> {
+    let node_id = node_id.unwrap_or(ua::ns0::ROOTFOLDER);
+    let browse_desc = ua::BrowseDescription::default().with_node_id(node_id);
+    let browse_req = ua::BrowseRequest::default().with_nodes_to_browse(&[browse_desc]);
+
     let state = state.lock().await;
     let Some(client) = &state.client else {
         return Err("No client connected".to_string());
     };
 
-    let browse_desc = ua::BrowseDescription::default().with_node_id(&node_id);
+    let response = client.browse(browse_req).await.map_err(|e| e.to_string())?;
 
     let (mut children, mut next) = client
         .browse(&browse_desc)

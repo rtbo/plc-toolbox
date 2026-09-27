@@ -2,10 +2,23 @@ use std::mem;
 
 use crate::{ffi, status_code};
 
+/// A trait representing a generic OPC UA data type.
+///
+/// # Safety
+/// 
+/// Implementors must ensure that `Self::UA_TYPE_IDX` is a valid index into
+/// the `ffi::UA_TYPES` array and that `Self::Raw` is the UA data type corresponding
+/// to the `ffi::UA_TYPES` entry at index `Self::UA_TYPE_IDX`.
 pub unsafe trait DataType {
     type Raw;
     const UA_TYPE_IDX: usize;
     const NAME: &'static str;
+
+    /// Get the FFI DataType as a pointer
+    fn data_type() -> *const ffi::UA_DataType {
+        // SAFETY: Self::UA_TYPE_IDX is a valid index into the UA_TYPES array.
+        unsafe { &ffi::UA_TYPES[Self::UA_TYPE_IDX] as *const _ }
+    }
 
     /// Constructs an instance of the type from its raw FFI representation.
     ///
@@ -29,15 +42,23 @@ pub unsafe trait DataType {
         self.as_raw_mut() as *mut Self::Raw
     }
 
+    fn default_raw() -> Self::Raw {
+        unsafe {
+            let mut raw = mem::MaybeUninit::<Self::Raw>::uninit();
+            ffi::UA_init(raw.as_mut_ptr() as *mut _, Self::data_type());
+            raw.assume_init()
+        }
+    }
+
     fn clone_raw(&self) -> Self::Raw {
         let mut dst = mem::MaybeUninit::<Self::Raw>::uninit();
-        // SAFETY: self.as_raw() is always valid and properly initialized, 
+        // SAFETY: self.as_raw() is always valid and properly initialized,
         // corresponding to the right FFI type.
         let code = unsafe {
             ffi::UA_copy(
                 self.as_ptr() as _,
                 dst.as_mut_ptr() as *mut _,
-                &ffi::UA_TYPES[Self::UA_TYPE_IDX],
+                Self::data_type(),
             )
         };
         status_code::expect_good(code);

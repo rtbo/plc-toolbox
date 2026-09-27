@@ -1,12 +1,13 @@
 use tokio::sync::{mpsc, oneshot, watch};
 
-use crate::{StatusCode, ffi, status_code};
+use crate::{StatusCode, ffi, status_code, ua};
 
 mod browse;
 mod actor;
 
 use actor::{Command, ClientActor}; 
 
+type Responder<T> = oneshot::Sender<status_code::Result<T>>;
 
 #[derive(Debug)]
 pub struct Client {
@@ -66,17 +67,17 @@ impl Client {
         self.state_rx.clone()
     }
 
-    pub async fn browse(&self, node_id: impl Into<String>) -> status_code::Result<()> {
+    pub async fn browse(&self, req: ua::BrowseRequest) -> status_code::Result<ua::BrowseResponse> {
         let (responder, receiver) = oneshot::channel();
         self.sender
             .send(Command::Browse {
-                node_id: node_id.into(),
+                req,
                 responder,
             })
             .await
             .expect("actor should be receptive");
-        receiver.await.expect("response should be received")?;
-        Ok(())
+        let response = receiver.await.expect("response should be received")?;
+        Ok(response)
     }
 }
 

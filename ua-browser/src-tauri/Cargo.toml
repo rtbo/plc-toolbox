@@ -22,7 +22,8 @@ serde_json = "1.0"
 
 [dependencies]
 log.workspace = true
-open62541.workspace = true
+opcua.workspace = true
+# open62541.workspace = true
 open62541-sys.workspace = true
 serde.workspace = true
 tauri = { version = "2.11.3", features = [] }

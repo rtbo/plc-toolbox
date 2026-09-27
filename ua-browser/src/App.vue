@@ -14,15 +14,15 @@ async function handleConnect(url: string) {
   try {
     await invoke("connect", { url });
     state.value = "connected";
-    let refs = await uaBrowse("i=84");
-    for (const refDesc of refs) {
-      console.log("Ref:", refs);
-      if (!typeDefs.has(refDesc.ReferenceTypeId)) {
-        const td = await uaReadAttribute(refDesc.ReferenceTypeId, "browse-name");
-        console.log(`Read type definition for ${refDesc.ReferenceTypeId}:`, td);
-        typeDefs.set(refDesc.ReferenceTypeId, td);
-      }
-    }
+    // let refs = await uaBrowse("i=84");
+    // for (const refDesc of refs) {
+    //   console.log("Ref:", refs);
+    //   if (!typeDefs.has(refDesc.ReferenceTypeId)) {
+    //     const td = await uaReadAttribute(refDesc.ReferenceTypeId, "browse-name");
+    //     console.log(`Read type definition for ${refDesc.ReferenceTypeId}:`, td);
+    //     typeDefs.set(refDesc.ReferenceTypeId, td);
+    //   }
+    // }
   } catch (e) {
     console.error(e);
     state.value = "error";

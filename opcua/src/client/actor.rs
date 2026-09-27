@@ -1,9 +1,9 @@
 use std::ffi::CString;
 use std::ptr;
 
-use tokio::sync::{mpsc, watch};
-use crate::{StatusCode, client::browse, ffi};
 use super::ConnectionState;
+use crate::{StatusCode, client::Responder, ffi, status_code, ua};
+use tokio::sync::{mpsc, oneshot, watch};
 
 pub(super) struct ClientActor {
     raw: *mut ffi::UA_Client,
@@ -34,17 +34,17 @@ impl ClientActor {
         self.raw
     }
 }
+
 pub(super) enum Command {
     Connect {
         url: String,
     },
     Disconnect,
     Browse {
-        node_id: String,
-        responder: browse::Responder,
+        req: ua::BrowseRequest,
+        responder: Responder<ua::BrowseResponse>,
     },
 }
-
 
 impl Drop for ClientActor {
     fn drop(&mut self) {
@@ -93,16 +93,11 @@ impl ClientActor {
         let mut state = ffi::UA_STATUSCODE_BAD;
         let mut session_state = ffi::UA_SessionState::UA_SESSIONSTATE_CLOSED;
         unsafe {
-            ffi::UA_Client_getState(
-                self.raw,
-                ptr::null_mut(),
-                &mut session_state,
-                &mut state,
-            );
+            ffi::UA_Client_getState(self.raw, ptr::null_mut(), &mut session_state, &mut state);
         }
         ConnectionState::from((state.into(), session_state))
     }
-    
+
     fn handle_command(&mut self, command: Command) {
         match command {
             Command::Connect { url } => {
@@ -110,9 +105,9 @@ impl ClientActor {
             }
             Command::Disconnect => {
                 self.handle_disconnect();
-            },
-            Command::Browse { node_id, responder } => {
-                self.handle_browse(node_id, responder);
+            }
+            Command::Browse { req, responder } => {
+                self.handle_browse(req, responder);
             }
         }
     }
@@ -121,8 +116,7 @@ impl ClientActor {
         let url_c = CString::new(url).expect("URL should not contain null bytes");
 
         unsafe {
-            let code: StatusCode =
-                ffi::UA_Client_connectAsync(self.raw, url_c.as_ptr()).into();
+            let code: StatusCode = ffi::UA_Client_connectAsync(self.raw, url_c.as_ptr()).into();
             code.expect_good("UA_Client_connectAsync should return good status");
         }
     }

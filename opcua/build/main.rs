@@ -5,6 +5,7 @@ use std::env;
 use std::path;
 
 mod data_types;
+mod ns0;
 mod status_codes;
 
 fn main() {
@@ -16,4 +17,5 @@ fn main() {
 
     status_codes::generate_rs(schema_dir, out_dir);
     data_types::generate_rs(schema_dir, out_dir);
+    ns0::generate_rs(schema_dir, out_dir);
 }
