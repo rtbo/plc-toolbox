@@ -8,7 +8,9 @@ use crate::{ffi, status_code};
 /// 
 /// Implementors must ensure that `Self::UA_TYPE_IDX` is a valid index into
 /// the `ffi::UA_TYPES` array and that `Self::Raw` is the UA data type corresponding
-/// to the `ffi::UA_TYPES` entry at index `Self::UA_TYPE_IDX`.
+/// to the `ffi::UA_TYPES` entry at index `Self::UA_TYPE_IDX`. `Self` must have
+/// the same memory layout as `Self::Raw`, so values can be viewed directly in
+/// an OPC UA array allocation. Each `Self` value must own the raw value it wraps.
 pub unsafe trait DataType {
     type Raw;
     const UA_TYPE_IDX: usize;

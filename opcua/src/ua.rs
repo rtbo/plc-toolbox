@@ -5,6 +5,7 @@ mod browse_description;
 mod browse_request;
 mod browse_response;
 mod browse_result;
+mod byte_string;
 mod node_id;
 mod reference_description;
 mod string;

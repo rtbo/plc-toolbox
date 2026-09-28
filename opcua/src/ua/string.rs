@@ -2,6 +2,8 @@ use std::fmt;
 
 use crate::ffi;
 
+pub type ByteString = String;
+
 #[repr(transparent)]
 pub struct String {
     raw: ffi::UA_String,

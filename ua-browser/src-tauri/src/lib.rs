@@ -126,7 +126,7 @@ async fn browse(
 ) -> Result<Vec<ua::ReferenceDescription>, String> {
     let node_id = node_id.unwrap_or(ua::ns0::ROOTFOLDER);
     let browse_desc = ua::BrowseDescription::default().with_node_id(node_id);
-    let browse_req = ua::BrowseRequest::default().with_nodes_to_browse(&[browse_desc]);
+    let browse_req = ua::BrowseRequest::default().with_nodes_to_browse(browse_desc.into());
 
     let state = state.lock().await;
     let Some(client) = &state.client else {

@@ -18,6 +18,18 @@ impl StatusCode {
     pub fn expect_good(&self, msg: &str) {
         self.check().expect(msg);
     }
+
+    /// Converts a raw C `UA_StatusCode` into a Rust `StatusCode` without checking its validity.
+    ///
+    /// # Safety
+    /// 
+    /// The caller must ensure that the provided `code` is a valid `UA_StatusCode`.
+    /// Typically, a status returned by the underlying C library can be safely converted using this function.
+    pub unsafe fn from_raw_unchecked(code: ffi::UA_StatusCode) -> Self {
+        unsafe {
+            std::mem::transmute(code)
+        }
+    }
 }
 
 impl fmt::Display for StatusCode {
