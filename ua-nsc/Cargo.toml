@@ -1,0 +1,21 @@
+[package]
+name = "ua-nsc"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[lib]
+name = "ua_nsc"
+path = "src/lib.rs"
+
+[[bin]]
+name = "ua-nsc"
+path = "src/main.rs"
+
+[dependencies]
+anyhow = "1.0.104"
+clap.workspace = true
+quick-xml.workspace = true
+tokio.workspace = true

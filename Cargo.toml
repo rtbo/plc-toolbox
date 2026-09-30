@@ -1,6 +1,12 @@
 [workspace]
 resolver = "3"
-members = ["opcua", "ua-browser/src-tauri", "ua-cat", "tests/plc-mock"]
+members = [
+    "opcua",
+    "ua-browser/src-tauri",
+    "ua-cat",
+    "tests/plc-mock",
+    "ua-nsc",
+]
 
 [workspace.package]
 version = "0.1.0"
@@ -11,8 +17,15 @@ repository = "https://github.com/rtbo/plc-toolbox"
 
 [workspace.dependencies]
 opcua = { path = "opcua" }
+clap = { version = "4.6.7", features = ["derive"] }
 log = "0.4"
-open62541 = { version = "0.12.0", features = ["serde", "time", "tokio", "uuid"] }
+open62541 = { version = "0.12.0", features = [
+    "serde",
+    "time",
+    "tokio",
+    "uuid",
+] }
 open62541-sys = "0.6.2"
+quick-xml = { version = "0.42.0", features = ["async-tokio"] }
 serde = { version = "1.0", features = ["derive"] }
 tokio = { version = "1", features = ["full"] }
