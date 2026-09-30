@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
-import type { ConnectionState } from "../ua";
+import { useConnectionStore } from "../stores/connection";
 import {
   mdiLanConnect,
   mdiLanDisconnect,
@@ -9,49 +9,32 @@ import {
   mdiClipboardCheckOutline,
 } from "@mdi/js";
 import Icon from "./Icon.vue";
+import { storeToRefs } from "pinia";
 
-const props = defineProps<{
-  state: ConnectionState;
-}>();
-const emit = defineEmits<{
-  (e: "connect", url: string): void;
-  (e: "disconnect"): void;
-  (e: "reset-error"): void;
-}>();
-
-const defaultAddress = import.meta.env.VITE_DEFAULT_ADDRESS || "192.168.0.1";
-const defaultPort = import.meta.env.VITE_DEFAULT_PORT || 4840;
-const address = ref(defaultAddress);
-const port = ref(defaultPort);
-
-function connect() {
-  const url = `opc.tcp://${address.value}:${port.value}`;
-  emit("connect", url);
-}
-function disconnect() {
-  emit("disconnect");
-}
+const store = useConnectionStore();
+const { state, address, port } = storeToRefs(store);
+const { connect, disconnect, resetError } = store;
 
 const iconPath = computed(() => {
-  if (props.state === "connected") {
+  if (state.value === "connected") {
     return mdiLanConnect;
   } else {
     return mdiLanDisconnect;
   }
 });
 const iconClass = computed(() => {
-  if (props.state === "error") {
+  if (state.value === "error") {
     return "text-error";
-  } else if (props.state === "connected") {
+  } else if (state.value === "connected") {
     return "text-primary";
   } else {
     return "text-on-surface/50";
   }
 });
 const addressClass = computed(() => {
-  if (props.state === "error") {
+  if (state.value === "error") {
     return "border-error";
-  } else if (props.state === "connected") {
+  } else if (state.value === "connected") {
     return "border-primary";
   } else {
     return "border-on-surface/50";
@@ -59,7 +42,7 @@ const addressClass = computed(() => {
 });
 
 const canEdit = computed(
-  () => props.state !== "connected" && props.state !== "connecting",
+  () => state.value !== "connected" && state.value !== "connecting",
 );
 
 const copied = ref(false);
@@ -100,10 +83,10 @@ function capitalize(str: string) {
           :pathData="iconPath"
           class="mx-2 text-xl"
           :class="iconClass"
-          :title="capitalize(props.state)"
+          :title="capitalize(state)"
         />
         <Icon
-          v-if="props.state === 'connecting'"
+          v-if="state === 'connecting'"
           :pathData="mdiLanConnect"
           class="text-primary absolute mx-2 animate-ping text-xl"
           :class="iconClass"
@@ -118,7 +101,7 @@ function capitalize(str: string) {
       >
         <span class="mr-2">opc.tcp://</span>
         <input
-          @input="$emit('reset-error')"
+          @input="resetError"
           @keyup.enter="connect"
           class="bg-surface w-50 px-2"
           :disabled="!canEdit"
@@ -129,7 +112,7 @@ function capitalize(str: string) {
         <span class="mx-1">:</span>
 
         <input
-          @input="$emit('reset-error')"
+          @input="resetError"
           @keyup.enter="connect"
           min="1"
           max="65535"
@@ -157,17 +140,17 @@ function capitalize(str: string) {
       <!-- Connect/Disconnect button -->
       <div class="mx-2 flex w-36 items-center justify-center">
         <button
-          v-if="props.state !== 'connected'"
+          v-if="state !== 'connected'"
           class="bg-primary text-on-primary right-4 inline-flex cursor-pointer items-center rounded-lg px-4 py-1"
-          :disabled="props.state === 'connecting'"
+          :disabled="state === 'connecting'"
           @click="connect"
         >
           <Icon
             :pathData="
-              props.state === 'connecting' ? mdiLoading : mdiLanConnect
+              state === 'connecting' ? mdiLoading : mdiLanConnect
             "
             class="mr-2"
-            :class="{ 'animate-spin': props.state === 'connecting' }"
+            :class="{ 'animate-spin': state === 'connecting' }"
             title="Connect"
           />
           Connect
