@@ -19,10 +19,16 @@ export const useConnectionStore = defineStore("connection", () => {
   async function connect() {
     error.value = null;
     state.value = "connecting";
+    const timeout = setTimeout(() => {
+        state.value = "error";
+        error.value = "Connection timed out";
+    }, 5000); // 5 seconds timeout
     try {
         await invoke("connect", { url: url.value });
+        clearTimeout(timeout);
         state.value = "connected";
     } catch (e) {
+        clearTimeout(timeout);
         state.value = "error";
         console.error(e);
         error.value = (e as Error).message;
