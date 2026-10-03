@@ -1,4 +1,14 @@
+# Compilation output
 target/
+
+# Editor directories and files
 .vscode/
+
+# Environment files
 env.*
+
+# Runtime cache
+.vite/
+
+# Misc data
 ua-specs/*
