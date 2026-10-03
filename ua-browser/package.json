@@ -4,8 +4,9 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "vue-tsc -b && vite build",
+    "gen-ua-ns0": "cargo run --bin ua-nsc -- ts-ns0 --schema-dir ../schema -o src/ua", 
+    "dev": "npm run gen-ua-ns0 && vite",
+    "build": "npm run gen-ua-ns0 && vue-tsc -b && vite build",
     "preview": "vite preview"
   },
   "dependencies": {

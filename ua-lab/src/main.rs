@@ -1,3 +1,4 @@
+#![allow(unused)]
 use std::slice;
 use std::str::FromStr;
 

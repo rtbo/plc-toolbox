@@ -50,7 +50,28 @@ async fn disconnect(state: State<'_, Mutex<AppState>>) -> Result<(), ()> {
     Ok(())
 }
 
-fn encode_json<T: open62541::DataType>(value: &T, out_buf: &mut Vec<u8>) -> Result<(), String> {
+fn decode_json<T: open62541::DataType>(json: &str) -> Result<T, String> {
+    let mut options = open62541_sys::UA_DecodeJsonOptions::default();
+    let mut bs = open62541_sys::UA_ByteString {
+        length: json.len() as _,
+        data: json.as_ptr() as _,
+    };
+    let mut value = T::init();
+    // SAFETY: We will not give away the ownership of the raw pointer; it is only used temporarily for the C API call.
+    // Also, value is just initialized and does not referenced any allocated memory that would be leaked.
+    let raw = unsafe { value.as_mut_ptr() };
+    unsafe {
+        open62541_sys::UA_decodeJson(
+            &mut bs as _,
+            raw as _,
+            T::data_type(),
+            &mut options,
+        );
+    }
+    Ok(value)
+}
+
+fn encode_json<T: open62541::DataType>(value: &T) -> Result<String, String> {
     let mut options = open62541_sys::UA_EncodeJsonOptions::default();
     options.stringNodeIds = true;
     let size = unsafe {
@@ -60,12 +81,12 @@ fn encode_json<T: open62541::DataType>(value: &T, out_buf: &mut Vec<u8>) -> Resu
         return Err("Failed to calculate JSON size".to_string());
     }
 
-    let start = out_buf.len();
+    let mut out_buf = Vec::with_capacity(size);
     out_buf.extend(std::iter::repeat(0u8).take(size));
 
     let mut bs = open62541_sys::UA_ByteString {
         length: size as _,
-        data: out_buf[start..].as_mut_ptr() as _,
+        data: out_buf[..].as_mut_ptr() as _,
     };
 
     unsafe {
@@ -77,7 +98,8 @@ fn encode_json<T: open62541::DataType>(value: &T, out_buf: &mut Vec<u8>) -> Resu
         );
     }
 
-    Ok(())
+    let result = String::from_utf8(out_buf).map_err(|e| e.to_string())?;
+    Ok(result)
 }
 
 #[tauri::command]
@@ -100,9 +122,7 @@ async fn read_attribute(
     println!("Read attribute value: {:?}", value);
     let json = if let Some(value) = value.into_value() {
         println!("Variant value: {:?}", value);
-        let mut out_buf = Vec::new();
-        encode_json(&value, &mut out_buf)?;
-        String::from_utf8(out_buf).map_err(|e| e.to_string())?
+        encode_json(&value)?
     } else {
         "null".to_string()
     };
@@ -114,69 +134,28 @@ async fn read_attribute(
 #[tauri::command]
 async fn browse(
     state: State<'_, Mutex<AppState>>,
-    node_id: Option<ua::NodeId>,
+    req: ipc::Request<'_>,
 ) -> Result<ipc::Response, String> {
-    use open62541::DataType;
-
-    //let node_id = node_id.unwrap_or(ua::ns0::ROOTFOLDER);
-    // let browse_desc = ua::BrowseDescription::default().with_node_id(node_id);
-    // let browse_req = ua::BrowseRequest::default().with_nodes_to_browse(browse_desc.into());
-
-    // let state = state.lock().await;
-    // let Some(client) = &state.client else {
-    //     return Err("No client connected".to_string());
-    // };
-
     let state = state.lock().await;
     let Some(client) = &state.client else {
         return Err("No client connected".to_string());
     };
 
-    // let response = client.browse(browse_req).await.map_err(|e| e.to_string())?;
-    let node_id = node_id.unwrap_or_else(|| ua::NodeId::ns0(open62541_sys::UA_NS0ID_ROOTFOLDER));
-    let browse_desc = ua::BrowseDescription::default()
-        .with_node_id(&node_id);
-
-    let browse_req = ua::BrowseRequest::init().with_nodes_to_browse(&[browse_desc]);
+    let ipc::InvokeBody::Raw(json) = req.body() else {
+        return Err("Expected raw JSON body".to_string());
+    };
+    let json = str::from_utf8(json).map_err(|e| e.to_string())?;
+    println!("Received JSON for browse request: {}", json);
+    let req: ua::BrowseRequest = decode_json(json)?;
+    println!("Decoded browse request: {:?}", req);
 
     let response = client
-        .service_request(browse_req)
+        .service_request(req)
         .await
         .map_err(|e| e.to_string())?;
 
-    let mut buf = Vec::new();
-    encode_json(&response, &mut buf)?;
+    let json = encode_json(&response)?;
 
-    let result = String::from_utf8(buf).map_err(|e| e.to_string())?;
-    let response = ipc::InvokeResponseBody::Json(result);
+    let response = ipc::InvokeResponseBody::Json(json);
     Ok(ipc::Response::new(response))
-    // let (mut children, mut next) = client
-    //     .browse(&browse_desc)
-    //     .await
-    //     .map_err(|e| e.to_string())?;
-
-    // while let Some(ref n) = next {
-    //     let n = std::slice::from_ref(n);
-    //     let res = client.browse_next(&n).await.map_err(|e| e.to_string())?;
-    //     for res in res {
-    //         let Ok((more_children, more_next)) = res else {
-    //             continue;
-    //         };
-    //         children.extend(more_children);
-    //         next = more_next;
-    //     }
-    // }
-
-    // let mut out_buf = b"[".to_vec();
-    // for (i, child) in children.iter().enumerate() {
-    //     if i > 0 {
-    //         out_buf.push(b',');
-    //     }
-    //     encode_json(child, &mut out_buf)?;
-    // }
-    // out_buf.push(b']');
-
-    // let result = String::from_utf8(out_buf).map_err(|e| e.to_string())?;
-    // let response = ipc::InvokeResponseBody::Json(result);
-    // Ok(ipc::Response::new(response))
 }

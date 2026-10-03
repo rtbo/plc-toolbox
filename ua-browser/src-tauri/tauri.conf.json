@@ -14,7 +14,7 @@
       {
         "title": "UA Browser",
         "resizable": true,
-        "maximized": true,
+        "maximized": false,
         "fullscreen": false
       }
     ],

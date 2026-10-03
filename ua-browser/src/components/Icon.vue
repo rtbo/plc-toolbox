@@ -12,7 +12,6 @@ defineProps<{
     :aria-label="title"
     class="ua-icon"
     role="img"
-    @click="$emit('click', $event)"
   >
     <svg
       class="ua-icon__svg"
