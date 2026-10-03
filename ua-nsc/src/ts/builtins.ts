@@ -41,7 +41,7 @@ export interface LocalizedText {
 }
 
 export interface ExtensionObject {
-    UaTypeId: NodeId;
+    UaTypeId?: NodeId;
     UaEncoding?: number;
     UaBody?: ByteString;
 }
