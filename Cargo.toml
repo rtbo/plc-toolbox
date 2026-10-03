@@ -5,7 +5,7 @@ members = [
     "ua-browser/src-tauri",
     "ua-cat",
     "tests/plc-mock",
-    "ua-nsc",
+    "ua-nsc", "ua-lab",
 ]
 
 [workspace.package]
@@ -17,6 +17,8 @@ repository = "https://github.com/rtbo/plc-toolbox"
 
 [workspace.dependencies]
 opcua = { path = "opcua" }
+
+anyhow = "1.0.104"
 clap = { version = "4.6.7", features = ["derive"] }
 log = "0.4"
 open62541 = { version = "0.12.0", features = [

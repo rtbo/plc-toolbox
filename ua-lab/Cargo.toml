@@ -1,21 +1,13 @@
 [package]
-name = "ua-nsc"
+name = "ua-lab"
 version.workspace = true
 edition.workspace = true
 authors.workspace = true
 license.workspace = true
 repository.workspace = true
 
-[lib]
-name = "ua_nsc"
-path = "src/lib.rs"
-
-[[bin]]
-name = "ua-nsc"
-path = "src/main.rs"
-
 [dependencies]
 anyhow.workspace = true
-clap.workspace = true
-quick-xml.workspace = true
+open62541.workspace = true
+open62541-sys.workspace = true
 tokio.workspace = true

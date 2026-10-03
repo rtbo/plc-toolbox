@@ -3944,6 +3944,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "ua-lab"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "open62541",
+ "open62541-sys",
+ "tokio",
+]
+
+[[package]]
 name = "ua-nsc"
 version = "0.1.0"
 dependencies = [
