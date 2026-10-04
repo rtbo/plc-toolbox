@@ -2,13 +2,8 @@
 import { computed, onMounted, ref } from "vue";
 import { useConnectionStore } from "../stores/connection";
 import type {
-  BrowseRequest,
-  BrowseResponse,
   ReferenceDescription,
 } from "../ua/types";
-import { BrowseDirection } from "../ua/types";
-import { clientBrowse } from "../client";
-import { ReferenceTypeId } from "../ua/ns0";
 import { mdiTriangleDown } from "@mdi/js";
 import Icon from "./Icon.vue";
 
@@ -21,22 +16,18 @@ const connectionStore = useConnectionStore();
 const children = ref<ReferenceDescription[]>([]);
 
 async function browse() {
-  const req: BrowseRequest = {
-    RequestedMaxReferencesPerNode: 100,
-    NodesToBrowse: [
-      {
-        BrowseDirection: BrowseDirection.Forward,
-        IncludeSubtypes: true,
-        ReferenceTypeId: ReferenceTypeId.HierarchicalReferences,
-        NodeId: props.node.NodeId,
-        ResultMask: 63,
-      },
-    ],
-  };
+  if (!connectionStore.client) {
+    console.warn(`No OPC/UA client available. Cannot browse nodes.`);
+    children.value = [];
+    return;
+  }
+  if (!props.node?.NodeId) {
+    console.warn(`No NodeId provided. Cannot browse nodes.`);
+    children.value = [];
+    return;
+  }
   try {
-    const response: BrowseResponse = await clientBrowse(req);
-    console.log(`Browse response:`, response);
-    children.value = response?.Results?.[0]?.References || [];
+    children.value = await connectionStore.client.browseNode(props.node.NodeId);
   } catch (error) {
     console.error(`Browse request failed:`, error);
   }
@@ -71,11 +62,17 @@ onMounted(async () => {
 
 <template>
   <div class="ml-2">
-    <div class="flex items-center" :class="toggleBtnClass" @click="toggleExpand">
-      <button
-        class="mr-2 w-4 text-center"
-      >
-        <Icon :pathData="mdiTriangleDown" class="text-xs" :class="toggleIconClass" />
+    <div
+      class="flex items-center"
+      :class="toggleBtnClass"
+      @click="toggleExpand"
+    >
+      <button class="mr-2 w-4 text-center">
+        <Icon
+          :pathData="mdiTriangleDown"
+          class="text-xs"
+          :class="toggleIconClass"
+        />
       </button>
       <div>{{ props.node.DisplayName?.Text || props.node.BrowseName }}</div>
     </div>

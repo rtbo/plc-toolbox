@@ -24,7 +24,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             connect, disconnect, // read_attribute,
-            browse
+            browse, browse_next,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
@@ -102,34 +102,34 @@ fn encode_json<T: open62541::DataType>(value: &T) -> Result<String, String> {
     Ok(result)
 }
 
-#[tauri::command]
-async fn read_attribute(
-    state: State<'_, Mutex<AppState>>,
-    node_id: ua::NodeId,
-    //attribute_id: uajs::AttributeId,
-) -> Result<ipc::Response, String> {
-
-    let state = state.lock().await;
-    let Some(client) = &state.client else {
-        return Err("No client connected".to_string());
-    };
-    let attribute_id: ua::AttributeId = ua::AttributeId::DISPLAYNAME;
-    let value = client
-        .read_attribute(&node_id, &attribute_id)
-        .await
-        .map_err(|e| e.to_string())?;
-
-    println!("Read attribute value: {:?}", value);
-    let json = if let Some(value) = value.into_value() {
-        println!("Variant value: {:?}", value);
-        encode_json(&value)?
-    } else {
-        "null".to_string()
-    };
-    println!("Resulting JSON: {}", json);
-    let response = ipc::InvokeResponseBody::Json(json);
-    Ok(ipc::Response::new(response))
-}
+// #[tauri::command]
+// async fn read_attribute(
+//     state: State<'_, Mutex<AppState>>,
+//     node_id: ua::NodeId,
+//     //attribute_id: uajs::AttributeId,
+// ) -> Result<ipc::Response, String> {
+// 
+//     let state = state.lock().await;
+//     let Some(client) = &state.client else {
+//         return Err("No client connected".to_string());
+//     };
+//     let attribute_id: ua::AttributeId = ua::AttributeId::DISPLAYNAME;
+//     let value = client
+//         .read_attribute(&node_id, &attribute_id)
+//         .await
+//         .map_err(|e| e.to_string())?;
+// 
+//     println!("Read attribute value: {:?}", value);
+//     let json = if let Some(value) = value.into_value() {
+//         println!("Variant value: {:?}", value);
+//         encode_json(&value)?
+//     } else {
+//         "null".to_string()
+//     };
+//     println!("Resulting JSON: {}", json);
+//     let response = ipc::InvokeResponseBody::Json(json);
+//     Ok(ipc::Response::new(response))
+// }
 
 #[tauri::command]
 async fn browse(
@@ -145,9 +145,34 @@ async fn browse(
         return Err("Expected raw JSON body".to_string());
     };
     let json = str::from_utf8(json).map_err(|e| e.to_string())?;
-    println!("Received JSON for browse request: {}", json);
     let req: ua::BrowseRequest = decode_json(json)?;
-    println!("Decoded browse request: {:?}", req);
+
+    let response = client
+        .service_request(req)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    let json = encode_json(&response)?;
+
+    let response = ipc::InvokeResponseBody::Json(json);
+    Ok(ipc::Response::new(response))
+}
+
+#[tauri::command]
+async fn browse_next(
+    state: State<'_, Mutex<AppState>>,
+    req: ipc::Request<'_>,
+) -> Result<ipc::Response, String> {
+    let state = state.lock().await;
+    let Some(client) = &state.client else {
+        return Err("No client connected".to_string());
+    };
+
+    let ipc::InvokeBody::Raw(json) = req.body() else {
+        return Err("Expected raw JSON body".to_string());
+    };
+    let json = str::from_utf8(json).map_err(|e| e.to_string())?;
+    let req: ua::BrowseNextRequest = decode_json(json)?;
 
     let response = client
         .service_request(req)
