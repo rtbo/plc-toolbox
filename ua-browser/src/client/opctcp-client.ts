@@ -4,22 +4,28 @@ import type {
   BrowseNextResponse,
   BrowseRequest,
   BrowseResponse,
+  ReadRequest,
+  ReadResponse,
 } from "@/ua/types";
 import { Client } from "@/client";
 
 export class OpcTcpClient extends Client {
   private url: string | null = null;
 
-  async connect(url: string): Promise<void> {
+  async doConnect(url: string): Promise<void> {
     await invoke("connect", { url });
     this.url = url;
   }
 
-  async disconnect(): Promise<void> {
+  async doDisconnect(): Promise<void> {
     if (this.url) {
       await invoke("disconnect");
       this.url = null;
     }
+  }
+
+  async sendReadRequest(req: ReadRequest): Promise<ReadResponse> {
+    return await invoke("read", serializeJSON(req));
   }
 
   async sendBrowseRequest(req: BrowseRequest): Promise<BrowseResponse> {

@@ -30,45 +30,70 @@ export type NodeId = string;
 export type ExpandedNodeId = string;
 
 export interface StatusCode {
-    Code?: number;
-    Symbol?: number;
+  Code?: number;
+  Symbol?: number;
 }
 export type QualifiedName = string;
 
 export interface LocalizedText {
-    Locale?: string;
-    Text?: string;
+  Locale?: string;
+  Text?: string;
 }
 
 export interface ExtensionObject {
-    UaTypeId?: NodeId;
-    UaEncoding?: number;
-    UaBody?: ByteString;
-}
-
-export interface DataValue {
-    UaType: Byte;
-    Value?: any;
-    Dimensions?: UInt32[];
-    Status?: StatusCode;
-    SourceTimestamp?: DateTime;
-    SourcePicoseconds?: UInt16;
-    ServerTimestamp?: DateTime;
-    ServerPicoseconds?: UInt16;
+  UaTypeId?: NodeId;
+  UaEncoding?: number;
+  UaBody?: ByteString;
 }
 
 export interface Variant {
-    UaType: number;
-    Value?: any;
-    Dimensions?: number[];
+  UaType: BuiltinTypeId;
+  Value?: any;
+  Dimensions?: number[];
+}
+
+export interface DataValue extends Variant {
+  Status?: StatusCode;
+  SourceTimestamp?: DateTime;
+  SourcePicoseconds?: UInt16;
+  ServerTimestamp?: DateTime;
+  ServerPicoseconds?: UInt16;
 }
 
 export interface DiagnosticInfo {
-    SymbolicId?: number;
-    NamespaceUri?: number;
-    Locale?: number;
-    LocalizedText?: number;
-    AdditionalInfo?: string;
-    InnerStatusCode?: StatusCode;
-    InnerDiagnosticInfo?: DiagnosticInfo;
+  SymbolicId?: number;
+  NamespaceUri?: number;
+  Locale?: number;
+  LocalizedText?: number;
+  AdditionalInfo?: string;
+  InnerStatusCode?: StatusCode;
+  InnerDiagnosticInfo?: DiagnosticInfo;
+}
+
+export const enum BuiltinTypeId {
+  Boolean = 1,
+  SByte = 2,
+  Byte = 3,
+  Int16 = 4,
+  UInt16 = 5,
+  Int32 = 6,
+  UInt32 = 7,
+  Int64 = 8,
+  UInt64 = 9,
+  Float = 10,
+  Double = 11,
+  String = 12,
+  DateTime = 13,
+  Guid = 14,
+  ByteString = 15,
+  XmlElement = 16,
+  NodeId = 17,
+  ExpandedNodeId = 18,
+  StatusCode = 19,
+  QualifiedName = 20,
+  LocalizedText = 21,
+  ExtensionObject = 22,
+  DataValue = 23,
+  Variant = 24,
+  DiagnosticInfo = 25,
 }
