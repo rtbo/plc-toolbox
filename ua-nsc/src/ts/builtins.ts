@@ -50,7 +50,7 @@ export interface ExtensionObject {
 
 export interface Variant {
   UaType: BuiltinTypeId;
-  Value?: any;
+  Value?: BuiltinTypeNoVariant | BuiltinType[];
   Dimensions?: number[];
 }
 
@@ -100,26 +100,67 @@ export const enum BuiltinTypeId {
   DiagnosticInfo = 25,
 }
 
-export function statusCodeIsGood(statusCode: StatusCodeId | StatusCode): boolean {
-    if (typeof statusCode === "number") {
-        return (statusCode & 0xf0000000) === 0x00000000;
-    } else {
-        return statusCode.Code === undefined || (statusCode.Code & 0xf0000000) === 0x00000000;
-    }
+export type BuiltinType = Boolean | SByte | Byte | Int16 | UInt16 | Int32 | UInt32 | Int64 | UInt64 | Float | Double | String | DateTime | Guid | ByteString | XmlElement | NodeId | ExpandedNodeId | StatusCode | QualifiedName | LocalizedText | ExtensionObject | DataValue | Variant | DiagnosticInfo;
+export type BuiltinTypeNoVariant = Boolean | SByte | Byte | Int16 | UInt16 | Int32 | UInt32 | Int64 | UInt64 | Float | Double | String | DateTime | Guid | ByteString | XmlElement | NodeId | ExpandedNodeId | StatusCode | QualifiedName | LocalizedText | ExtensionObject | DiagnosticInfo;
+
+export function statusCodeIsGood(statusCode?: StatusCodeId | StatusCode): boolean {
+  if (statusCode === undefined) {
+    return true;
+  } else if (typeof statusCode === "number") {
+    return (statusCode & 0xf0000000) === 0x00000000;
+  } else {
+    return statusCode.Code === undefined || (statusCode.Code & 0xf0000000) === 0x00000000;
+  }
 }
 
 export function statusCodeIsUncertain(statusCode: StatusCodeId | StatusCode): boolean {
-    if (typeof statusCode === "number") {
-        return (statusCode & 0xf0000000) === 0x40000000;
-    } else {
-        return statusCode.Code !== undefined && (statusCode.Code & 0xf0000000) === 0x40000000;
-    }
+  if (typeof statusCode === "number") {
+    return (statusCode & 0xf0000000) === 0x40000000;
+  } else {
+    return statusCode.Code !== undefined && (statusCode.Code & 0xf0000000) === 0x40000000;
+  }
 }
 
 export function statusCodeIsBad(statusCode: StatusCodeId | StatusCode): boolean {
-    if (typeof statusCode === "number") {
-        return (statusCode & 0xf0000000) === 0x80000000;
-    } else {
-        return statusCode.Code !== undefined && (statusCode.Code & 0xf0000000) === 0x80000000;
-    }
+  if (typeof statusCode === "number") {
+    return (statusCode & 0xf0000000) === 0x80000000;
+  } else {
+    return statusCode.Code !== undefined && (statusCode.Code & 0xf0000000) === 0x80000000;
+  }
+}
+
+const BUILTIN_TYPE_NAMES = [
+  "Invalid",
+  "Boolean",
+  "SByte",
+  "Byte",
+  "Int16",
+  "UInt16",
+  "Int32",
+  "UInt32",
+  "Int64",
+  "UInt64",
+  "Float",
+  "Double",
+  "String",
+  "DateTime",
+  "Guid",
+  "ByteString",
+  "XmlElement",
+  "NodeId",
+  "ExpandedNodeId",
+  "Status",
+  "QualifiedName",
+  "LocalizedText",
+  "ExtensionObject",
+  "DataValue",
+  "Variant",
+  "DiagnosticInfo",
+];
+
+export function builtinTypeName(typeId: BuiltinTypeId): string {
+  if (typeId < 0 || typeId >= BUILTIN_TYPE_NAMES.length) {
+    return "Invalid";
+  }
+  return BUILTIN_TYPE_NAMES[typeId];
 }
