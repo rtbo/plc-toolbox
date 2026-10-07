@@ -1,6 +1,7 @@
 import { AttributeId } from "./ua/attribute_ids";
-import { DataTypeId, ObjectId, ReferenceTypeId, VariableId } from "./ua/ns0";
-import { statusCodeIsGood } from "./ua/status_codes";
+import { ReferenceTypeId, VariableId } from "./ua/ns0";
+import { StatusCodeId } from "./ua/status_codes";
+import { statusCodeIsGood } from "./ua/types";
 import {
   BrowseDirection,
   BuiltinTypeId,
@@ -8,14 +9,15 @@ import {
   type BrowseNextResponse,
   type BrowseRequest,
   type BrowseResponse,
+  type DataValue,
   type NodeId,
   type ReadRequest,
   type ReadResponse,
+  type ReadValueId,
   type ReferenceDescription,
   type RequestHeader,
   type ResponseHeader,
   type StatusCode,
-  type Variant,
 } from "./ua/types";
 
 export abstract class Client {
@@ -24,7 +26,7 @@ export abstract class Client {
   get nsArray(): string[] {
     return this._nsArray;
   }
-  
+
   protected abstract doConnect(url: string): Promise<void>;
   protected abstract doDisconnect(): Promise<void>;
 
@@ -41,14 +43,15 @@ export abstract class Client {
   async connect(url: string): Promise<void> {
     await this.doConnect(url);
     try {
-      const nsArray = await this.readAttribute(
+      const nsArray = await this.readAttributes(
         VariableId.Server_NamespaceArray,
-        AttributeId.Value,
+        [AttributeId.Value],
       );
-      if (!nsArray || nsArray.UaType !== BuiltinTypeId.String) {
+      
+      if (nsArray?.[0]?.UaType !== BuiltinTypeId.String) {
         throw new Error("NamespaceArray is not an array of strings");
       }
-      this._nsArray = nsArray?.Value || [];
+      this._nsArray = nsArray?.[0]?.Value || [];
       console.log("NamespaceArray:", this._nsArray);
     } catch (e) {
       console.error("Error reading namespace array:", e);
@@ -59,30 +62,34 @@ export abstract class Client {
 
   async disconnect(): Promise<void> {
     await this.doDisconnect();
+    this._nsArray = [];
   }
 
-  async readAttribute(nodeId: NodeId, attrId: AttributeId): Promise<Variant | null> {
+  async readAttributes(
+    nodeId: NodeId,
+    attrIds: AttributeId[],
+  ): Promise<(DataValue | null)[]> {
     const req: ReadRequest = {
       RequestHeader: defaultHeader(),
-      NodesToRead: [
-        {
-          NodeId: nodeId,
-          AttributeId: attrId,
-        },
-      ],
+      NodesToRead: attrIds.map<ReadValueId>((attrId) => ({
+        NodeId: nodeId,
+        AttributeId: attrId,
+      })),
     };
     const resp = await this.sendReadRequest(req);
     console.log("Read response:", resp);
     checkResponse(resp.ResponseHeader);
-    if (resp.Results?.length !== 1) {
+    if (resp.Results?.length !== attrIds.length) {
       throw new Error("Unexpected number of results in read response");
     }
-    const result = resp.Results[0];
-    if (!result) {
-      return null;
+    for (const result of resp.Results) {
+      if (result?.Status?.Code === StatusCodeId.BadAttributeIdInvalid)  {
+        console.log(`AttributeId ${result?.Status?.Symbol} is not valid for node ${nodeId}`);
+      } else {
+        checkStatusCode(result?.Status);
+      }
     }
-    checkStatusCode(result?.Status);
-    return result;
+    return resp.Results;
   }
 
   async browseNode(nodeId: NodeId): Promise<ReferenceDescription[]> {
@@ -143,10 +150,7 @@ function checkResponse(header?: ResponseHeader): void {
   if (typeof result === "undefined") {
     throw new Error("Response is missing ServiceResult");
   }
-  if (!result.Code) {
-    return;
-  }
-  if (!statusCodeIsGood(result.Code)) {
+  if (!statusCodeIsGood(result)) {
     throw new Error(`ServiceResult: ${result}`);
   }
 }

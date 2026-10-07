@@ -76,7 +76,7 @@ function capitalize(str: string) {
 
 <template>
   <div class="address-bar w-full px-4 py-4">
-    <div class="mx-auto flex max-w-4xl items-center">
+    <div class="mx-auto flex w-full items-center">
       <!-- Icon indicating connection state -->
       <div class="flex items-center">
         <Icon

@@ -7,7 +7,7 @@ pub async fn generate<W>(status_codes: &[StatusCode], out: &mut W) -> tokio::io:
 where
     W: io::AsyncWrite + Unpin,
 {
-    out.write(b"export const enum StatusCode {\n").await?;
+    out.write(b"export const enum StatusCodeId {\n").await?;
     for code in status_codes {
         out.write(format!("    /** {} */\n", code.explanation).as_bytes())
             .await?;
@@ -15,9 +15,6 @@ where
             .await?;
     }
     out.write(b"}\n").await?;
-
-    let post = include_bytes!("status_codes_post.ts");
-    out.write(post).await?;
     
     out.flush().await
 }

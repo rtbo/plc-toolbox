@@ -1,9 +1,8 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
 import { useConnectionStore } from "../stores/connection";
-import type {
-  ReferenceDescription,
-} from "../ua/types";
+import { useNodeTreeStore } from "../stores/node-tree";
+import type { ReferenceDescription } from "../ua/types";
 import { mdiTriangleDown } from "@mdi/js";
 import Icon from "./Icon.vue";
 
@@ -12,6 +11,7 @@ const props = defineProps<{
 }>();
 
 const connectionStore = useConnectionStore();
+const nodeTreeStore = useNodeTreeStore();
 
 const children = ref<ReferenceDescription[]>([]);
 
@@ -51,6 +51,13 @@ const toggleExpand = () => {
   console.log("expanded: ", expanded.value);
 };
 
+const selected = computed(() => {
+  return nodeTreeStore.selectedNode === props.node?.NodeId;
+});
+const selectedClass = computed(() => {
+  return selected.value ? "bg-surface" : "";
+});
+
 onMounted(async () => {
   if (connectionStore.state !== "connected") {
     console.warn(`Not connected to OPC UA server. Cannot browse nodes.`);
@@ -62,19 +69,24 @@ onMounted(async () => {
 
 <template>
   <div class="ml-2">
-    <div
-      class="flex items-center"
-      :class="toggleBtnClass"
-      @click="toggleExpand"
-    >
-      <button class="mr-2 w-4 text-center">
+    <div class="flex items-center">
+      <button
+        class="mr-2 w-4 text-center"
+        :class="toggleBtnClass"
+        @click="toggleExpand"
+      >
         <Icon
           :pathData="mdiTriangleDown"
           class="text-xs"
           :class="toggleIconClass"
         />
       </button>
-      <div>{{ props.node.DisplayName?.Text || props.node.BrowseName }}</div>
+      <div
+        @click="nodeTreeStore.setSelectedNode(props.node?.NodeId || null)"
+        :class="['rounded px-2 py-1', selectedClass]"
+      >
+        {{ props.node.DisplayName?.Text || props.node.BrowseName }}
+      </div>
     </div>
     <ul v-if="children.length > 0 && expanded" class="ml-4">
       <li v-for="child in children" :key="child.NodeId">

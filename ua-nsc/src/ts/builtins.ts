@@ -1,3 +1,5 @@
+import { StatusCodeId } from "./status_codes";
+
 export type Boolean = boolean;
 export type SByte = number;
 export type Byte = number;
@@ -30,7 +32,7 @@ export type NodeId = string;
 export type ExpandedNodeId = string;
 
 export interface StatusCode {
-  Code?: number;
+  Code?: StatusCodeId;
   Symbol?: number;
 }
 export type QualifiedName = string;
@@ -96,4 +98,28 @@ export const enum BuiltinTypeId {
   DataValue = 23,
   Variant = 24,
   DiagnosticInfo = 25,
+}
+
+export function statusCodeIsGood(statusCode: StatusCodeId | StatusCode): boolean {
+    if (typeof statusCode === "number") {
+        return (statusCode & 0xf0000000) === 0x00000000;
+    } else {
+        return statusCode.Code === undefined || (statusCode.Code & 0xf0000000) === 0x00000000;
+    }
+}
+
+export function statusCodeIsUncertain(statusCode: StatusCodeId | StatusCode): boolean {
+    if (typeof statusCode === "number") {
+        return (statusCode & 0xf0000000) === 0x40000000;
+    } else {
+        return statusCode.Code !== undefined && (statusCode.Code & 0xf0000000) === 0x40000000;
+    }
+}
+
+export function statusCodeIsBad(statusCode: StatusCodeId | StatusCode): boolean {
+    if (typeof statusCode === "number") {
+        return (statusCode & 0xf0000000) === 0x80000000;
+    } else {
+        return statusCode.Code !== undefined && (statusCode.Code & 0xf0000000) === 0x80000000;
+    }
 }
