@@ -2,8 +2,9 @@
 import { useConnectionStore } from "@/stores/connection";
 import { useNodeTreeStore } from "@/stores/node-tree";
 import { AttributeId } from "@/ua/attribute_ids";
-import { statusCodeIsGood, type Variant } from "@/ua/types";
+import { builtinTypeName, statusCodeIsGood, type Variant } from "@/ua/types";
 import { ref, watch } from "vue";
+import AttributeValue from "./AttributeValue.vue";
 
 const connectionStore = useConnectionStore();
 const nodeTreeStore = useNodeTreeStore();
@@ -38,7 +39,7 @@ const ALL_ATTRS = [
   AttributeId.AccessLevelEx,
 ];
 
-const ALL_ATTRS_NAMES = [
+const ATTRS_NAMES = [
   "NodeId",
   "NodeClass",
   "BrowseName",
@@ -72,25 +73,28 @@ const attributes = ref<[AttributeId, Variant][]>([]);
 
 watch(
   () => nodeTreeStore.selectedNode,
-  async (newSelected, oldSelected) => {
-    if (newSelected) {
-      if (!connectionStore.client) {
-        console.warn(
-          `No OPC/UA client available. Cannot read node attributes.`,
-        );
-        return;
-      }
-      try {
-        const attrs = await connectionStore.client.readAttributes(
-          newSelected,
-          ALL_ATTRS,
-        );
-        attributes.value = attrs
-          .filter((val) => val !== null && statusCodeIsGood(val.Status))
-          .map((val, index) => [ALL_ATTRS[index], val as Variant]);
-      } catch (error) {
-        console.error(`Read node attributes failed:`, error);
-      }
+  async (newSelected, _) => {
+    if (!newSelected) {
+      attributes.value = [];
+      return;
+    }
+    if (!connectionStore.client) {
+      console.warn(`No OPC/UA client available. Cannot read node attributes.`);
+      attributes.value = [];
+      return;
+    }
+    try {
+      const attrs = await connectionStore.client.readAttributes(
+        newSelected,
+        ALL_ATTRS,
+      );
+      attributes.value = attrs
+        .filter(
+          (val) => val !== null && statusCodeIsGood(val?.Status),
+        )
+        .map((val, index) => [index, val as Variant]);
+    } catch (error) {
+      console.error(`Read node attributes failed:`, error);
     }
   },
 );
@@ -101,12 +105,14 @@ watch(
       <tr>
         <th>Attribute</th>
         <th>Value</th>
+        <th>DataType</th>
       </tr>
     </thead>
     <tbody>
-      <tr v-for="(attr, index) in attributes" :key="index">
-        <td>{{ ALL_ATTRS_NAMES[index] }}</td>
-        <td>{{ JSON.stringify(attr) }}</td>
+      <tr v-for="[index, attr] in attributes" :key="index">
+        <td>{{ ATTRS_NAMES[index] }}</td>
+        <td><AttributeValue :value="attr" /></td>
+        <td>{{ builtinTypeName(attr.UaType) }}</td>
       </tr>
     </tbody>
   </table>

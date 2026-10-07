@@ -51,7 +51,7 @@ export abstract class Client {
       if (nsArray?.[0]?.UaType !== BuiltinTypeId.String) {
         throw new Error("NamespaceArray is not an array of strings");
       }
-      this._nsArray = nsArray?.[0]?.Value || [];
+      this._nsArray = (nsArray?.[0]?.Value || []) as string[];
       console.log("NamespaceArray:", this._nsArray);
     } catch (e) {
       console.error("Error reading namespace array:", e);
@@ -81,13 +81,6 @@ export abstract class Client {
     checkResponse(resp.ResponseHeader);
     if (resp.Results?.length !== attrIds.length) {
       throw new Error("Unexpected number of results in read response");
-    }
-    for (const result of resp.Results) {
-      if (result?.Status?.Code === StatusCodeId.BadAttributeIdInvalid)  {
-        console.log(`AttributeId ${result?.Status?.Symbol} is not valid for node ${nodeId}`);
-      } else {
-        checkStatusCode(result?.Status);
-      }
     }
     return resp.Results;
   }
