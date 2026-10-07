@@ -100,8 +100,57 @@ export const enum BuiltinTypeId {
   DiagnosticInfo = 25,
 }
 
-export type BuiltinType = Boolean | SByte | Byte | Int16 | UInt16 | Int32 | UInt32 | Int64 | UInt64 | Float | Double | String | DateTime | Guid | ByteString | XmlElement | NodeId | ExpandedNodeId | StatusCode | QualifiedName | LocalizedText | ExtensionObject | DataValue | Variant | DiagnosticInfo;
-export type BuiltinTypeNoVariant = Boolean | SByte | Byte | Int16 | UInt16 | Int32 | UInt32 | Int64 | UInt64 | Float | Double | String | DateTime | Guid | ByteString | XmlElement | NodeId | ExpandedNodeId | StatusCode | QualifiedName | LocalizedText | ExtensionObject | DiagnosticInfo;
+export type BuiltinType =
+  | Boolean
+  | SByte
+  | Byte
+  | Int16
+  | UInt16
+  | Int32
+  | UInt32
+  | Int64
+  | UInt64
+  | Float
+  | Double
+  | String
+  | DateTime
+  | Guid
+  | ByteString
+  | XmlElement
+  | NodeId
+  | ExpandedNodeId
+  | StatusCode
+  | QualifiedName
+  | LocalizedText
+  | ExtensionObject
+  | DataValue
+  | Variant
+  | DiagnosticInfo;
+  
+type BuiltinTypeNoVariant =
+  | Boolean
+  | SByte
+  | Byte
+  | Int16
+  | UInt16
+  | Int32
+  | UInt32
+  | Int64
+  | UInt64
+  | Float
+  | Double
+  | String
+  | DateTime
+  | Guid
+  | ByteString
+  | XmlElement
+  | NodeId
+  | ExpandedNodeId
+  | StatusCode
+  | QualifiedName
+  | LocalizedText
+  | ExtensionObject
+  | DiagnosticInfo;
 
 export function statusCodeIsGood(statusCode?: StatusCodeId | StatusCode): boolean {
   if (statusCode === undefined) {
