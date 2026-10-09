@@ -2,6 +2,9 @@
 import AddressBar from "./components/AddressBar.vue";
 import AttributeTable from "./components/AttributeTable.vue";
 import NodeTreeView from "./components/NodeTreeView.vue";
+import { useConnectionStore } from "./stores/connection";
+
+const connectionStore = useConnectionStore();
 </script>
 
 <template>
@@ -16,7 +19,7 @@ import NodeTreeView from "./components/NodeTreeView.vue";
         <NodeTreeView />
       </section>
       <section class="min-h-0 w-1/2 overflow-auto">
-        <AttributeTable />
+          <AttributeTable v-if="connectionStore.state === 'connected'"/>
       </section>
     </div>
   </div>

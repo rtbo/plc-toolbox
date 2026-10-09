@@ -100,12 +100,12 @@ watch(
 );
 </script>
 <template>
-  <table>
+  <table class="table-auto border-separate border-spacing-x-3">
     <thead>
       <tr>
-        <th>Attribute</th>
-        <th>Value</th>
-        <th>DataType</th>
+        <th class="text-start">Attribute</th>
+        <th class="text-start">Value</th>
+        <th class="text-start">DataType</th>
       </tr>
     </thead>
     <tbody>

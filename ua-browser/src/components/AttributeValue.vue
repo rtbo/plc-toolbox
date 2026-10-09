@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { BuiltinTypeId, type Variant } from "@/ua/types";
+import { BuiltinTypeId, builtinTypeName, type LocalizedText, type Variant } from "@/ua/types";
 
 const props = defineProps<{
   value: Variant;
@@ -39,11 +39,20 @@ function elidedString(str: string, maxLength: number): string {
       <span v-if="value.UaType === BuiltinTypeId.Boolean">
         {{ value.Value ? "true" : "false" }}
       </span>
-      <span v-if="isNumberType(value.UaType)">
+      <span v-else-if="isNumberType(value.UaType)">
         {{ value.Value }}
       </span>
-      <span v-if="typeof value.Value === 'string'">
+      <span v-else-if="typeof value.Value === 'string'">
         {{ elidedString(value.Value as string, 50) }}
+      </span>
+      <span v-else-if="value.UaType === BuiltinTypeId.LocalizedText">
+        {{ (value.Value as LocalizedText).Text }}
+        <span v-if="(value.Value as LocalizedText).Locale" class="text-sm text-content/50">
+          (Locale: {{ (value.Value as LocalizedText).Locale }})
+        </span>
+      </span>
+      <span v-else>
+          Unsupported type: {{ builtinTypeName(value.UaType) }}
       </span>
     </div>
   </div>
