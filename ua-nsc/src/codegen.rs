@@ -15,4 +15,8 @@ where
         out.write_all(b"\n").await?;
         Ok(())
     }
+
+    async fn flush(&mut self) -> io::Result<()> {
+        self.output_mut().flush().await
+    }
 }

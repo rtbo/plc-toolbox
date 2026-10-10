@@ -32,7 +32,7 @@ where
         ctx.generate_type_def(type_def).await?;
     }
 
-    ctx.cg.output_mut().flush().await
+    ctx.cg.flush().await
 }
 
 struct Ctx<'a, W>

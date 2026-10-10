@@ -25,7 +25,7 @@ enum Command {
     /// Generate Typescript files for the NS0 namespace.
     /// This will generate the following files:
     /// - ns0.ts: The Typescript file containing all the NodeIds of the NS0 namespace
-    /// - status_codes.ts: The Typescript file containing the status codes
+    /// - status_code.ts: The Typescript file containing the status codes
     /// - attribute_ids.ts: The Typescript file containing the attribute ids
     /// - types.ts: The Typescript file containing the NS0 and builtin types
     TsNs0 {
@@ -38,8 +38,8 @@ enum Command {
         #[arg(short, long, value_name = "ATTR_IDS_CSV")]
         attr_ids: Option<path::PathBuf>,
 
-        #[arg(short, long, value_name = "STATUS_CODES_CSV")]
-        status_codes: Option<path::PathBuf>,
+        #[arg(short, long, value_name = "STATUS_CODE_CSV")]
+        status_code: Option<path::PathBuf>,
 
         #[arg(
             long,
@@ -121,7 +121,7 @@ async fn run() -> anyhow::Result<()> {
             types_bsd,
             node_ids_csv,
             attr_ids,
-            status_codes,
+            status_code,
             schema_dir,
             output_dir,
         } => {
@@ -152,7 +152,7 @@ async fn run() -> anyhow::Result<()> {
                     ));
                 }
             };
-            let status_codes_path = match (status_codes, &schema_dir) {
+            let status_code_path = match (status_code, &schema_dir) {
                 (Some(path), _) => path,
                 (None, Some(dir)) => dir.join("StatusCode.csv"),
                 (None, None) => {
@@ -168,8 +168,8 @@ async fn run() -> anyhow::Result<()> {
             let node_ids = ua_nsc::parse::node_ids::parse_csv(&node_ids_path).await?;
             println!("Reading {}", attr_ids_path.display());
             let attr_ids = ua_nsc::parse::attribute_ids::parse_csv(&attr_ids_path).await?;
-            println!("Reading {}", status_codes_path.display());
-            let status_codes = ua_nsc::parse::status_codes::parse_csv(&status_codes_path).await?;
+            println!("Reading {}", status_code_path.display());
+            let status_code = ua_nsc::parse::status_code::parse_csv(&status_code_path).await?;
 
             println!("Creating {}", output_dir.display());
             tokio::fs::create_dir_all(&output_dir).await?;
@@ -186,11 +186,11 @@ async fn run() -> anyhow::Result<()> {
             let mut attr_ids_file = create_new_file(&attr_ids_path).await?;
             ua_nsc::ts::attribute_ids::generate(&attr_ids, &mut attr_ids_file).await?;
 
-            // Generate status_codes.ts
-            let status_codes_path = output_dir.join("status_codes.ts");
-            println!("Writing {}", status_codes_path.display());
-            let mut status_codes_file = create_new_file(&status_codes_path).await?;
-            ua_nsc::ts::status_codes::generate(&status_codes, &mut status_codes_file).await?;
+            // Generate status_code.ts
+            let status_code_path = output_dir.join("status_code.ts");
+            println!("Writing {}", status_code_path.display());
+            let mut status_code_file = create_new_file(&status_code_path).await?;
+            ua_nsc::ts::status_code::generate(&status_code, &mut status_code_file).await?;
 
             // Generate types.ts
             let types_path = output_dir.join("types.ts");

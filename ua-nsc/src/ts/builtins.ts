@@ -1,4 +1,5 @@
-import { StatusCodeId } from "./status_codes";
+// @ts-ignore
+import { StatusCodeId } from "./status_code";
 
 export type Boolean = boolean;
 export type SByte = number;

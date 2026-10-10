@@ -1,35 +1,7 @@
-// use std::fmt;
-
-// use open62541::{AsyncClient, ua};
-
-// #[derive(Debug)]
-// enum Error {
-//     ConnectionRejected,
-//     OtherOpen62541(open62541::Error),
-// }
-
-// impl From<open62541::Error> for Error {
-//     fn from(e: open62541::Error) -> Self {
-//         if e.status_code() == ua::StatusCode::BADCONNECTIONREJECTED {
-//             return Error::ConnectionRejected;
-//         }
-//         Error::OtherOpen62541(e)
-//     }
-// }
-
-// impl fmt::Display for Error {
-//     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-//         match self {
-//             Error::ConnectionRejected => write!(f, "Connection rejected"),
-//             Error::OtherOpen62541(e) => write!(f, "other Open62541 error: {}", e),
-//         }
-//     }
-// }
-
 #[tokio::main]
 async fn main() -> std::process::ExitCode {
     if let Err(e) = run().await {
-        eprintln!("Error: {}", e);
+        eprintln!("Error: {}", e.name());
         eprintln!("{}", e.explanation());
         std::process::ExitCode::FAILURE
     } else {
@@ -37,8 +9,8 @@ async fn main() -> std::process::ExitCode {
     }
 }
 
-async fn run() -> opcua::status_code::Result<()> {
-    let client = opcua::Client::new();
+async fn run() -> Result<(), ua_core::StatusCode> {
+    let mut client = ua_client::TcpClient::new();
     client.connect("opc.tcp://localhost:4840").await?;
 
     // let root = "i=84";

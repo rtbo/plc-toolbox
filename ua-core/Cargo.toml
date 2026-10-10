@@ -1,0 +1,15 @@
+[package]
+name = "ua-core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+build = "build.rs"
+
+[dependencies]
+bytes.workspace = true
+tokio.workspace = true
+
+[build-dependencies]
+ua-nsc.workspace = true
+tokio.workspace = true

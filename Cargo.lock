@@ -2304,16 +2304,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "384b8ab6d37215f3c5301a95a4accb5d64aa607f1fcb26a11b5303878451b4fe"
 
 [[package]]
-name = "opcua"
-version = "0.1.0"
-dependencies = [
- "open62541-sys",
- "quick-xml 0.42.0",
- "serde",
- "tokio",
-]
-
-[[package]]
 name = "open62541"
 version = "0.12.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3939,8 +3929,25 @@ dependencies = [
 name = "ua-cat"
 version = "0.1.0"
 dependencies = [
- "opcua",
  "tokio",
+ "ua-client",
+ "ua-core",
+]
+
+[[package]]
+name = "ua-client"
+version = "0.1.0"
+dependencies = [
+ "ua-core",
+]
+
+[[package]]
+name = "ua-core"
+version = "0.1.0"
+dependencies = [
+ "bytes",
+ "tokio",
+ "ua-nsc",
 ]
 
 [[package]]

@@ -13,7 +13,7 @@ pub struct StatusCode {
 }
 
 pub async fn parse_csv(csv_path: &path::Path) -> Result<Vec<StatusCode>, Error> {
-    let mut status_codes = Vec::new();
+    let mut status_code = Vec::new();
 
     let reader = io::BufReader::new(fs::File::open(&csv_path).await?);
     let mut lines = reader.lines();
@@ -41,11 +41,11 @@ pub async fn parse_csv(csv_path: &path::Path) -> Result<Vec<StatusCode>, Error> 
             explanation_str.to_string()
         };
 
-        status_codes.push(StatusCode {
+        status_code.push(StatusCode {
             name,
             code,
             explanation,
         });
     }
-    Ok(status_codes)
+    Ok(status_code)
 }

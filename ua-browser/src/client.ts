@@ -1,6 +1,6 @@
 import { AttributeId } from "./ua/attribute_ids";
 import { ReferenceTypeId, VariableId } from "./ua/ns0";
-import { StatusCodeId } from "./ua/status_codes";
+import { StatusCodeId } from "./ua/status_code";
 import { statusCodeIsGood } from "./ua/types";
 import {
   BrowseDirection,

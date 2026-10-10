@@ -67,7 +67,7 @@ impl NodeId {
 }
 
 pub async fn parse_csv(csv_path: &path::Path) -> Result<Vec<NodeId>, Error> {
-    let mut status_codes = Vec::new();
+    let mut status_code = Vec::new();
 
     let reader = io::BufReader::new(fs::File::open(&csv_path).await?);
     let mut lines = reader.lines();
@@ -83,11 +83,11 @@ pub async fn parse_csv(csv_path: &path::Path) -> Result<Vec<NodeId>, Error> {
         let numeric_id = line[sep1 + 1..sep1 + 1 + sep2].parse()?;
         let class = line[sep1 + 1 + sep2 + 1..].parse()?;
 
-        status_codes.push(NodeId {
+        status_code.push(NodeId {
             name,
             numeric_id,
             class,
         });
     }
-    Ok(status_codes)
+    Ok(status_code)
 }

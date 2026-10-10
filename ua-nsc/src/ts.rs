@@ -2,7 +2,7 @@ pub use tokio::io;
 
 pub mod attribute_ids;
 pub mod node_ids;
-pub mod status_codes;
+pub mod status_code;
 pub mod types;
 
 use crate::codegen::CodeGen;

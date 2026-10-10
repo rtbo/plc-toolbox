@@ -5,11 +5,11 @@ use tokio::io;
 pub mod attribute_ids;
 pub mod node_ids;
 pub mod opc_bsd;
-pub mod status_codes;
+pub mod status_code;
 
 pub use attribute_ids::AttributeId;
 pub use node_ids::{NodeClass, NodeId};
-pub use status_codes::StatusCode;
+pub use status_code::StatusCode;
 
 #[derive(Debug)]
 pub enum Error {

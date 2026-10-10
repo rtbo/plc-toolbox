@@ -1,0 +1,9 @@
+[package]
+name = "ua-client"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+ua-core.workspace = true

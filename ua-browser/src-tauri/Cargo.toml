@@ -2,7 +2,6 @@
 name = "ua-browser"
 version.workspace = true
 edition.workspace = true
-authors.workspace = true
 repository.workspace = true
 license.workspace = true
 description = "A browser for OPC/UA devices"
