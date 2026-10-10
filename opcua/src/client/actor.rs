@@ -1,9 +1,11 @@
 use std::ffi::CString;
 use std::ptr;
 
-use super::ConnectionState;
-use crate::{StatusCode, client::Responder, ffi, status_code, ua};
 use tokio::sync::{mpsc, oneshot, watch};
+
+use super::ConnectionState;
+use crate::client::Responder;
+use crate::{StatusCode, ffi, status_code, ua};
 
 pub(super) struct ClientActor {
     raw: *mut ffi::UA_Client,

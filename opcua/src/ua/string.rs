@@ -38,7 +38,7 @@ impl String {
             let s = ffi::UA_String {
                 length: s.len(),
                 data: s.as_ptr() as *mut u8,
-            }; 
+            };
             ffi::UA_String_append(&mut raw, s);
             raw
         };
@@ -47,9 +47,7 @@ impl String {
 
     pub fn as_str(&self) -> &str {
         // SAFETY: self.raw.data is always valid and properly initialized
-        let slice = unsafe {
-            std::slice::from_raw_parts(self.raw.data, self.raw.length)
-        };
+        let slice = unsafe { std::slice::from_raw_parts(self.raw.data, self.raw.length) };
         std::str::from_utf8(slice).unwrap()
     }
 }

@@ -35,7 +35,8 @@ pub fn generate_rs(schema_dir: &path::Path, out_dir: &path::Path) {
         writeln!(
             &mut output,
             "pub const {}: crate::ua::NodeId = crate::ua::NodeId::numeric(0, {});",
-            node_id.name.to_uppercase(), node_id.id
+            node_id.name.to_uppercase(),
+            node_id.id
         )
         .unwrap();
     }
@@ -48,7 +49,8 @@ pub fn generate_rs(schema_dir: &path::Path, out_dir: &path::Path) {
         writeln!(
             &mut output,
             "pub const {}: u32 = {};",
-            node_id.name.to_uppercase(), node_id.id
+            node_id.name.to_uppercase(),
+            node_id.id
         )
         .unwrap();
     }

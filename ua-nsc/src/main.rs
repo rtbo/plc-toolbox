@@ -1,5 +1,7 @@
+use std::collections::HashMap;
+use std::path;
+
 use clap::{Parser, Subcommand};
-use std::{collections::HashMap, path};
 
 #[derive(Debug, Subcommand)]
 enum Command {
@@ -39,7 +41,11 @@ enum Command {
         #[arg(short, long, value_name = "STATUS_CODES_CSV")]
         status_codes: Option<path::PathBuf>,
 
-        #[arg(long, value_name = "SCHEMA_DIR", help = "Path to the directory containing the OPC UA schema files. If not provided, individual file paths must be provided.")]
+        #[arg(
+            long,
+            value_name = "SCHEMA_DIR",
+            help = "Path to the directory containing the OPC UA schema files. If not provided, individual file paths must be provided."
+        )]
         schema_dir: Option<path::PathBuf>,
 
         #[arg(short, long, value_name = "OUTPUT_DIR")]
@@ -125,7 +131,7 @@ async fn run() -> anyhow::Result<()> {
                 (None, None) => {
                     return Err(anyhow::anyhow!(
                         "Either --types-bsd or --schema-dir must be provided"
-                    ))
+                    ));
                 }
             };
             let node_ids_path = match (node_ids_csv, &schema_dir) {
@@ -134,7 +140,7 @@ async fn run() -> anyhow::Result<()> {
                 (None, None) => {
                     return Err(anyhow::anyhow!(
                         "Either --node-ids or --schema-dir must be provided"
-                    ))
+                    ));
                 }
             };
             let attr_ids_path = match (attr_ids, &schema_dir) {
@@ -143,7 +149,7 @@ async fn run() -> anyhow::Result<()> {
                 (None, None) => {
                     return Err(anyhow::anyhow!(
                         "Either --attr-ids or --schema-dir must be provided"
-                    ))
+                    ));
                 }
             };
             let status_codes_path = match (status_codes, &schema_dir) {
@@ -152,7 +158,7 @@ async fn run() -> anyhow::Result<()> {
                 (None, None) => {
                     return Err(anyhow::anyhow!(
                         "Either --status-codes or --schema-dir must be provided"
-                    ))
+                    ));
                 }
             };
 

@@ -1,4 +1,5 @@
-use crate::{Array, ua::BrowseDescription};
+use crate::Array;
+use crate::ua::BrowseDescription;
 
 impl super::BrowseRequest {
     pub fn with_nodes_to_browse(mut self, nodes: Array<BrowseDescription>) -> Self {
@@ -6,7 +7,10 @@ impl super::BrowseRequest {
         // in otder to properly manage its memory.
 
         let _old = unsafe {
-            Array::<BrowseDescription>::from_raw_parts(self.raw.nodesToBrowse, self.raw.nodesToBrowseSize)
+            Array::<BrowseDescription>::from_raw_parts(
+                self.raw.nodesToBrowse,
+                self.raw.nodesToBrowseSize,
+            )
         };
         self.raw.nodesToBrowse = nodes.as_mut_ptr();
         self.raw.nodesToBrowseSize = nodes.len();

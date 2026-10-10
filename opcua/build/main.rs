@@ -1,8 +1,7 @@
 // Build script for the OPC UA crate
 // Reads CSV/XML schema files and generates Rust code accordingly
 
-use std::env;
-use std::path;
+use std::{env, path};
 
 mod data_types;
 mod ns0;

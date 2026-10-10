@@ -7,31 +7,29 @@ pub mod types;
 
 use crate::codegen::CodeGen;
 
-struct TsCodeGen<W> 
+struct TsCodeGen<W>
 where
-    W: io::AsyncWrite + Unpin
+    W: io::AsyncWrite + Unpin,
 {
     output: W,
     indent: u32,
 }
 
-impl<W> CodeGen<W> for TsCodeGen<W> 
-where W: io::AsyncWrite + Unpin
+impl<W> CodeGen<W> for TsCodeGen<W>
+where
+    W: io::AsyncWrite + Unpin,
 {
     fn output_mut(&mut self) -> &mut W {
         &mut self.output
     }
 }
 
-impl<W> TsCodeGen<W> 
+impl<W> TsCodeGen<W>
 where
-    W: io::AsyncWrite + Unpin
+    W: io::AsyncWrite + Unpin,
 {
     fn new(output: W) -> Self {
-        TsCodeGen {
-            output,
-            indent: 0,
-        }
+        TsCodeGen { output, indent: 0 }
     }
 
     async fn write_line(&mut self, txt: &str) -> io::Result<()> {
@@ -39,7 +37,8 @@ where
     }
 
     async fn start_block(&mut self, prefix: &str) -> io::Result<()> {
-        self.write_indentedline(self.indent, &format!("{}{{", prefix)).await?;
+        self.write_indentedline(self.indent, &format!("{}{{", prefix))
+            .await?;
         self.indent += 1;
         Ok(())
     }
@@ -51,5 +50,4 @@ where
         self.write_indentedline(self.indent, "}").await?;
         Ok(())
     }
-    
 }

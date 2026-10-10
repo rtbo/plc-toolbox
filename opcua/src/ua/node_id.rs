@@ -1,4 +1,5 @@
-use std::{fmt, str::FromStr};
+use std::fmt;
+use std::str::FromStr;
 
 use super::NodeId;
 use crate::{ffi, status_code, ua};

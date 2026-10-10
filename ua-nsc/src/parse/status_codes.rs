@@ -1,4 +1,5 @@
-use std::{path};
+use std::path;
+
 use tokio::fs;
 use tokio::io::{self, AsyncBufReadExt};
 
@@ -13,16 +14,20 @@ pub struct StatusCode {
 
 pub async fn parse_csv(csv_path: &path::Path) -> Result<Vec<StatusCode>, Error> {
     let mut status_codes = Vec::new();
-    
+
     let reader = io::BufReader::new(fs::File::open(&csv_path).await?);
     let mut lines = reader.lines();
     while let Some(line) = lines.next_line().await? {
-        let sep1 = line.find(',').ok_or_else(|| Error::Parse(format!("Missing first comma in line: {}", line)))?;
-        let sep2 = line[sep1 + 1 ..].find(',').ok_or_else(|| Error::Parse(format!("Missing second comma in line: {}", line)))?;
+        let sep1 = line
+            .find(',')
+            .ok_or_else(|| Error::Parse(format!("Missing first comma in line: {}", line)))?;
+        let sep2 = line[sep1 + 1..]
+            .find(',')
+            .ok_or_else(|| Error::Parse(format!("Missing second comma in line: {}", line)))?;
 
         let name = line[0..sep1].to_string();
-        let code_str = &line[sep1 + 1 .. sep1 + 1 + sep2];
-        let explanation_str = &line[sep1 + 1 + sep2 + 1 ..];
+        let code_str = &line[sep1 + 1..sep1 + 1 + sep2];
+        let explanation_str = &line[sep1 + 1 + sep2 + 1..];
 
         let code = if code_str.starts_with("0x") {
             u32::from_str_radix(&code_str[2..], 16)?
@@ -35,7 +40,7 @@ pub async fn parse_csv(csv_path: &path::Path) -> Result<Vec<StatusCode>, Error> 
         } else {
             explanation_str.to_string()
         };
-        
+
         status_codes.push(StatusCode {
             name,
             code,

@@ -1,12 +1,14 @@
 use std::ffi::c_void;
 
-
 use crate::client::Responder;
-use crate::{DataType, ua};
-use crate::{client, ffi, status_code};
+use crate::{DataType, client, ffi, status_code, ua};
 
 impl client::ClientActor {
-    pub fn handle_browse(&mut self, mut req: ua::BrowseRequest, responder: Responder<ua::BrowseResponse>) {
+    pub fn handle_browse(
+        &mut self,
+        mut req: ua::BrowseRequest,
+        responder: Responder<ua::BrowseResponse>,
+    ) {
         // let node_id: ua::NodeId = match node_id.parse() {
         //     Ok(n) => n,
         //     Err(e) => {
@@ -48,7 +50,8 @@ extern "C" fn browse_callback(
     wr: *mut ffi::UA_BrowseResponse,
 ) {
     // Convert the userdata back into a oneshot::Sender
-    let responder: Box<super::Responder<ua::BrowseResponse>> = unsafe { Box::from_raw(userdata as *mut _) };
+    let responder: Box<super::Responder<ua::BrowseResponse>> =
+        unsafe { Box::from_raw(userdata as *mut _) };
 
     // SAFETY: wr is a pointer to a valid UA_BrowseResponse structure.
     // wr ownership is transferred to the BrowseResponse

@@ -15,6 +15,6 @@ where
             .await?;
     }
     out.write(b"}\n").await?;
-    
+
     out.flush().await
 }

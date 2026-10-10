@@ -36,7 +36,7 @@ impl ByteString {
             let s = ffi::UA_ByteString {
                 length: s.len(),
                 data: s.as_ptr() as *mut u8,
-            }; 
+            };
             ffi::UA_String_append(&mut raw, s);
             raw
         };
@@ -45,16 +45,12 @@ impl ByteString {
 
     pub fn as_slice(&self) -> &[u8] {
         // SAFETY: self.raw.data is always valid and properly initialized
-        unsafe {
-            std::slice::from_raw_parts(self.raw.data, self.raw.length)
-        }
+        unsafe { std::slice::from_raw_parts(self.raw.data, self.raw.length) }
     }
 
     pub fn as_slice_mut(&mut self) -> &mut [u8] {
         // SAFETY: self.raw.data is always valid and properly initialized
-        unsafe {
-            std::slice::from_raw_parts_mut(self.raw.data, self.raw.length)
-        }
+        unsafe { std::slice::from_raw_parts_mut(self.raw.data, self.raw.length) }
     }
 }
 

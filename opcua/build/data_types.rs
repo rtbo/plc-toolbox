@@ -307,8 +307,15 @@ fn generate_type_rs<W: io::Write>(out: &mut W, typ: &DataType) -> io::Result<()>
             writeln!(out, "    }}")?;
             writeln!(out, "}}")?;
             writeln!(out)?;
-            writeln!(out, "// SAFETY: {} owns all its data, so it is safe to send between threads.", name)?;
-            writeln!(out, "// Especially, it is safe to allocate in one thread and deallocate in another.")?;
+            writeln!(
+                out,
+                "// SAFETY: {} owns all its data, so it is safe to send between threads.",
+                name
+            )?;
+            writeln!(
+                out,
+                "// Especially, it is safe to allocate in one thread and deallocate in another."
+            )?;
             writeln!(out, "unsafe impl Send for {} {{}}", name)?;
             writeln!(out)?;
             writeln!(out, "impl Default for {} {{", name)?;
@@ -316,7 +323,10 @@ fn generate_type_rs<W: io::Write>(out: &mut W, typ: &DataType) -> io::Result<()>
             writeln!(out, "        use crate::DataType;")?;
             writeln!(out)?;
             writeln!(out, "        // SAFETY: The raw value is always valid.")?;
-            writeln!(out, "        unsafe {{ Self::from_raw(Self::default_raw()) }}")?;
+            writeln!(
+                out,
+                "        unsafe {{ Self::from_raw(Self::default_raw()) }}"
+            )?;
             writeln!(out, "    }}")?;
             writeln!(out, "}}")?;
             writeln!(out)?;
@@ -334,7 +344,11 @@ fn generate_type_rs<W: io::Write>(out: &mut W, typ: &DataType) -> io::Result<()>
             writeln!(out, "        use crate::DataType;")?;
             writeln!(out)?;
             writeln!(out, "        // SAFETY: The raw value is always valid.")?;
-            writeln!(out, "        unsafe {{ crate::ffi::UA_{}_clear(self.as_mut_ptr()) }}", name)?;
+            writeln!(
+                out,
+                "        unsafe {{ crate::ffi::UA_{}_clear(self.as_mut_ptr()) }}",
+                name
+            )?;
             writeln!(out, "    }}")?;
             writeln!(out, "}}")?;
         }

@@ -5,7 +5,7 @@ use crate::{ffi, status_code};
 /// A trait representing a generic OPC UA data type.
 ///
 /// # Safety
-/// 
+///
 /// Implementors must ensure that `Self::UA_TYPE_IDX` is a valid index into
 /// the `ffi::UA_TYPES` array and that `Self::Raw` is the UA data type corresponding
 /// to the `ffi::UA_TYPES` entry at index `Self::UA_TYPE_IDX`. `Self` must have

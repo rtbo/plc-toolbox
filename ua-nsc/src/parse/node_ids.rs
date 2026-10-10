@@ -1,4 +1,5 @@
 use std::{fmt, path};
+
 use tokio::fs;
 use tokio::io::{self, AsyncBufReadExt};
 
@@ -81,7 +82,6 @@ pub async fn parse_csv(csv_path: &path::Path) -> Result<Vec<NodeId>, Error> {
         let name = line[0..sep1].to_string();
         let numeric_id = line[sep1 + 1..sep1 + 1 + sep2].parse()?;
         let class = line[sep1 + 1 + sep2 + 1..].parse()?;
-
 
         status_codes.push(NodeId {
             name,

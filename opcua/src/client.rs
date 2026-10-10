@@ -2,10 +2,10 @@ use tokio::sync::{mpsc, oneshot, watch};
 
 use crate::{StatusCode, ffi, status_code, ua};
 
-mod browse;
 mod actor;
+mod browse;
 
-use actor::{Command, ClientActor}; 
+use actor::{ClientActor, Command};
 
 type Responder<T> = oneshot::Sender<status_code::Result<T>>;
 
@@ -30,7 +30,8 @@ impl Client {
     }
 
     pub async fn connect(&self, url: impl Into<String>) -> status_code::Result<()> {
-        self.send_command(Command::Connect { url: url.into() }).await;
+        self.send_command(Command::Connect { url: url.into() })
+            .await;
 
         self.expect_connection_state(ConnectionState::Connected)
             .await
@@ -44,7 +45,10 @@ impl Client {
     }
 
     async fn send_command(&self, command: Command) {
-        self.sender.send(command).await.expect("actor should be receptive");
+        self.sender
+            .send(command)
+            .await
+            .expect("actor should be receptive");
     }
 
     async fn expect_connection_state(&self, expected: ConnectionState) -> status_code::Result<()> {
@@ -70,10 +74,7 @@ impl Client {
     pub async fn browse(&self, req: ua::BrowseRequest) -> status_code::Result<ua::BrowseResponse> {
         let (responder, receiver) = oneshot::channel();
         self.sender
-            .send(Command::Browse {
-                req,
-                responder,
-            })
+            .send(Command::Browse { req, responder })
             .await
             .expect("actor should be receptive");
         let response = receiver.await.expect("response should be received")?;
@@ -103,4 +104,3 @@ impl From<(StatusCode, ffi::UA_SessionState)> for ConnectionState {
         }
     }
 }
-
