@@ -2,122 +2,71 @@
 use bytes::BufMut;
 use ua_macros::{DecodeBinary, EncodeBinary};
 
-use crate::msg::binary::{DecodeBinary, DecodingError, EncodeBinary};
+use crate::msg::binary::{DecodeBinary, DecodingError, EncodeBinary, check_remaining};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum MsgType {
-    Hello,
-    Acknowledge,
-    Error,
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Msg {
+    Hello(Hello),
+    Acknowledge(Acknowledge),
+    Error(Error),
 }
 
-impl MsgType {
-    pub fn to_bytes(&self) -> [u8; 3] {
-        match self {
-            MsgType::Hello => *b"HEL",
-            MsgType::Acknowledge => *b"ACK",
-            MsgType::Error => *b"ERR",
-        }
-    }
-
-    pub fn from_bytes(bytes: &[u8; 3]) -> Result<Self, DecodingError> {
-        match bytes {
-            b"HEL" => Ok(MsgType::Hello),
-            b"ACK" => Ok(MsgType::Acknowledge),
-            b"ERR" => Ok(MsgType::Error),
-            _ => Err(DecodingError::InvalidData),
-        }
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct Header {
-    pub message_type: MsgType,
-    pub message_size: u32,
-}
-
-impl EncodeBinary for Header {
+impl EncodeBinary for Msg {
     fn encoded_len(&self) -> u32 {
-        3 + 1 + 4
-    }
-     fn encode<B: BufMut>(&self, buf: &mut B) {
-        buf.put_slice(&self.message_type.to_bytes());
-        buf.put_u8(b'F');
-        buf.put_u32_le(self.message_size);
-     }
-}
-
-impl DecodeBinary for Header {
-    fn decode<B: bytes::Buf>(buf: &mut B) -> Result<Self, DecodingError> {
-        let mut message_type_bytes = [0u8; 3];
-        buf.copy_to_slice(&mut message_type_bytes);
-        let message_type = MsgType::from_bytes(&message_type_bytes)?;
-        let _reserved = buf.get_u8();
-        let message_size = buf.get_u32_le();
-        Ok(Header {
-            message_type,
-            message_size,
-        })
-    }    
-}
-
-impl Header {
-    pub fn encoded_len() -> u32 {
-        3 + 1 + 4
-    }
-}
-
-pub trait UacpMessage: EncodeBinary + DecodeBinary {
-    fn message_type() -> MsgType;
-}
-
-pub struct Msg<T: UacpMessage>(pub T);
-
-impl<T: UacpMessage> EncodeBinary for Msg<T> {
-    fn encoded_len(&self) -> u32 {
-        Header::encoded_len() + self.0.encoded_len()
+        8 + match self {
+            Msg::Hello(msg) => msg.encoded_len(),
+            Msg::Acknowledge(msg) => msg.encoded_len(),
+            Msg::Error(msg) => msg.encoded_len(),
+        }
     }
 
     fn encode<B: BufMut>(&self, buf: &mut B) {
-        let header = Header {
-            message_type: T::message_type(),
-            message_size: self.encoded_len(),
-        };
-        header.encode(buf);
-        self.0.encode(buf);
-    }
-}
-
-impl<T: UacpMessage> DecodeBinary for Msg<T> {
-    fn decode<B: bytes::Buf>(buf: &mut B) -> Result<Self, DecodingError> {
-        let header = Header::decode(buf)?;
-        if header.message_type != T::message_type() {
-            return Err(crate::msg::binary::DecodingError::BadMessageType);
+        match self {
+            Msg::Hello(msg) => {
+                buf.put_slice(b"HELF");
+                buf.put_u32_le(8 + msg.encoded_len());
+                msg.encode(buf);
+            }
+            Msg::Acknowledge(msg) => {
+                buf.put_slice(b"ACKF");
+                buf.put_u32_le(8 + msg.encoded_len());
+                msg.encode(buf);
+            }
+            Msg::Error(msg) => {
+                buf.put_slice(b"ERRF");
+                buf.put_u32_le(8 + msg.encoded_len());
+                msg.encode(buf);
+            }
         }
-        let message = T::decode(buf)?;
-        Ok(Msg(message))
     }
 }
 
-impl<T: UacpMessage> std::fmt::Debug for Msg<T>
-where
-    T: std::fmt::Debug,
-{
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_tuple("Msg").field(&self.0).finish()
+impl DecodeBinary for Msg {
+    fn decode<B: bytes::Buf>(buf: &mut B) -> Result<Self, DecodingError> {
+        let mut msg_type = [0u8; 3];
+        check_remaining(buf, 8)?;
+        buf.copy_to_slice(&mut msg_type);
+        let _reserved = buf.get_u8();
+        let message_size = buf.get_u32_le();
+        check_remaining(buf, message_size as usize - 8)?;
+
+        match &msg_type {
+            b"HEL" => {
+                let hello = Hello::decode(buf)?;
+                Ok(Msg::Hello(hello))
+            }
+            b"ACK" => {
+                let ack = Acknowledge::decode(buf)?;
+                Ok(Msg::Acknowledge(ack))
+            }
+            b"ERR" => {
+                let err = Error::decode(buf)?;
+                Ok(Msg::Error(err))
+            }
+            _ => Err(DecodingError::BadMessageType),
+        }
     }
 }
-
-impl<T: UacpMessage> PartialEq for Msg<T>
-where
-    T: PartialEq,
-{
-    fn eq(&self, other: &Self) -> bool {
-        self.0 == other.0
-    }
-}
-
-impl<T: UacpMessage> Eq for Msg<T> where T: Eq {}
 
 #[derive(Debug, Clone, PartialEq, Eq, EncodeBinary, DecodeBinary)]
 pub struct Hello {
@@ -129,12 +78,6 @@ pub struct Hello {
     pub endpoint_url: String,
 }
 
-impl UacpMessage for Hello {
-    fn message_type() -> MsgType {
-        MsgType::Hello
-    }
-}
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq, EncodeBinary, DecodeBinary)]
 pub struct Acknowledge {
     pub protocol_version: u32,
@@ -142,12 +85,6 @@ pub struct Acknowledge {
     pub send_buffer_size: u32,
     pub max_message_size: u32,
     pub max_chunk_count: u32,
-}
-
-impl UacpMessage for Acknowledge {
-    fn message_type() -> MsgType {
-        MsgType::Acknowledge
-    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, EncodeBinary, DecodeBinary)]
@@ -203,16 +140,11 @@ pub enum ErrorCode {
     BadServiceUnsupported = 0x800b0000,
 }
 
-#[derive(Debug, Clone, PartialEq, EncodeBinary, DecodeBinary)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(EncodeBinary, DecodeBinary)]
 pub struct Error {
     pub code: ErrorCode,
     pub reason: String,
-}
-
-impl UacpMessage for Error {
-    fn message_type() -> MsgType {
-        MsgType::Error
-    }    
 }
 
 impl Error {
@@ -243,7 +175,7 @@ impl From<ErrorCode> for Error {
 mod tests {
     use bytes::BytesMut;
 
-    use super::{Acknowledge, Error, ErrorCode, Header, Hello, Msg, MsgType};
+    use super::{Acknowledge, Error, ErrorCode, Hello, Msg};
     use crate::msg::binary::{DecodeBinary, DecodingError, EncodeBinary};
 
     #[derive(Clone, Copy, ua_macros::EncodeBinary, ua_macros::DecodeBinary)]
@@ -299,6 +231,28 @@ mod tests {
     }
 
     #[test]
+    fn hello_msg_encodes_fields_in_declaration_order() {
+        let hello = Msg::Hello(Hello {
+            protocol_version: 1,
+            receive_buffer_size: 2,
+            send_buffer_size: 3,
+            max_message_size: 4,
+            max_chunk_count: 5,
+            endpoint_url: "x".to_owned(),
+        });
+        let mut buf = BytesMut::new();
+
+        assert_eq!(hello.encoded_len(), 33);
+        hello.encode(&mut buf);
+        assert_eq!(
+            &buf[..],
+            &[
+                b'H', b'E', b'L', b'F', 33, 0, 0, 0, 1, 0, 0, 0, 2, 0, 0, 0, 3, 0, 0, 0, 4, 0, 0, 0, 5, 0, 0, 0, 1, 0, 0, 0, b'x',
+            ]
+        );
+    }
+
+    #[test]
     fn repr_enums_encode_their_discriminants() {
         let mut buf = BytesMut::new();
 
@@ -343,12 +297,6 @@ mod tests {
 
     #[test]
     fn uacp_types_roundtrip() {
-        let header = Header {
-            message_type: MsgType::Hello,
-            message_size: 8,
-        };
-        assert_roundtrip(&header);
-
         let hello = Hello {
             protocol_version: 1,
             receive_buffer_size: 8192,
@@ -358,7 +306,7 @@ mod tests {
             endpoint_url: "opc.tcp://localhost:4840".to_owned(),
         };
         assert_roundtrip(&hello);
-        assert_roundtrip(&Msg(hello));
+        assert_roundtrip(&Msg::Hello(hello));
 
         let acknowledge = Acknowledge {
             protocol_version: 1,
@@ -368,12 +316,14 @@ mod tests {
             max_chunk_count: 10,
         };
         assert_roundtrip(&acknowledge);
+        assert_roundtrip(&Msg::Acknowledge(acknowledge));
 
         let error = Error::new(
             ErrorCode::BadTcpMessageTooLarge,
             "message exceeds configured limit".to_owned(),
         );
         assert_roundtrip(&error);
+        assert_roundtrip(&Msg::Error(error));
 
         let error_codes = [
             ErrorCode::BadTcpServerTooBusy,

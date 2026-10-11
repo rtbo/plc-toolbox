@@ -3,6 +3,7 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net;
 
 use crate::msg::binary::{DecodeBinary, EncodeBinary};
+use crate::msg::uacp::Msg;
 
 pub struct Connection {
     stream: net::TcpStream,
@@ -26,7 +27,7 @@ impl crate::Connection for Connection {
         })
     }
 
-    async fn send(&mut self, msg: impl EncodeBinary) -> Result<(), super::Error> {
+    async fn send(&mut self, msg: Msg) -> Result<(), super::Error> {
         self.send_buf.clear();
         msg.encode(&mut self.send_buf);
         println!("Sending message of length: {}", self.send_buf.len());
@@ -35,7 +36,7 @@ impl crate::Connection for Connection {
         Ok(())
     }
 
-    async fn recv<T: DecodeBinary>(&mut self) -> Result<T, super::Error> {
+    async fn recv(&mut self) -> Result<Msg, super::Error> {
         self.recv_buf.clear();
         let n = self.stream.read_buf(&mut self.recv_buf).await?;
         if n == 0 {
@@ -46,7 +47,7 @@ impl crate::Connection for Connection {
         }
         
         let mut buf = &self.recv_buf[..];
-        let msg = T::decode(&mut buf)?;
+        let msg = Msg::decode(&mut buf)?;
         Ok(msg)
     }
 }

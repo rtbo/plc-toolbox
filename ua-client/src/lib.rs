@@ -28,12 +28,17 @@ where
             max_chunk_count: 16,
             endpoint_url: endpoint.to_string(),
         };
-        println!("endpoint len: {}", endpoint.len());
 
-        conn.send(uacp::Msg(hello_msg)).await?;
+        conn.send(uacp::Msg::Hello(hello_msg)).await?;
 
-        let ack_msg = conn.recv::<uacp::Msg<uacp::Acknowledge>>().await?;
-        println!("Received Acknowledge: {:?}", ack_msg);
+        let msg = conn.recv().await?;
+        let uacp::Msg::Acknowledge(ack_msg) = msg else {
+            return Err(ua_core::connection::Error::Uacp(
+                uacp::ErrorCode::BadTcpMessageTypeInvalid.into(),
+            ));
+        };
+
+        println!("Acknowledge: {:?}", ack_msg);
 
         self.connection = Some(conn);
         Ok(())

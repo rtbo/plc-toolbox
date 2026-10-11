@@ -1,5 +1,5 @@
-use crate::msg::binary::{self, DecodeBinary, EncodeBinary};
-use crate::msg::uacp;
+use crate::msg::binary;
+use crate::msg::uacp::{self, Msg};
 
 
 pub mod tcp;
@@ -23,6 +23,6 @@ pub enum Error {
 pub trait Connection: Sized {
     async fn connect(endpoint: &str) -> Result<Self, Error>;
 
-    async fn send(&mut self, msg: impl EncodeBinary) -> Result<(), Error>;
-    async fn recv<T: DecodeBinary>(&mut self) -> Result<T, Error>;
+    async fn send(&mut self, msg: Msg) -> Result<(), Error>;
+    async fn recv(&mut self) -> Result<Msg, Error>;
 }

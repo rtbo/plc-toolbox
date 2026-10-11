@@ -25,7 +25,7 @@ pub trait DecodeBinary: Sized {
     fn decode<B: Buf>(buf: &mut B) -> Result<Self, DecodingError>;
 }
 
-fn check_remaining<B: Buf>(buf: &mut B, required: usize) -> Result<(), DecodingError> {
+pub(crate) fn check_remaining<B: Buf>(buf: &mut B, required: usize) -> Result<(), DecodingError> {
     if buf.remaining() < required {
         return Err(DecodingError::NotEnoughData);
     }
