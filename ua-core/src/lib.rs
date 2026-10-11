@@ -1,3 +1,5 @@
+extern crate self as ua_core;
+
 pub mod connection;
 pub mod msg;
 pub mod status_code;

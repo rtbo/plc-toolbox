@@ -3947,6 +3947,7 @@ version = "0.1.0"
 dependencies = [
  "bytes",
  "tokio",
+ "ua-macros",
  "ua-nsc",
 ]
 
@@ -3958,6 +3959,15 @@ dependencies = [
  "open62541",
  "open62541-sys",
  "tokio",
+]
+
+[[package]]
+name = "ua-macros"
+version = "0.1.0"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.119",
 ]
 
 [[package]]

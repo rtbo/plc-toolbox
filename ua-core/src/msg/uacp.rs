@@ -3,7 +3,7 @@ use bytes::BufMut;
 
 use crate::msg::binary::EncodeBinary;
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, ua_macros::EncodeBinary)]
 pub struct Header {
     pub message_type: [u8; 3],
     pub reserved: u8,
@@ -13,18 +13,6 @@ pub struct Header {
 impl Header {
     pub fn encoded_len() -> u32 {
         3 + 1 + 4
-    }
-}
-
-impl EncodeBinary for Header {
-    fn encoded_len(&self) -> u32 {
-        Self::encoded_len()
-    }
-
-    fn encode<B: BufMut>(&self, buf: &mut B) {
-        self.message_type.encode(buf);
-        self.reserved.encode(buf);
-        self.message_size.encode(buf);
     }
 }
 
@@ -50,7 +38,7 @@ impl<T: UacpMessage> EncodeBinary for Msg<T> {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, ua_macros::EncodeBinary)]
 pub struct Hello {
     pub protocol_version: u32,
     pub receive_buffer_size: u32,
@@ -66,27 +54,7 @@ impl UacpMessage for Hello {
     }
 }
 
-impl EncodeBinary for Hello {
-    fn encoded_len(&self) -> u32 {
-        self.protocol_version.encoded_len()
-            + self.receive_buffer_size.encoded_len()
-            + self.send_buffer_size.encoded_len()
-            + self.max_message_size.encoded_len()
-            + self.max_chunk_count.encoded_len()
-            + self.endpoint_url.encoded_len()
-    }
-
-    fn encode<B: BufMut>(&self, buf: &mut B) {
-        self.protocol_version.encode(buf);
-        self.receive_buffer_size.encode(buf);
-        self.send_buffer_size.encode(buf);
-        self.max_message_size.encode(buf);
-        self.max_chunk_count.encode(buf);
-        self.endpoint_url.encode(buf);
-    }
-}
-
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, ua_macros::EncodeBinary)]
 pub struct Acknowledge {
     pub protocol_version: u32,
     pub receive_buffer_size: u32,
@@ -95,7 +63,7 @@ pub struct Acknowledge {
     pub max_chunk_count: u32,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ua_macros::EncodeBinary)]
 #[repr(u32)]
 pub enum ErrorCode {
     /// The server cannot process the request because it is too busy.
@@ -180,7 +148,7 @@ impl ErrorCode {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, ua_macros::EncodeBinary)]
 pub struct Error {
     pub code: ErrorCode,
     pub reason: String,
@@ -199,3 +167,67 @@ impl std::fmt::Display for Error {
 }
 
 impl std::error::Error for Error {}
+
+#[cfg(test)]
+mod tests {
+    use bytes::BytesMut;
+
+    use super::{ErrorCode, Hello};
+    use crate::msg::binary::EncodeBinary;
+
+    #[derive(Clone, Copy, ua_macros::EncodeBinary)]
+    #[repr(u8)]
+    enum SmallCode {
+        Value = 0xab,
+    }
+
+    #[derive(Clone, Copy, ua_macros::EncodeBinary)]
+    #[repr(u16)]
+    enum MediumCode {
+        Value = 0xcdef,
+    }
+
+    #[test]
+    fn hello_encodes_fields_in_declaration_order() {
+        let hello = Hello {
+            protocol_version: 1,
+            receive_buffer_size: 2,
+            send_buffer_size: 3,
+            max_message_size: 4,
+            max_chunk_count: 5,
+            endpoint_url: "x".to_owned(),
+        };
+        let mut buf = BytesMut::new();
+
+        assert_eq!(hello.encoded_len(), 25);
+        hello.encode(&mut buf);
+        assert_eq!(
+            &buf[..],
+            &[
+                1, 0, 0, 0, 2, 0, 0, 0, 3, 0, 0, 0, 4, 0, 0, 0, 5, 0, 0, 0, 1, 0, 0, 0, b'x',
+            ]
+        );
+    }
+
+    #[test]
+    fn repr_enums_encode_their_discriminants() {
+        let mut buf = BytesMut::new();
+
+        let small = SmallCode::Value;
+        assert_eq!(small.encoded_len(), 1);
+        small.encode(&mut buf);
+        assert_eq!(&buf[..], &[0xab]);
+
+        buf.clear();
+        let medium = MediumCode::Value;
+        assert_eq!(medium.encoded_len(), 2);
+        medium.encode(&mut buf);
+        assert_eq!(&buf[..], &[0xef, 0xcd]);
+
+        buf.clear();
+        let large = ErrorCode::BadTcpServerTooBusy;
+        assert_eq!(large.encoded_len(), 4);
+        large.encode(&mut buf);
+        assert_eq!(&buf[..], &0x807d0000u32.to_le_bytes());
+    }
+}

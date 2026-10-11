@@ -7,6 +7,7 @@ members = [
   "ua-client",
   "ua-core",
   "ua-lab",
+  "ua-macros",
   "ua-nsc",
 ]
 
@@ -19,6 +20,7 @@ license = "MIT"
 [workspace.dependencies]
 ua-client = { path = "ua-client" }
 ua-core = { path = "ua-core" }
+ua-macros = { path = "ua-macros" }
 ua-nsc = { path = "ua-nsc" }
 
 anyhow = "1.0.104"

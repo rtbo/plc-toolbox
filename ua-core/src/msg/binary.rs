@@ -1,4 +1,4 @@
-use bytes::BufMut;
+pub use bytes::BufMut;
 
 pub trait EncodeBinary {
     fn encoded_len(&self) -> u32;
@@ -29,6 +29,15 @@ impl EncodeBinary for &[u8] {
     }
     fn encode<B: BufMut>(&self, buf: &mut B) {
         buf.put_slice(self);
+    }
+}
+
+impl EncodeBinary for u16 {
+    fn encoded_len(&self) -> u32 {
+        2
+    }
+    fn encode<B: BufMut>(&self, buf: &mut B) {
+        buf.put_u16_le(*self);
     }
 }
 

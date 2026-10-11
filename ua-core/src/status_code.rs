@@ -1,6 +1,7 @@
 use std::mem;
 
-use crate::{connection, msg::uacp};
+use crate::connection;
+use crate::msg::uacp;
 
 include!(concat!(env!("OUT_DIR"), "/status_code.rs"));
 
