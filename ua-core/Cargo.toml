@@ -7,10 +7,13 @@ repository.workspace = true
 build = "build.rs"
 
 [dependencies]
+ua-macros.workspace = true
+
 bytes.workspace = true
+chrono.workspace = true
 thiserror.workspace = true
 tokio.workspace = true
-ua-macros.workspace = true
+uuid.workspace = true
 
 [build-dependencies]
 ua-nsc.workspace = true

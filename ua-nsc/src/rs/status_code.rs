@@ -23,22 +23,25 @@ where
     cg.end_block().await?;
 
     cg.write_line("").await?;
-    cg.start_block("impl StatusCode ").await?;
-    cg.start_block("pub fn from_u32(code: u32) -> Option<StatusCode> ")
+    cg.start_block("impl TryFrom<u32> for StatusCode ").await?;
+    cg.write_line("type Error = ();").await?;
+    cg.start_block("pub fn try_from(code: u32) -> Result<Self, Self::Error> ")
         .await?;
     cg.start_block("match code ").await?;
     for code in status_code {
         cg.write_line(&format!(
-            "0x{:08x} => Some(StatusCode::{}),",
+            "0x{:08x} => Ok(StatusCode::{}),",
             code.code, code.name
         ))
         .await?;
     }
-    cg.write_line("_ => None,").await?;
-    cg.end_block().await?;
-    cg.end_block().await?;
+    cg.write_line("_ => Err(()),").await?;
+    cg.end_block().await?; // match
+    cg.end_block().await?; // fn try_from
+    cg.end_block().await?; // impl TryFrom<u32> for StatusCode
 
     cg.write_line("").await?;
+    cg.start_block("impl StatusCode ").await?;
     cg.start_block("pub fn name(&self) -> &'static str ")
         .await?;
     cg.start_block("match self ").await?;
@@ -46,8 +49,8 @@ where
         cg.write_line(&format!("StatusCode::{} => \"{}\",", code.name, code.name))
             .await?;
     }
-    cg.end_block().await?;
-    cg.end_block().await?;
+    cg.end_block().await?; // match
+    cg.end_block().await?; // fn name
 
     cg.write_line("").await?;
     cg.start_block("pub fn explanation(&self) -> &'static str ")
@@ -60,10 +63,9 @@ where
         ))
         .await?;
     }
-    cg.end_block().await?;
-    cg.end_block().await?;
-
-    cg.end_block().await?;
+    cg.end_block().await?; // match
+    cg.end_block().await?; // fn explanation
+    cg.end_block().await?; // impl StatusCode
 
     cg.flush().await
 }

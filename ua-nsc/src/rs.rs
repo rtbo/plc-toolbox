@@ -2,6 +2,7 @@ use tokio::io;
 
 use crate::codegen::CodeGen;
 
+pub mod attribute_id;
 pub mod status_code;
 
 struct RsCodeGen<W>
