@@ -8,6 +8,7 @@ build = "build.rs"
 
 [dependencies]
 bytes.workspace = true
+thiserror.workspace = true
 tokio.workspace = true
 ua-macros.workspace = true
 

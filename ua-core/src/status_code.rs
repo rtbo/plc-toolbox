@@ -1,6 +1,7 @@
 use std::mem;
 
 use crate::connection;
+use crate::msg::binary::DecodingError;
 use crate::msg::uacp;
 
 include!(concat!(env!("OUT_DIR"), "/status_code.rs"));
@@ -28,8 +29,6 @@ impl std::fmt::Display for StatusCode {
     }
 }
 
-impl std::error::Error for StatusCode {}
-
 impl From<uacp::ErrorCode> for StatusCode {
     fn from(value: uacp::ErrorCode) -> Self {
         // SAFETY: All ErrorCode variants are valid status codes
@@ -42,6 +41,9 @@ impl From<connection::Error> for StatusCode {
         match value {
             connection::Error::Io(_) => StatusCode::BadCommunicationError,
             connection::Error::Uacp(err) => StatusCode::from(err.code),
+            connection::Error::Decoding(DecodingError::BadMessageType) => StatusCode::BadTcpMessageTypeInvalid,
+            connection::Error::Decoding(DecodingError::NotEnoughData) => StatusCode::BadEncodingLimitsExceeded,
+            connection::Error::Decoding(_) => StatusCode::BadDataEncodingInvalid,
             connection::Error::UnsupportedProtocol(_) => StatusCode::BadProtocolVersionUnsupported,
         }
     }

@@ -32,6 +32,9 @@ where
 
         conn.send(uacp::Msg(hello_msg)).await?;
 
+        let ack_msg = conn.recv::<uacp::Msg<uacp::Acknowledge>>().await?;
+        println!("Received Acknowledge: {:?}", ack_msg);
+
         self.connection = Some(conn);
         Ok(())
     }
