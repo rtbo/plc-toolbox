@@ -25,7 +25,7 @@ where
     cg.write_line("").await?;
     cg.start_block("impl TryFrom<u32> for StatusCode ").await?;
     cg.write_line("type Error = ();").await?;
-    cg.start_block("pub fn try_from(code: u32) -> Result<Self, Self::Error> ")
+    cg.start_block("fn try_from(code: u32) -> Result<Self, Self::Error> ")
         .await?;
     cg.start_block("match code ").await?;
     for code in status_code {

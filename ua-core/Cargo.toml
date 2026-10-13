@@ -2,8 +2,8 @@
 name = "ua-core"
 version.workspace = true
 edition.workspace = true
-license.workspace = true
 repository.workspace = true
+license.workspace = true
 build = "build.rs"
 
 [dependencies]
@@ -13,8 +13,11 @@ bytes.workspace = true
 chrono.workspace = true
 thiserror.workspace = true
 tokio.workspace = true
-uuid.workspace = true
+uuid = { workspace = true, optional = true }
 
 [build-dependencies]
-ua-nsc.workspace = true
 tokio.workspace = true
+ua-nsc.workspace = true
+
+[features]
+uuid = ["dep:uuid"]

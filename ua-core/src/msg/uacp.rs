@@ -2,7 +2,8 @@
 use bytes::BufMut;
 use ua_macros::{DecodeBinary, EncodeBinary};
 
-use crate::msg::binary::{DecodeBinary, DecodingError, EncodeBinary, check_remaining};
+use crate::msg::binary::{Decode, DecodingError, Encode, check_remaining};
+use crate::ua;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Msg {
@@ -11,7 +12,7 @@ pub enum Msg {
     Error(Error),
 }
 
-impl EncodeBinary for Msg {
+impl Encode for Msg {
     fn encoded_len(&self) -> u32 {
         8 + match self {
             Msg::Hello(msg) => msg.encoded_len(),
@@ -41,7 +42,7 @@ impl EncodeBinary for Msg {
     }
 }
 
-impl DecodeBinary for Msg {
+impl Decode for Msg {
     fn decode<B: bytes::Buf>(buf: &mut B) -> Result<Self, DecodingError> {
         let mut msg_type = [0u8; 3];
         check_remaining(buf, 8)?;
@@ -140,8 +141,7 @@ pub enum ErrorCode {
     BadServiceUnsupported = 0x800b0000,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-#[derive(EncodeBinary, DecodeBinary)]
+#[derive(Debug, Clone, PartialEq, Eq, EncodeBinary, DecodeBinary)]
 pub struct Error {
     pub code: ErrorCode,
     pub reason: String,
@@ -163,7 +163,7 @@ impl std::error::Error for Error {}
 
 impl From<ErrorCode> for Error {
     fn from(code: ErrorCode) -> Self {
-        let status_code = crate::StatusCode::from(code);
+        let status_code = ua::StatusCode::from(code);
         Self {
             code,
             reason: status_code.explanation().to_string(),
@@ -176,7 +176,7 @@ mod tests {
     use bytes::BytesMut;
 
     use super::{Acknowledge, Error, ErrorCode, Hello, Msg};
-    use crate::msg::binary::{DecodeBinary, DecodingError, EncodeBinary};
+    use crate::msg::binary::{Decode, DecodingError, Encode};
 
     #[derive(Clone, Copy, ua_macros::EncodeBinary, ua_macros::DecodeBinary)]
     #[repr(u8)]
@@ -192,7 +192,7 @@ mod tests {
 
     fn assert_roundtrip<T>(value: &T)
     where
-        T: EncodeBinary + DecodeBinary + PartialEq + std::fmt::Debug,
+        T: Encode + Decode + PartialEq + std::fmt::Debug,
     {
         let mut encoded = BytesMut::new();
         value.encode(&mut encoded);
@@ -247,7 +247,8 @@ mod tests {
         assert_eq!(
             &buf[..],
             &[
-                b'H', b'E', b'L', b'F', 33, 0, 0, 0, 1, 0, 0, 0, 2, 0, 0, 0, 3, 0, 0, 0, 4, 0, 0, 0, 5, 0, 0, 0, 1, 0, 0, 0, b'x',
+                b'H', b'E', b'L', b'F', 33, 0, 0, 0, 1, 0, 0, 0, 2, 0, 0, 0, 3, 0, 0, 0, 4, 0, 0,
+                0, 5, 0, 0, 0, 1, 0, 0, 0, b'x',
             ]
         );
     }

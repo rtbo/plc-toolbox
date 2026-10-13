@@ -1,20 +1,19 @@
 use crate::msg::binary;
 use crate::msg::uacp::{self, Msg};
 
-
 pub mod tcp;
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),
-    
+
     #[error("UACP error: {0}")]
     Uacp(#[from] uacp::Error),
-    
+
     #[error("Decoding error: {0}")]
     Decoding(#[from] binary::DecodingError),
-    
+
     #[error("Unsupported protocol: {0}")]
     UnsupportedProtocol(String),
 }

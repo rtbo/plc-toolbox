@@ -23,7 +23,7 @@ where
     cg.write_line("").await?;
     cg.start_block("impl TryFrom<u32> for AttributeId ").await?;
     cg.write_line("type Error = ();").await?;
-    cg.start_block("pub fn try_from(id: u32) -> Result<Self, Self::Error> ")
+    cg.start_block("fn try_from(id: u32) -> Result<Self, Self::Error> ")
         .await?;
     cg.start_block("match id ").await?;
     for attr_id in attr_ids {

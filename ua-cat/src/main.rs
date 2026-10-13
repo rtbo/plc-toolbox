@@ -1,3 +1,5 @@
+use ua_core::ua;
+
 #[tokio::main]
 async fn main() -> std::process::ExitCode {
     if let Err(e) = run().await {
@@ -9,7 +11,7 @@ async fn main() -> std::process::ExitCode {
     }
 }
 
-async fn run() -> Result<(), ua_core::StatusCode> {
+async fn run() -> Result<(), ua::StatusCode> {
     let mut client = ua_client::TcpClient::new();
     client.connect("opc.tcp://localhost:4840").await?;
 

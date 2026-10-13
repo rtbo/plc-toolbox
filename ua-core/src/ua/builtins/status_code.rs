@@ -1,8 +1,8 @@
 use std::mem;
 
-use crate::connection;
-use crate::msg::binary::DecodingError;
+use crate::msg::binary::{self, DecodingError};
 use crate::msg::uacp;
+use crate::{DataType, connection};
 
 include!(concat!(env!("OUT_DIR"), "/status_code.rs"));
 
@@ -41,10 +41,46 @@ impl From<connection::Error> for StatusCode {
         match value {
             connection::Error::Io(_) => StatusCode::BadCommunicationError,
             connection::Error::Uacp(err) => StatusCode::from(err.code),
-            connection::Error::Decoding(DecodingError::BadMessageType) => StatusCode::BadTcpMessageTypeInvalid,
-            connection::Error::Decoding(DecodingError::NotEnoughData) => StatusCode::BadEncodingLimitsExceeded,
+            connection::Error::Decoding(DecodingError::BadMessageType) => {
+                StatusCode::BadTcpMessageTypeInvalid
+            }
+            connection::Error::Decoding(DecodingError::NotEnoughData) => {
+                StatusCode::BadEncodingLimitsExceeded
+            }
             connection::Error::Decoding(_) => StatusCode::BadDataEncodingInvalid,
             connection::Error::UnsupportedProtocol(_) => StatusCode::BadProtocolVersionUnsupported,
         }
+    }
+}
+
+impl DataType for StatusCode {
+    fn type_id() -> crate::ua::NodeId {
+        crate::ua::NodeId::Numeric(0, 19)
+    }
+
+    fn nullable() -> bool {
+        false
+    }
+
+    fn default() -> Self {
+        StatusCode::Good
+    }
+}
+
+impl binary::Encode for StatusCode {
+    fn encoded_len(&self) -> u32 {
+        4
+    }
+
+    fn encode<B: bytes::BufMut>(&self, buf: &mut B) {
+        buf.put_u32_le(*self as u32)
+    }
+}
+
+impl binary::Decode for StatusCode {
+    fn decode<B: bytes::Buf>(buf: &mut B) -> Result<Self, binary::DecodingError> {
+        binary::check_remaining(buf, 4)?;
+        let code = buf.get_u32_le();
+        Self::try_from(code).map_err(|_| binary::DecodingError::InvalidData)
     }
 }

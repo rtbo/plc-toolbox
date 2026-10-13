@@ -51,24 +51,24 @@ fn expand_struct(
         generics
             .make_where_clause()
             .predicates
-            .push(parse_quote!(#field_type: ::ua_core::msg::binary::EncodeBinary));
+            .push(parse_quote!(#field_type: ::ua_core::msg::binary::Encode));
     }
 
     let encoded_len_fields = field_accesses.iter().map(|member| {
         quote! {
-            ::ua_core::msg::binary::EncodeBinary::encoded_len(&self.#member)
+            ::ua_core::msg::binary::Encode::encoded_len(&self.#member)
         }
     });
     let encode_fields = field_accesses.iter().map(|member| {
         quote! {
-            ::ua_core::msg::binary::EncodeBinary::encode(&self.#member, buf);
+            ::ua_core::msg::binary::Encode::encode(&self.#member, buf);
         }
     });
     let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
 
     Ok(quote! {
         #[automatically_derived]
-        impl #impl_generics ::ua_core::msg::binary::EncodeBinary for #name #ty_generics #where_clause {
+        impl #impl_generics ::ua_core::msg::binary::Encode for #name #ty_generics #where_clause {
             fn encoded_len(&self) -> u32 {
                 0 #( + #encoded_len_fields )*
             }
@@ -123,15 +123,15 @@ fn expand_enum(
 
     Ok(quote! {
         #[automatically_derived]
-        impl #impl_generics ::ua_core::msg::binary::EncodeBinary for #name #ty_generics #where_clause {
+        impl #impl_generics ::ua_core::msg::binary::Encode for #name #ty_generics #where_clause {
             fn encoded_len(&self) -> u32 {
                 let value: #repr_type = *self as #repr_type;
-                ::ua_core::msg::binary::EncodeBinary::encoded_len(&value)
+                ::ua_core::msg::binary::Encode::encoded_len(&value)
             }
 
             fn encode<B: ::ua_core::msg::binary::BufMut>(&self, buf: &mut B) {
                 let value: #repr_type = *self as #repr_type;
-                ::ua_core::msg::binary::EncodeBinary::encode(&value, buf);
+                ::ua_core::msg::binary::Encode::encode(&value, buf);
             }
         }
     })

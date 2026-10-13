@@ -2,7 +2,7 @@ use bytes::BytesMut;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net;
 
-use crate::msg::binary::{DecodeBinary, EncodeBinary};
+use crate::msg::binary::{Decode, Encode};
 use crate::msg::uacp::Msg;
 
 pub struct Connection {
@@ -45,7 +45,7 @@ impl crate::Connection for Connection {
                 "Connection closed",
             )));
         }
-        
+
         let mut buf = &self.recv_buf[..];
         let msg = Msg::decode(&mut buf)?;
         Ok(msg)

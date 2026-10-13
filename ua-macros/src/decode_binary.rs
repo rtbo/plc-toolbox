@@ -51,12 +51,12 @@ pub fn expand_struct(
         generics
             .make_where_clause()
             .predicates
-            .push(syn::parse_quote!(#field_type: ::ua_core::msg::binary::DecodeBinary));
+            .push(syn::parse_quote!(#field_type: ::ua_core::msg::binary::Decode));
     }
 
     let decode_fields = field_accesses.iter().map(|member| {
         quote! {
-            #member: ::ua_core::msg::binary::DecodeBinary::decode(buf)?
+            #member: ::ua_core::msg::binary::Decode::decode(buf)?
         }
     });
 
@@ -64,7 +64,7 @@ pub fn expand_struct(
 
     let expanded = quote! {
         #[automatically_derived]
-        impl #impl_generics ::ua_core::msg::binary::DecodeBinary for #name #ty_generics #where_clause {
+        impl #impl_generics ::ua_core::msg::binary::Decode for #name #ty_generics #where_clause {
             fn decode<B: ::bytes::Buf>(buf: &mut B) -> Result<Self, ::ua_core::msg::binary::DecodingError> {
                 Ok(Self {
                     #(#decode_fields),*
@@ -119,11 +119,11 @@ fn expand_enum(
         }
 
         #[automatically_derived]
-        impl #impl_generics ::ua_core::msg::binary::DecodeBinary for #name #ty_generics #where_clause {
+        impl #impl_generics ::ua_core::msg::binary::Decode for #name #ty_generics #where_clause {
             fn decode<B: ::ua_core::msg::binary::Buf>(
                 buf: &mut B,
             ) -> Result<Self, ::ua_core::msg::binary::DecodingError> {
-                let value = <#repr_type as ::ua_core::msg::binary::DecodeBinary>::decode(buf)?;
+                let value = <#repr_type as ::ua_core::msg::binary::Decode>::decode(buf)?;
                 Self::try_from(value)
                     .map_err(|_| ::ua_core::msg::binary::DecodingError::InvalidData)
             }
