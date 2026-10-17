@@ -1,9 +1,11 @@
+use std::fmt;
+
 use bytes::BufMut;
 
 use crate::msg::binary::{self, Decode, Encode};
 use crate::{DataType, ua};
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum NodeId {
     Numeric(u16, u32),
     String(u16, String),
@@ -12,7 +14,7 @@ pub enum NodeId {
 }
 
 /// A node-id that borrows its identifier instead of owning it. This is useful for encoding node-ids without allocating.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum NodeIdRef<'a> {
     Numeric(u16, u32),
     String(u16, &'a str),
@@ -66,6 +68,100 @@ impl NodeId {
             NodeId::Opaque(ns, id) => NodeIdRef::Opaque(*ns, id.as_slice()),
         }
     }
+}
+
+impl NodeIdRef<'_> {
+    pub fn namespace_index(&self) -> u16 {
+        match self {
+            NodeIdRef::Numeric(namespace_index, ..) => *namespace_index,
+            NodeIdRef::String(namespace_index, ..) => *namespace_index,
+            NodeIdRef::Guid(namespace_index, ..) => *namespace_index,
+            NodeIdRef::Opaque(namespace_index, ..) => *namespace_index,
+        }
+    }
+}
+
+impl fmt::Display for NodeId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let ns = self.namespace_index();
+        if ns != 0 {
+            write!(f, "ns={};", ns)?;
+        }
+        match self {
+            NodeId::Numeric(_, id) => {
+                write!(f, "i={}", id)
+            }
+            NodeId::String(_, id) => {
+                write!(f, "s={}", id)
+            }
+            NodeId::Guid(_, id) => {
+                write!(f, "g={}", id)
+            }
+            NodeId::Opaque(_, id) => {
+                use base64::engine::general_purpose::STANDARD;
+                use base64::Engine;
+                write!(f, "b={}", STANDARD.encode(id))
+            }
+        }
+    }
+}
+
+impl fmt::Display for NodeIdRef<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let ns = self.namespace_index();
+        if ns != 0 {
+            write!(f, "ns={};", ns)?;
+        }
+        match self {
+            NodeIdRef::Numeric(_, id) => {
+                write!(f, "i={}", id)
+            }
+            NodeIdRef::String(_, id) => {
+                write!(f, "s={}", id)
+            }
+            NodeIdRef::Guid(_, id) => {
+                write!(f, "g={}", id)
+            }
+            NodeIdRef::Opaque(_, id) => {
+                use base64::engine::general_purpose::STANDARD;
+                use base64::Engine;
+                write!(f, "b={}", STANDARD.encode(id))
+            }
+        }
+    }
+}
+
+impl std::str::FromStr for NodeId {
+    type Err = &'static str;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let (ns, id) = if let Some(ns_index) = s.strip_prefix("ns=") {
+            let semicolon_pos = ns_index.find(';').ok_or("Invalid NodeId format")?;
+            let ns_str = &ns_index[..semicolon_pos];
+            let ns: u16 = ns_str.parse().map_err(|_| "Invalid namespace index")?;
+            let id = &ns_index[semicolon_pos + 1..];
+            (ns, id)
+        } else {
+            (0, s)
+        };
+
+        if let Some(id) = id.strip_prefix("i=") {
+            let identifier: u32 = id.parse().map_err(|_| "Invalid numeric identifier")?;
+            Ok(NodeId::Numeric(ns, identifier))
+        } else if let Some(id) = id.strip_prefix("s=") {
+            Ok(NodeId::String(ns, id.to_string()))
+        } else if let Some(id) = id.strip_prefix("g=") {
+            let guid: ua::Guid = id.parse().map_err(|_| "Invalid GUID identifier")?;
+            Ok(NodeId::Guid(ns, guid))
+        } else if let Some(id) = id.strip_prefix("b=") {
+            use base64::engine::general_purpose::STANDARD;
+            use base64::Engine;
+            let bytes = STANDARD.decode(id).map_err(|_| "Invalid base64 identifier")?;
+            Ok(NodeId::Opaque(ns, bytes))
+        } else {
+            Err("Invalid NodeId format")
+        }
+    }    
 }
 
 impl DataType for NodeId {
@@ -237,5 +333,55 @@ pub(super) fn nodeidref_encode<B: BufMut>(node_id: &NodeIdRef, buf: &mut B, flag
             buf.put_u16_le(*namespace_index);
             identifier.encode(buf);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn test_nodeid_display() {
+        let node_id_numeric = NodeId::Numeric(0, 42);
+        assert_eq!(node_id_numeric.to_string(), "i=42");
+
+        let node_id_string = NodeId::String(1, "Hello".to_string());
+        assert_eq!(node_id_string.to_string(), "ns=1;s=Hello");
+
+        let guid = ua::Guid {
+            data1: 0x12345678,
+            data2: 0x1234,
+            data3: 0x5678,
+            data4: [0x90, 0xab, 0xcd, 0xef, 0x12, 0x34, 0x56, 0x78],
+        };
+        let node_id_guid = NodeId::Guid(2, guid);
+        assert_eq!(
+            node_id_guid.to_string(),
+            "ns=2;g=12345678-1234-5678-90AB-CDEF12345678"
+        );
+
+        let node_id_opaque = NodeId::Opaque(3, vec![1, 2, 3, 4]);
+        assert_eq!(node_id_opaque.to_string(), "ns=3;b=AQIDBA==");
+    }
+
+    #[test]
+    fn test_nodeid_from_str() {
+        let node_id_numeric: NodeId = "i=42".parse().unwrap();
+        assert_eq!(node_id_numeric, NodeId::Numeric(0, 42));
+
+        let node_id_string: NodeId = "ns=1;s=Hello".parse().unwrap();
+        assert_eq!(node_id_string, NodeId::String(1, "Hello".to_string()));
+
+        let guid_str = "12345678-1234-5678-90AB-CDEF12345678";
+        let node_id_guid: NodeId = format!("ns=2;g={}", guid_str).parse().unwrap();
+        let guid = ua::Guid {
+            data1: 0x12345678,
+            data2: 0x1234,
+            data3: 0x5678,
+            data4: [0x90, 0xab, 0xcd, 0xef, 0x12, 0x34, 0x56, 0x78],
+        };
+        assert_eq!(node_id_guid, NodeId::Guid(2, guid));
+
+        let node_id_opaque: NodeId = "ns=3;b=AQIDBA==".parse().unwrap();
+        assert_eq!(node_id_opaque, NodeId::Opaque(3, vec![1, 2, 3, 4]));
     }
 }
