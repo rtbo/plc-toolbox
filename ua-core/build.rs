@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::env;
 use std::path::{Path, PathBuf};
 
@@ -53,6 +54,37 @@ async fn attribute_ids(schema_path: &Path, out_dir: &Path) {
         .unwrap();
 }
 
+async fn types(schema_path: &Path, out_dir: &Path) {
+    let xml_path = schema_path.join("Opc.Ua.Types.bsd");
+    let csv_path = schema_path.join("NodeIds.csv");
+
+    println!("cargo:rerun-if-changed={}", xml_path.display());
+
+    let types = ua_nsc::parse::opc_bsd::parse_types_bsd(&xml_path)
+        .await
+        .expect("Failed to parse Opc.Ua.Types.bsd.xml");
+
+    let ua_type_ids = ua_nsc::parse::node_ids::parse_csv(&csv_path)
+        .await
+        .expect("Failed to parse NodeIds.csv");
+    let ua_type_ids =
+        HashMap::from_iter(ua_type_ids.into_iter().map(|nid| (nid.name.clone(), nid)));
+
+    // Generate types.rs
+    let rs_path = out_dir.join("types.rs");
+    let mut rs_file = create_new_file(&rs_path).await.unwrap();
+    ua_nsc::rs::types::generate(
+        &types,
+        &ua_type_ids,
+        &ua_nsc::rs::types::Options {
+            ua_core_module: "crate".to_string(),
+        },
+        &mut rs_file,
+    )
+    .await
+    .unwrap();
+}
+
 #[tokio::main]
 async fn main() {
     let manifest_dir = env_dir("CARGO_MANIFEST_DIR");
@@ -61,4 +93,5 @@ async fn main() {
 
     status_codes(&schema_path, &out_dir).await;
     attribute_ids(&schema_path, &out_dir).await;
+    types(&schema_path, &out_dir).await;
 }

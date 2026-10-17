@@ -1,4 +1,4 @@
-use quote::quote;
+use quote::{ToTokens, quote};
 use syn::punctuated::Punctuated;
 use syn::{Attribute, Data, DeriveInput, Fields, Path, Token};
 
@@ -98,22 +98,25 @@ fn expand_enum(
         })
         .collect::<syn::Result<Vec<_>>>()?;
 
+    let from_fn_name = syn::Ident::new(
+        &format!("from_{}", repr_type.to_token_stream()),
+        name.span(),
+    );
+
     let try_from_arms = variant_names.iter().map(|variant| {
         quote! {
-            value if value == Self::#variant as #repr_type => Ok(Self::#variant)
+            value if value == Self::#variant as #repr_type => Some(Self::#variant)
         }
     });
     let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
 
     Ok(quote! {
         #[automatically_derived]
-        impl #impl_generics ::core::convert::TryFrom<#repr_type> for #name #ty_generics #where_clause {
-            type Error = ();
-
-            fn try_from(value: #repr_type) -> Result<Self, Self::Error> {
+        impl #impl_generics #name #ty_generics #where_clause {
+            pub fn #from_fn_name (value: #repr_type) -> Option<Self> {
                 match value {
                     #(#try_from_arms,)*
-                    _ => Err(()),
+                    _ => None,
                 }
             }
         }
@@ -124,8 +127,8 @@ fn expand_enum(
                 buf: &mut B,
             ) -> Result<Self, ::ua_core::msg::binary::DecodingError> {
                 let value = <#repr_type as ::ua_core::msg::binary::Decode>::decode(buf)?;
-                Self::try_from(value)
-                    .map_err(|_| ::ua_core::msg::binary::DecodingError::InvalidData)
+                Self::#from_fn_name(value)
+                    .ok_or_else(|| ::ua_core::msg::binary::DecodingError::InvalidData)
             }
         }
     })

@@ -4,6 +4,7 @@ use crate::codegen::CodeGen;
 
 pub mod attribute_id;
 pub mod status_code;
+pub mod types;
 
 struct RsCodeGen<W>
 where
@@ -46,6 +47,30 @@ where
             self.indent -= 1;
         }
         self.write_indentedline(self.indent, "}").await?;
+        Ok(())
+    }
+
+    async fn _write_comment(&mut self, doc: &str) -> io::Result<()> {
+        for line in doc.lines() {
+            self.write_indentedline(self.indent, &format!("// {}", line))
+                .await?;
+        }
+        Ok(())
+    }
+
+    async fn write_doc_comment(&mut self, doc: &str) -> io::Result<()> {
+        for line in doc.lines() {
+            self.write_indentedline(self.indent, &format!("/// {}", line))
+                .await?;
+        }
+        Ok(())
+    }
+
+    async fn write_module_doc_comment(&mut self, doc: &str) -> io::Result<()> {
+        for line in doc.lines() {
+            self.write_indentedline(self.indent, &format!("//! {}", line))
+                .await?;
+        }
         Ok(())
     }
 }
