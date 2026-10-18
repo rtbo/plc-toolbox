@@ -98,8 +98,8 @@ impl fmt::Display for NodeId {
                 write!(f, "g={}", id)
             }
             NodeId::Opaque(_, id) => {
-                use base64::engine::general_purpose::STANDARD;
                 use base64::Engine;
+                use base64::engine::general_purpose::STANDARD;
                 write!(f, "b={}", STANDARD.encode(id))
             }
         }
@@ -123,8 +123,8 @@ impl fmt::Display for NodeIdRef<'_> {
                 write!(f, "g={}", id)
             }
             NodeIdRef::Opaque(_, id) => {
-                use base64::engine::general_purpose::STANDARD;
                 use base64::Engine;
+                use base64::engine::general_purpose::STANDARD;
                 write!(f, "b={}", STANDARD.encode(id))
             }
         }
@@ -154,14 +154,16 @@ impl std::str::FromStr for NodeId {
             let guid: ua::Guid = id.parse().map_err(|_| "Invalid GUID identifier")?;
             Ok(NodeId::Guid(ns, guid))
         } else if let Some(id) = id.strip_prefix("b=") {
-            use base64::engine::general_purpose::STANDARD;
             use base64::Engine;
-            let bytes = STANDARD.decode(id).map_err(|_| "Invalid base64 identifier")?;
+            use base64::engine::general_purpose::STANDARD;
+            let bytes = STANDARD
+                .decode(id)
+                .map_err(|_| "Invalid base64 identifier")?;
             Ok(NodeId::Opaque(ns, bytes))
         } else {
             Err("Invalid NodeId format")
         }
-    }    
+    }
 }
 
 impl DataType for NodeId {

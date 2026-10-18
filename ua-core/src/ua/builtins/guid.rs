@@ -69,7 +69,11 @@ impl std::str::FromStr for Guid {
 
         let mut data4 = [0u8; 8];
         for (i, byte) in data4.iter_mut().enumerate() {
-            let p = if i < 2 { &p4[i * 2..] } else { &p5[(i - 2) * 2..] };
+            let p = if i < 2 {
+                &p4[i * 2..]
+            } else {
+                &p5[(i - 2) * 2..]
+            };
             *byte = u8::from_str_radix(&p[..2], 16).map_err(|_| "Invalid data4")?;
         }
 
@@ -181,5 +185,5 @@ mod tests {
                 [0x87, 0x0A, 0x74, 0x52, 0x38, 0xC6, 0xAE, 0xAE]
             )
         );
-    }  
+    }
 }

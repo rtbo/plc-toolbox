@@ -16,6 +16,9 @@ pub enum Error {
 
     #[error("Unsupported protocol: {0}")]
     UnsupportedProtocol(String),
+
+    #[error("Invalid or oversized message: {size} bytes (max {max})")]
+    MessageSize { size: usize, max: usize },
 }
 
 #[allow(async_fn_in_trait)]

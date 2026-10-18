@@ -1,14 +1,14 @@
-use crate::{DataType, ua};
 use crate::msg::binary;
+use crate::{DataType, ua};
 
-#[derive(Debug,Clone,PartialEq,Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Body {
     None,
     ByteString(ua::ByteString),
     XmlElement(ua::XmlElement),
 }
 
-#[derive(Debug,Clone,PartialEq,Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ExtensionObject {
     pub type_id: ua::NodeId,
     pub body: Body,
@@ -33,11 +33,13 @@ impl DataType for ExtensionObject {
 
 impl binary::Encode for ExtensionObject {
     fn encoded_len(&self) -> u32 {
-        self.type_id.encoded_len() + 1 + match &self.body {
-            Body::None => 0,
-            Body::ByteString(b) => b.encoded_len(),
-            Body::XmlElement(x) => x.encoded_len(),
-        }
+        self.type_id.encoded_len()
+            + 1
+            + match &self.body {
+                Body::None => 0,
+                Body::ByteString(b) => b.encoded_len(),
+                Body::XmlElement(x) => x.encoded_len(),
+            }
     }
 
     fn encode<B: binary::BufMut>(&self, buf: &mut B) {
@@ -45,7 +47,7 @@ impl binary::Encode for ExtensionObject {
         match &self.body {
             Body::None => {
                 0u8.encode(buf);
-            },
+            }
             Body::ByteString(b) => {
                 1u8.encode(buf);
                 b.encode(buf)

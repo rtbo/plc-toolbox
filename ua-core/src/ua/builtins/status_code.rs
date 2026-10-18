@@ -49,6 +49,7 @@ impl From<connection::Error> for StatusCode {
             }
             connection::Error::Decoding(_) => StatusCode::BadDataEncodingInvalid,
             connection::Error::UnsupportedProtocol(_) => StatusCode::BadProtocolVersionUnsupported,
+            connection::Error::MessageSize { .. } => StatusCode::BadEncodingLimitsExceeded,
         }
     }
 }
