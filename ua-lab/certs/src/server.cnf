@@ -1,0 +1,20 @@
+[req]
+distinguished_name = req_distinguished_name
+x509_extensions = v3_req
+prompt = no
+
+[req_distinguished_name]
+CN = Open62541Server
+O = Organization
+C = FR
+
+[v3_req]
+basicConstraints = CA:FALSE
+keyUsage = critical, digitalSignature, nonRepudiation, keyEncipherment, dataEncipherment, keyCertSign
+extendedKeyUsage = critical, clientAuth, serverAuth
+subjectAltName = @alt_names
+
+[alt_names]
+URI = urn:plc-toolbox:ua-lab:server
+DNS.1 = localhost
+IP.1 = 127.0.0.1

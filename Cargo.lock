@@ -3964,7 +3964,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "ua-lab"
+name = "ua-lab-json"
 version = "0.1.0"
 dependencies = [
  "anyhow",

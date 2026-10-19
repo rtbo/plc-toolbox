@@ -6,9 +6,10 @@ members = [
   "ua-cat",
   "ua-client",
   "ua-core",
-  "ua-lab",
   "ua-macros",
   "ua-nsc",
+  
+  "ua-lab/json",
 ]
 
 [workspace.package]
