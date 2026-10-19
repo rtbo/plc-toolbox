@@ -319,17 +319,31 @@ where
         self.cg
             .start_block(&format!("pub struct {} ", &desc.name))
             .await?;
-        for field in fields {
+
+        for i in 0..fields.len() {
+            let field = &fields[i];
+            let Some(type_name) = &field.type_name else {
+                continue;
+            };
+
+            if is_length_field(fields, i) {
+                continue;
+            }
+
+            let field_name = self.to_snake_case(&field.name);
+            let mut type_name = self.translate_ns_name(type_name);
+
+            let is_array = field.length_field.is_some();
+            if is_array {
+                type_name = format!("Vec<{}>", type_name);
+            }
+
             if let Some(doc) = field.doc.as_deref() {
                 self.cg.write_doc_comment(doc).await?;
             }
-            if let Some(type_name) = &field.type_name {
-                let field_name = self.to_snake_case(&field.name);
-                let type_name = self.translate_ns_name(type_name);
-                self.cg
-                    .write_line(&format!("pub {}: {},", field_name, type_name))
-                    .await?;
-            }
+            self.cg
+                .write_line(&format!("pub {}: {},", field_name, type_name))
+                .await?;
         }
         self.cg.end_block().await?;
         self.cg.write_line("").await?;
@@ -389,14 +403,25 @@ where
                     self.cg
                         .start_block(&format!("{} ", type_def.name()))
                         .await?;
-                    for field in fields {
+                    for i in 0..fields.len() {
+                        let field = &fields[i];
+                        if is_length_field(fields, i) {
+                            continue;
+                        }
                         let field_name = self.to_snake_case(&field.name);
-                        self.cg
-                            .write_line(&format!(
-                                "{}: {}::DataType::default(),",
-                                field_name, self.options.ua_core_module
-                            ))
-                            .await?;
+                        let is_array = field.length_field.is_some();
+                        if is_array {
+                            self.cg
+                                .write_line(&format!("{}: Vec::new(),", field_name))
+                                .await?;
+                        } else {
+                            self.cg
+                                .write_line(&format!(
+                                    "{}: {}::DataType::default(),",
+                                    field_name, self.options.ua_core_module
+                                ))
+                                .await?;
+                        }
                     }
                     self.cg.end_block().await?;
                 }
@@ -408,4 +433,15 @@ where
         }
         Ok(())
     }
+}
+
+fn is_length_field(fields: &[opc_bsd::Field], idx: usize) -> bool {
+    let name = &fields[idx].name;
+    for j in (idx + 1..fields.len()).chain(0..idx) {
+        let f = &fields[j];
+        if f.length_field.as_deref() == Some(name) {
+            return true;
+        }
+    }
+    false
 }
