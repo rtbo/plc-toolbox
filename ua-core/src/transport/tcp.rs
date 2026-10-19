@@ -9,13 +9,14 @@ const HEADER_LEN: usize = 8;
 /// Maximum message size. Buffers are allocated once to this size.
 const MAX_MESSAGE_SIZE: usize = 65536;
 
-pub struct Connection {
+/// A TCP transport for OPC UA messages. 
+pub struct Transport {
     stream: net::TcpStream,
     send_buf: BytesMut,
     recv_buf: BytesMut,
 }
 
-impl crate::Connection for Connection {
+impl crate::Transport for Transport {
     async fn connect(endpoint: &str) -> Result<Self, super::Error> {
         if !endpoint.starts_with("opc.tcp://") {
             return Err(super::Error::UnsupportedProtocol(endpoint.to_string()));
@@ -24,7 +25,7 @@ impl crate::Connection for Connection {
         let stream = net::TcpStream::connect(endpoint).await?;
         let send_buf = BytesMut::with_capacity(MAX_MESSAGE_SIZE);
         let recv_buf = BytesMut::with_capacity(MAX_MESSAGE_SIZE);
-        Ok(Connection {
+        Ok(Transport {
             stream,
             send_buf,
             recv_buf,
@@ -68,7 +69,7 @@ impl crate::Connection for Connection {
     }
 }
 
-impl Connection {
+impl Transport {
     /// Reads from the socket until at least `n` bytes are available in `recv_buf`.
     async fn fill(&mut self, n: usize) -> Result<(), super::Error> {
         // No allocation is done if n <= MAX_MESSAGE_SIZE

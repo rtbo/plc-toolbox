@@ -2,7 +2,7 @@ use std::mem;
 
 use crate::msg::binary::{self, DecodingError};
 use crate::msg::uacp;
-use crate::{DataType, connection};
+use crate::{DataType, transport};
 
 include!(concat!(env!("OUT_DIR"), "/status_code.rs"));
 
@@ -36,20 +36,20 @@ impl From<uacp::ErrorCode> for StatusCode {
     }
 }
 
-impl From<connection::Error> for StatusCode {
-    fn from(value: connection::Error) -> Self {
+impl From<transport::Error> for StatusCode {
+    fn from(value: transport::Error) -> Self {
         match value {
-            connection::Error::Io(_) => StatusCode::BadCommunicationError,
-            connection::Error::Uacp(err) => StatusCode::from(err.code),
-            connection::Error::Decoding(DecodingError::BadMessageType) => {
+            transport::Error::Io(_) => StatusCode::BadCommunicationError,
+            transport::Error::Uacp(err) => StatusCode::from(err.code),
+            transport::Error::Decoding(DecodingError::BadMessageType) => {
                 StatusCode::BadTcpMessageTypeInvalid
             }
-            connection::Error::Decoding(DecodingError::NotEnoughData) => {
+            transport::Error::Decoding(DecodingError::NotEnoughData) => {
                 StatusCode::BadEncodingLimitsExceeded
             }
-            connection::Error::Decoding(_) => StatusCode::BadDataEncodingInvalid,
-            connection::Error::UnsupportedProtocol(_) => StatusCode::BadProtocolVersionUnsupported,
-            connection::Error::MessageSize { .. } => StatusCode::BadEncodingLimitsExceeded,
+            transport::Error::Decoding(_) => StatusCode::BadDataEncodingInvalid,
+            transport::Error::UnsupportedProtocol(_) => StatusCode::BadProtocolVersionUnsupported,
+            transport::Error::MessageSize { .. } => StatusCode::BadEncodingLimitsExceeded,
         }
     }
 }

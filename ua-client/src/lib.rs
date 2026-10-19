@@ -1,24 +1,24 @@
-use ua_core::Connection;
-use ua_core::connection::tcp;
+use ua_core::Transport;
+use ua_core::transport::tcp;
 
-pub type TcpClient = Client<tcp::Connection>;
+pub type TcpClient = Client<tcp::Transport>;
 
-pub struct Client<C> {
-    connection: Option<C>,
+pub struct Client<T> {
+    transport: Option<T>,
 }
 
-impl<C> Client<C>
+impl<T> Client<T>
 where
-    C: Connection,
+    T: Transport,
 {
     pub fn new() -> Self {
-        Client { connection: None }
+        Client { transport: None }
     }
 
-    pub async fn connect(&mut self, endpoint: &str) -> Result<(), ua_core::connection::Error> {
+    pub async fn connect(&mut self, endpoint: &str) -> Result<(), ua_core::transport::Error> {
         use ua_core::msg::uacp;
 
-        let mut conn = C::connect(endpoint).await?;
+        let mut conn = T::connect(endpoint).await?;
 
         let hello_msg = uacp::Hello {
             protocol_version: 0,
@@ -33,14 +33,14 @@ where
 
         let msg = conn.recv().await?;
         let uacp::Msg::Acknowledge(ack_msg) = msg else {
-            return Err(ua_core::connection::Error::Uacp(
+            return Err(ua_core::transport::Error::Uacp(
                 uacp::ErrorCode::BadTcpMessageTypeInvalid.into(),
             ));
         };
 
         println!("Acknowledge: {:?}", ack_msg);
 
-        self.connection = Some(conn);
+        self.transport = Some(conn);
         Ok(())
     }
 }
