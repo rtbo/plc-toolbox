@@ -1,6 +1,53 @@
 use crate::encoding::binary;
 use crate::{DataType, ua};
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(u8)]
+pub enum Encoding {
+    None = 0x00,
+    ByteString = 0x01,
+    XmlElement = 0x02,
+} 
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Header {
+    pub type_id: ua::NodeId,
+    pub encoding: Encoding,
+    pub length: u32,
+}
+
+impl binary::Encode for Header {
+    fn encoded_len(&self) -> u32 {
+        self.type_id.encoded_len() + 1 + 4
+    }
+
+    fn encode<B: binary::BufMut>(&self, buf: &mut B) {
+        self.type_id.encode(buf);
+        (self.encoding as u8).encode(buf);
+        self.length.encode(buf);
+    }
+}
+
+impl binary::Decode for Header {
+    fn decode<B: binary::Buf>(buf: &mut B) -> Result<Self, binary::DecodingError> {
+        let type_id = ua::NodeId::decode(buf)?;
+        binary::check_remaining(buf, 5)?;
+        let encoding = buf.get_u8();
+        let length = buf.get_u32_le();
+        let encoding = match encoding {
+            0x00 => Encoding::None,
+            0x01 => Encoding::ByteString,
+            0x02 => Encoding::XmlElement,
+            _ => return Err(binary::DecodingError::InvalidData),
+        };
+        Ok(Header {
+            type_id,
+            encoding,
+            length,
+        })
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Body {
     None,
