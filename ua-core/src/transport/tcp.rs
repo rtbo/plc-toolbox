@@ -3,11 +3,9 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net;
 
 use crate::encoding::binary::{Decode, Encode};
-use crate::uacp::Msg;
+use crate::uacp::{self, Msg};
 
 const HEADER_LEN: usize = 8;
-/// Maximum message size. Buffers are allocated once to this size.
-const MAX_MESSAGE_SIZE: usize = 65536;
 
 /// A TCP transport for OPC UA messages.
 pub struct Transport {
@@ -16,15 +14,19 @@ pub struct Transport {
     recv_buf: BytesMut,
 }
 
-impl crate::Transport for Transport {
-    async fn connect(endpoint: &str) -> Result<Self, super::Error> {
+impl Transport {
+    pub async fn connect(
+        endpoint: &str,
+        send_buf_size: usize,
+        recv_buf_size: usize,
+    ) -> Result<Self, super::Error> {
         if !endpoint.starts_with("opc.tcp://") {
             return Err(super::Error::UnsupportedProtocol(endpoint.to_string()));
         }
         let endpoint = &endpoint[10..]; // Remove "opc.tcp://"
         let stream = net::TcpStream::connect(endpoint).await?;
-        let send_buf = BytesMut::with_capacity(MAX_MESSAGE_SIZE);
-        let recv_buf = BytesMut::with_capacity(MAX_MESSAGE_SIZE);
+        let send_buf = BytesMut::with_capacity(send_buf_size);
+        let recv_buf = BytesMut::with_capacity(recv_buf_size);
         Ok(Transport {
             stream,
             send_buf,
@@ -32,12 +34,33 @@ impl crate::Transport for Transport {
         })
     }
 
-    async fn send(&mut self, msg: Msg) -> Result<(), super::Error> {
+    fn max_send_size(&self) -> usize {
+        self.send_buf.capacity()
+    }
+
+    fn max_recv_size(&self) -> usize {
+        self.recv_buf.capacity()
+    }
+
+    pub fn adjust_buffer_sizes(&mut self, send_size: usize, recv_size: usize) {
+        if send_size != self.send_buf.capacity() {
+            self.send_buf = BytesMut::with_capacity(send_size);
+        }
+        if recv_size != self.recv_buf.capacity() {
+            self.recv_buf = BytesMut::with_capacity(recv_size);
+        }
+    }
+
+    pub async fn send_uacp<M>(&mut self, msg: uacp::Msg<M>) -> Result<(), super::Error>
+    where
+        M: uacp::MsgType + Encode,
+    {
         let size = msg.encoded_len() as usize;
-        if size > MAX_MESSAGE_SIZE {
+        let max_send_size = self.max_send_size();
+        if size > max_send_size {
             return Err(super::Error::MessageSize {
                 size,
-                max: MAX_MESSAGE_SIZE,
+                max: max_send_size,
             });
         }
         self.send_buf.clear();
@@ -46,13 +69,17 @@ impl crate::Transport for Transport {
         Ok(())
     }
 
-    async fn recv(&mut self) -> Result<Msg, super::Error> {
+    pub async fn recv_uacp<M>(&mut self) -> Result<Msg<M>, super::Error>
+    where
+        M: uacp::MsgType + Decode,
+    {
         self.fill(HEADER_LEN).await?;
         let size = u32::from_le_bytes(self.recv_buf[4..8].try_into().unwrap()) as usize;
-        if !(HEADER_LEN..=MAX_MESSAGE_SIZE).contains(&size) {
+        let max_recv_size = self.max_recv_size();
+        if !(HEADER_LEN..=max_recv_size).contains(&size) {
             return Err(super::Error::MessageSize {
                 size,
-                max: MAX_MESSAGE_SIZE,
+                max: max_recv_size,
             });
         }
         self.fill(size).await?;
@@ -67,14 +94,12 @@ impl crate::Transport for Transport {
         }
         Ok(msg?)
     }
-}
 
-impl Transport {
     /// Reads from the socket until at least `n` bytes are available in `recv_buf`.
     async fn fill(&mut self, n: usize) -> Result<(), super::Error> {
-        // No allocation is done if n <= MAX_MESSAGE_SIZE
+        // No allocation is done if n <= self.max_recv_size()
         self.recv_buf
-            .reserve(MAX_MESSAGE_SIZE.saturating_sub(self.recv_buf.len()));
+            .reserve(self.max_recv_size().saturating_sub(self.recv_buf.len()));
         while self.recv_buf.len() < n {
             if self.stream.read_buf(&mut self.recv_buf).await? == 0 {
                 return Err(super::Error::Io(std::io::Error::new(

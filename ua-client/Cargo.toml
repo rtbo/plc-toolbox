@@ -7,3 +7,6 @@ repository.workspace = true
 
 [dependencies]
 ua-core.workspace = true
+
+bytes.workspace = true
+tokio.workspace = true

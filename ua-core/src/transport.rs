@@ -1,6 +1,5 @@
 use crate::encoding::binary;
 use crate::ua;
-use crate::uacp::Msg;
 
 pub mod tcp;
 
@@ -22,10 +21,10 @@ pub enum Error {
     MessageSize { size: usize, max: usize },
 }
 
-#[allow(async_fn_in_trait)]
-pub trait Transport: Sized {
-    async fn connect(endpoint: &str) -> Result<Self, Error>;
-
-    async fn send(&mut self, msg: Msg) -> Result<(), Error>;
-    async fn recv(&mut self) -> Result<Msg, Error>;
-}
+// #[allow(async_fn_in_trait)]
+// pub trait Transport: Sized {
+//     async fn connect(endpoint: &str) -> Result<Self, Error>;
+//
+//     async fn send(&mut self, msg: Msg) -> Result<(), Error>;
+//     async fn recv(&mut self) -> Result<Msg, Error>;
+// }

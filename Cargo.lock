@@ -3946,6 +3946,8 @@ dependencies = [
 name = "ua-client"
 version = "0.1.0"
 dependencies = [
+ "bytes",
+ "tokio",
  "ua-core",
 ]
 

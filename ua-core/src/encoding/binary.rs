@@ -140,3 +140,91 @@ macro_rules! repr_decode_methods {
     };
 }
 pub(crate) use repr_decode_methods;
+
+#[cfg(test)]
+mod tests {
+    use bytes::BytesMut;
+
+    use super::*;
+    use crate::ua;
+
+    #[derive(Debug, Clone, Copy, PartialEq, ua_macros::EncodeBinary, ua_macros::DecodeBinary)]
+    #[repr(u8)]
+    enum SmallCode {
+        Value = 0xab,
+    }
+
+    #[derive(Debug, Clone, Copy, PartialEq, ua_macros::EncodeBinary, ua_macros::DecodeBinary)]
+    #[repr(u16)]
+    enum MediumCode {
+        Value = 0xcdef,
+    }
+
+    fn assert_roundtrip<T>(value: &T)
+    where
+        T: Encode + Decode + PartialEq + std::fmt::Debug,
+    {
+        let mut encoded = BytesMut::new();
+        value.encode(&mut encoded);
+        assert_eq!(encoded.len(), value.encoded_len() as usize);
+
+        let mut remaining = encoded.clone();
+        let decoded = T::decode(&mut remaining).expect("encoded value should decode");
+        assert!(remaining.is_empty());
+        assert_eq!(&decoded, value);
+
+        let mut reencoded = BytesMut::new();
+        decoded.encode(&mut reencoded);
+        assert_eq!(reencoded, encoded);
+    }
+
+    #[test]
+    fn repr_enums_encode_their_discriminants() {
+        let mut buf = BytesMut::new();
+
+        let small = SmallCode::Value;
+        assert_eq!(small.encoded_len(), 1);
+        small.encode(&mut buf);
+        assert_eq!(&buf[..], &[0xab]);
+        assert!(matches!(SmallCode::decode(&mut buf), Ok(SmallCode::Value)));
+
+        buf.clear();
+        let medium = MediumCode::Value;
+        assert_eq!(medium.encoded_len(), 2);
+        medium.encode(&mut buf);
+        assert_eq!(&buf[..], &[0xef, 0xcd]);
+        assert!(matches!(
+            MediumCode::decode(&mut buf),
+            Ok(MediumCode::Value)
+        ));
+
+        buf.clear();
+        let large = ua::StatusCode::BadTcpServerTooBusy;
+        assert_eq!(large.encoded_len(), 4);
+        large.encode(&mut buf);
+        assert_eq!(&buf[..], &0x807d0000u32.to_le_bytes());
+    }
+
+    #[test]
+    fn repr_enums_roundtrip() {
+        assert_roundtrip(&SmallCode::Value);
+        assert_roundtrip(&MediumCode::Value);
+        assert_roundtrip(&ua::StatusCode::BadTcpServerTooBusy);
+    }
+
+    #[test]
+    fn repr_enum_decodes_through_try_from() {
+        let mut buf = BytesMut::from(&0x807d0000u32.to_le_bytes()[..]);
+
+        assert!(matches!(
+            ua::StatusCode::decode(&mut buf),
+            Ok(ua::StatusCode::BadTcpServerTooBusy)
+        ));
+
+        let mut buf = BytesMut::from(&0x12345678u32.to_le_bytes()[..]);
+        assert!(matches!(
+            ua::StatusCode::decode(&mut buf),
+            Err(DecodingError::InvalidData)
+        ));
+    }
+}
