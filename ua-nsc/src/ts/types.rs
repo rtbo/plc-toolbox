@@ -5,7 +5,7 @@ use tokio::io::{self, AsyncWriteExt};
 
 use crate::codegen::CodeGen;
 use crate::parse::NodeId;
-use crate::parse::opc_bsd::{EnumValue, Field, Type, TypeDescription, TypeDictionary};
+use crate::parse::types::{EnumValue, Field, Type, TypeDescription, TypeDictionary};
 
 pub async fn generate<W>(
     types: &TypeDictionary,

@@ -90,7 +90,7 @@ async fn run() -> anyhow::Result<()> {
             node_ids_csv,
             output,
         } => {
-            let types = ua_nsc::parse::opc_bsd::parse_types_bsd(&types_bsd).await?;
+            let types = ua_nsc::parse::types::parse_types_bsd(&types_bsd).await?;
             let ua_type_ids = if let Some(csv_path) = node_ids_csv {
                 let node_ids = ua_nsc::parse::node_ids::parse_csv(&csv_path).await?;
                 node_ids
@@ -163,7 +163,7 @@ async fn run() -> anyhow::Result<()> {
             };
 
             println!("Reading {}", types_bsd_path.display());
-            let types = ua_nsc::parse::opc_bsd::parse_types_bsd(&types_bsd_path).await?;
+            let types = ua_nsc::parse::types::parse_types_bsd(&types_bsd_path).await?;
             println!("Reading {}", node_ids_path.display());
             let node_ids = ua_nsc::parse::node_ids::parse_csv(&node_ids_path).await?;
             println!("Reading {}", attr_ids_path.display());

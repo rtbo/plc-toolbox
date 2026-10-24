@@ -3,14 +3,14 @@ use std::collections::{HashMap, HashSet};
 use tokio::io;
 
 use crate::codegen::CodeGen;
-use crate::parse::{NodeId, opc_bsd};
+use crate::parse::{NodeId, types};
 
 pub struct Options {
     pub ua_core_module: String,
 }
 
 pub async fn generate<W>(
-    types: &opc_bsd::TypeDictionary,
+    types: &types::TypeDictionary,
     ua_type_ids: &HashMap<String, NodeId>,
     options: &Options,
     out: &mut W,
@@ -95,7 +95,7 @@ struct Ctx<'a, W>
 where
     W: io::AsyncWrite + Unpin,
 {
-    _types: &'a opc_bsd::TypeDictionary,
+    _types: &'a types::TypeDictionary,
     ua_type_ids: &'a HashMap<String, NodeId>,
     options: &'a Options,
     cg: super::RsCodeGen<W>,
@@ -190,9 +190,9 @@ where
         Ok(())
     }
 
-    async fn generate_type_def(&mut self, type_def: &opc_bsd::Type) -> io::Result<()> {
+    async fn generate_type_def(&mut self, type_def: &types::Type) -> io::Result<()> {
         match type_def {
-            opc_bsd::Type::Opaque {
+            types::Type::Opaque {
                 desc,
                 length_in_bits,
                 byte_order_significant,
@@ -200,7 +200,7 @@ where
                 self.generate_opaque_type(desc, *length_in_bits, *byte_order_significant)
                     .await?;
             }
-            opc_bsd::Type::Enumerated {
+            types::Type::Enumerated {
                 desc,
                 length_in_bits,
                 byte_order_significant,
@@ -216,7 +216,7 @@ where
                 )
                 .await?;
             }
-            opc_bsd::Type::Structured {
+            types::Type::Structured {
                 desc,
                 fields,
                 base_type,
@@ -231,7 +231,7 @@ where
 
     async fn generate_opaque_type(
         &mut self,
-        desc: &opc_bsd::TypeDescription,
+        desc: &types::TypeDescription,
         _length_in_bits: Option<u32>,
         _byte_order_significant: bool,
     ) -> io::Result<()> {
@@ -253,11 +253,11 @@ where
 
     async fn generate_enumerated_type(
         &mut self,
-        desc: &opc_bsd::TypeDescription,
+        desc: &types::TypeDescription,
         length_in_bits: Option<u32>,
         _byte_order_significant: bool,
         is_option_set: bool,
-        values: &[opc_bsd::EnumValue],
+        values: &[types::EnumValue],
     ) -> io::Result<()> {
         if values.is_empty() {
             return Ok(());
@@ -303,8 +303,8 @@ where
 
     async fn generate_structured_type(
         &mut self,
-        desc: &opc_bsd::TypeDescription,
-        fields: &[opc_bsd::Field],
+        desc: &types::TypeDescription,
+        fields: &[types::Field],
         _base_type: Option<&str>,
     ) -> io::Result<()> {
         if let Some(doc) = desc.doc.as_deref() {
@@ -350,8 +350,8 @@ where
         Ok(())
     }
 
-    async fn generate_datatype_impl(&mut self, type_def: &opc_bsd::Type) -> io::Result<()> {
-        if let opc_bsd::Type::Enumerated { values, .. } = type_def {
+    async fn generate_datatype_impl(&mut self, type_def: &types::Type) -> io::Result<()> {
+        if let types::Type::Enumerated { values, .. } = type_def {
             if values.is_empty() {
                 return Ok(());
             }
@@ -379,7 +379,7 @@ where
 
             self.cg.start_block("fn default() -> Self ").await?;
             match type_def {
-                opc_bsd::Type::Opaque { .. } => {
+                types::Type::Opaque { .. } => {
                     self.cg
                         .write_line(&format!(
                             "{}(<ua::ByteString as {}::DataType>::default())",
@@ -388,7 +388,7 @@ where
                         ))
                         .await?;
                 }
-                opc_bsd::Type::Enumerated { values, .. } => {
+                types::Type::Enumerated { values, .. } => {
                     if let Some(first_value) = values.first() {
                         self.cg
                             .write_line(&format!(
@@ -399,7 +399,7 @@ where
                             .await?;
                     }
                 }
-                opc_bsd::Type::Structured { fields, .. } => {
+                types::Type::Structured { fields, .. } => {
                     self.cg
                         .start_block(&format!("{} ", type_def.name()))
                         .await?;
@@ -435,7 +435,7 @@ where
     }
 }
 
-fn is_length_field(fields: &[opc_bsd::Field], idx: usize) -> bool {
+fn is_length_field(fields: &[types::Field], idx: usize) -> bool {
     let name = &fields[idx].name;
     for j in (idx + 1..fields.len()).chain(0..idx) {
         let f = &fields[j];

@@ -1,6 +1,6 @@
 use crate::encoding::binary;
-use crate::uacp::Msg;
 use crate::ua;
+use crate::uacp::Msg;
 
 pub mod tcp;
 
