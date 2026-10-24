@@ -1,7 +1,4 @@
-use std::mem;
-
-use crate::msg::binary::{self, DecodingError};
-use crate::msg::uacp;
+use crate::encoding::binary::{self, DecodingError};
 use crate::{DataType, transport};
 
 include!(concat!(env!("OUT_DIR"), "/status_code.rs"));
@@ -29,18 +26,13 @@ impl std::fmt::Display for StatusCode {
     }
 }
 
-impl From<uacp::ErrorCode> for StatusCode {
-    fn from(value: uacp::ErrorCode) -> Self {
-        // SAFETY: All ErrorCode variants are valid status codes
-        unsafe { mem::transmute(value as u32) }
-    }
-}
+impl std::error::Error for StatusCode {}
 
 impl From<transport::Error> for StatusCode {
     fn from(value: transport::Error) -> Self {
         match value {
             transport::Error::Io(_) => StatusCode::BadCommunicationError,
-            transport::Error::Uacp(err) => StatusCode::from(err.code),
+            transport::Error::Ua(code) => code,
             transport::Error::Decoding(DecodingError::BadMessageType) => {
                 StatusCode::BadTcpMessageTypeInvalid
             }

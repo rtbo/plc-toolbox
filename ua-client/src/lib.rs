@@ -1,5 +1,5 @@
-use ua_core::Transport;
 use ua_core::transport::tcp;
+use ua_core::{Transport, ua};
 
 pub type TcpClient = Client<tcp::Transport>;
 
@@ -16,7 +16,7 @@ where
     }
 
     pub async fn connect(&mut self, endpoint: &str) -> Result<(), ua_core::transport::Error> {
-        use ua_core::msg::uacp;
+        use ua_core::uacp;
 
         let mut conn = T::connect(endpoint).await?;
 
@@ -33,8 +33,8 @@ where
 
         let msg = conn.recv().await?;
         let uacp::Msg::Acknowledge(ack_msg) = msg else {
-            return Err(ua_core::transport::Error::Uacp(
-                uacp::ErrorCode::BadTcpMessageTypeInvalid.into(),
+            return Err(ua_core::transport::Error::Ua(
+                ua::StatusCode::BadTcpMessageTypeInvalid.into(),
             ));
         };
 

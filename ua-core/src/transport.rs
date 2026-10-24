@@ -1,5 +1,6 @@
-use crate::msg::binary;
-use crate::msg::uacp::{self, Msg};
+use crate::encoding::binary;
+use crate::uacp::Msg;
+use crate::ua;
 
 pub mod tcp;
 
@@ -8,8 +9,8 @@ pub enum Error {
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),
 
-    #[error("UACP error: {0}")]
-    Uacp(#[from] uacp::Error),
+    #[error("UA error: {0}")]
+    Ua(#[from] ua::StatusCode),
 
     #[error("Decoding error: {0}")]
     Decoding(#[from] binary::DecodingError),

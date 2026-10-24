@@ -113,7 +113,7 @@ macro_rules! repr_slice_methods {
 
         #[cfg(target_endian = "little")]
         fn encode_slice<B: BufMut>(items: &[Self], buf: &mut B) {
-            buf.put_slice($crate::msg::binary::repr_slice_bytes(items));
+            buf.put_slice($crate::encoding::binary::repr_slice_bytes(items));
         }
     };
 }
@@ -134,8 +134,8 @@ macro_rules! repr_decode_methods {
         fn decode_vec<B: Buf>(
             buf: &mut B,
             len: usize,
-        ) -> Result<Vec<Self>, $crate::msg::binary::DecodingError> {
-            $crate::msg::binary::repr_decode_vec(buf, len)
+        ) -> Result<Vec<Self>, $crate::encoding::binary::DecodingError> {
+            $crate::encoding::binary::repr_decode_vec(buf, len)
         }
     };
 }

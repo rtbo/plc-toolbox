@@ -1,4 +1,4 @@
-use crate::msg::binary;
+use crate::encoding::binary;
 use crate::ua;
 
 pub trait DataType: Sized + binary::Encode + binary::Decode {

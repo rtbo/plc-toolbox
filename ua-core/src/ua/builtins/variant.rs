@@ -1,4 +1,4 @@
-use crate::msg::binary::{self, Encode};
+use crate::encoding::binary::{self, Encode};
 use crate::{DataType, ua};
 
 #[derive(Debug, Clone, PartialEq)]

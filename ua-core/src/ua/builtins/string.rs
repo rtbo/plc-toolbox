@@ -1,6 +1,6 @@
 use bytes::{Buf, BufMut};
 
-use crate::msg::binary;
+use crate::encoding::binary;
 use crate::{DataType, ua};
 
 pub type String = std::string::String;

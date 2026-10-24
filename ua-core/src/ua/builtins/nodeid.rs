@@ -2,7 +2,7 @@ use std::fmt;
 
 use bytes::BufMut;
 
-use crate::msg::binary::{self, Decode, Encode};
+use crate::encoding::binary::{self, Decode, Encode};
 use crate::{DataType, ua};
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]

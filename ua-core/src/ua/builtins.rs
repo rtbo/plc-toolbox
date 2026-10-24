@@ -1,4 +1,4 @@
-use crate::msg::binary;
+use crate::encoding::binary;
 
 mod boolean;
 mod byte;

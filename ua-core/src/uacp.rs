@@ -2,7 +2,7 @@
 use bytes::BufMut;
 use ua_macros::{DecodeBinary, EncodeBinary};
 
-use crate::msg::binary::{Decode, DecodingError, Encode, check_remaining};
+use crate::encoding::binary::{Decode, DecodingError, Encode, check_remaining};
 use crate::ua;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -88,67 +88,14 @@ pub struct Acknowledge {
     pub max_chunk_count: u32,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, EncodeBinary, DecodeBinary)]
-#[repr(u32)]
-pub enum ErrorCode {
-    /// The server cannot process the request because it is too busy.
-    BadTcpServerTooBusy = 0x807d0000,
-    /// The type of the message specified in the header invalid.
-    BadTcpMessageTypeInvalid = 0x807e0000,
-    /// The SecureChannelId and/or TokenId are not currently in use.
-    BadTcpSecureChannelUnknown = 0x807f0000,
-    /// The size of the message chunk specified in the header is too large.
-    BadTcpMessageTooLarge = 0x80800000,
-    /// The operation timed out.
-    BadTimeout = 0x800a0000,
-    /// There are not enough resources to process the request.
-    BadTcpNotEnoughResources = 0x80810000,
-    /// An internal error occurred.
-    BadTcpInternalError = 0x80820000,
-    /// The server does not recognize the QueryString specified.
-    BadTcpEndpointUrlInvalid = 0x80830000,
-    /// An error occurred verifying security.
-    BadSecurityChecksFailed = 0x80130000,
-    /// The request could not be sent because of a network interruption.
-    BadRequestInterrupted = 0x80840000,
-    /// Timeout occurred while processing the request.
-    BadRequestTimeout = 0x80850000,
-    /// The secure channel has been closed.
-    BadSecureChannelClosed = 0x80860000,
-    /// The token has expired or is not recognized.
-    BadSecureChannelTokenUnknown = 0x80870000,
-    /// The certificate is not trusted.
-    BadCertificateUntrusted = 0x801a0000,
-    /// It was not possible to determine if the certificate has been revoked.
-    BadCertificateRevocationUnknown = 0x801b0000,
-    /// It was not possible to determine if the issuer certificate has been revoked.
-    BadCertificateIssuerRevocationUnknown = 0x801c0000,
-    /// The certificate has been revoked.
-    BadCertificateRevoked = 0x801d0000,
-    /// The certificate has expired or is not yet valid.
-    BadCertificateTimeInvalid = 0x80140000,
-    /// An issuer certificate has expired or is not yet valid.
-    BadCertificateIssuerTimeInvalid = 0x80150000,
-    /// The certificate may not be used for the requested operation.
-    BadCertificateUseNotAllowed = 0x80180000,
-    /// The issuer certificate may not be used for the requested operation.
-    BadCertificateIssuerUseNotAllowed = 0x80190000,
-    /// The issuer certificate has been revoked.
-    BadCertificateIssuerRevoked = 0x801e0000,
-    /// The sequence number is not valid.
-    BadSequenceNumberInvalid = 0x80880000,
-    /// The server does not support the requested service.
-    BadServiceUnsupported = 0x800b0000,
-}
-
 #[derive(Debug, Clone, PartialEq, Eq, EncodeBinary, DecodeBinary)]
 pub struct Error {
-    pub code: ErrorCode,
+    pub code: ua::StatusCode,
     pub reason: String,
 }
 
 impl Error {
-    pub fn new(code: ErrorCode, reason: String) -> Self {
+    pub fn new(code: ua::StatusCode, reason: String) -> Self {
         Self { code, reason }
     }
 }
@@ -161,12 +108,11 @@ impl std::fmt::Display for Error {
 
 impl std::error::Error for Error {}
 
-impl From<ErrorCode> for Error {
-    fn from(code: ErrorCode) -> Self {
-        let status_code = ua::StatusCode::from(code);
+impl From<ua::StatusCode> for Error {
+    fn from(code: ua::StatusCode) -> Self {
         Self {
             code,
-            reason: status_code.explanation().to_string(),
+            reason: code.explanation().to_string(),
         }
     }
 }
@@ -175,8 +121,9 @@ impl From<ErrorCode> for Error {
 mod tests {
     use bytes::BytesMut;
 
-    use super::{Acknowledge, Error, ErrorCode, Hello, Msg};
-    use crate::msg::binary::{Decode, DecodingError, Encode};
+    use super::{Acknowledge, Error, Hello, Msg};
+    use crate::encoding::binary::{Decode, DecodingError, Encode};
+    use crate::ua;
 
     #[derive(Clone, Copy, ua_macros::EncodeBinary, ua_macros::DecodeBinary)]
     #[repr(u8)]
@@ -274,7 +221,7 @@ mod tests {
         ));
 
         buf.clear();
-        let large = ErrorCode::BadTcpServerTooBusy;
+        let large = ua::StatusCode::BadTcpServerTooBusy;
         assert_eq!(large.encoded_len(), 4);
         large.encode(&mut buf);
         assert_eq!(&buf[..], &0x807d0000u32.to_le_bytes());
@@ -285,13 +232,13 @@ mod tests {
         let mut buf = BytesMut::from(&0x807d0000u32.to_le_bytes()[..]);
 
         assert!(matches!(
-            ErrorCode::decode(&mut buf),
-            Ok(ErrorCode::BadTcpServerTooBusy)
+            ua::StatusCode::decode(&mut buf),
+            Ok(ua::StatusCode::BadTcpServerTooBusy)
         ));
 
         let mut buf = BytesMut::from(&0x12345678u32.to_le_bytes()[..]);
         assert!(matches!(
-            ErrorCode::decode(&mut buf),
+            ua::StatusCode::decode(&mut buf),
             Err(DecodingError::InvalidData)
         ));
     }
@@ -320,40 +267,10 @@ mod tests {
         assert_roundtrip(&Msg::Acknowledge(acknowledge));
 
         let error = Error::new(
-            ErrorCode::BadTcpMessageTooLarge,
+            ua::StatusCode::BadTcpMessageTooLarge,
             "message exceeds configured limit".to_owned(),
         );
         assert_roundtrip(&error);
         assert_roundtrip(&Msg::Error(error));
-
-        let error_codes = [
-            ErrorCode::BadTcpServerTooBusy,
-            ErrorCode::BadTcpMessageTypeInvalid,
-            ErrorCode::BadTcpSecureChannelUnknown,
-            ErrorCode::BadTcpMessageTooLarge,
-            ErrorCode::BadTimeout,
-            ErrorCode::BadTcpNotEnoughResources,
-            ErrorCode::BadTcpInternalError,
-            ErrorCode::BadTcpEndpointUrlInvalid,
-            ErrorCode::BadSecurityChecksFailed,
-            ErrorCode::BadRequestInterrupted,
-            ErrorCode::BadRequestTimeout,
-            ErrorCode::BadSecureChannelClosed,
-            ErrorCode::BadSecureChannelTokenUnknown,
-            ErrorCode::BadCertificateUntrusted,
-            ErrorCode::BadCertificateRevocationUnknown,
-            ErrorCode::BadCertificateIssuerRevocationUnknown,
-            ErrorCode::BadCertificateRevoked,
-            ErrorCode::BadCertificateTimeInvalid,
-            ErrorCode::BadCertificateIssuerTimeInvalid,
-            ErrorCode::BadCertificateUseNotAllowed,
-            ErrorCode::BadCertificateIssuerUseNotAllowed,
-            ErrorCode::BadCertificateIssuerRevoked,
-            ErrorCode::BadSequenceNumberInvalid,
-            ErrorCode::BadServiceUnsupported,
-        ];
-        for code in error_codes {
-            assert_roundtrip(&code);
-        }
     }
 }

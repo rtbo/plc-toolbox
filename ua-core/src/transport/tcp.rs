@@ -2,14 +2,14 @@ use bytes::{Buf, BytesMut};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net;
 
-use crate::msg::binary::{Decode, Encode};
-use crate::msg::uacp::Msg;
+use crate::encoding::binary::{Decode, Encode};
+use crate::uacp::Msg;
 
 const HEADER_LEN: usize = 8;
 /// Maximum message size. Buffers are allocated once to this size.
 const MAX_MESSAGE_SIZE: usize = 65536;
 
-/// A TCP transport for OPC UA messages. 
+/// A TCP transport for OPC UA messages.
 pub struct Transport {
     stream: net::TcpStream,
     send_buf: BytesMut,

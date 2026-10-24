@@ -51,12 +51,12 @@ pub fn expand_struct(
         generics
             .make_where_clause()
             .predicates
-            .push(syn::parse_quote!(#field_type: ::ua_core::msg::binary::Decode));
+            .push(syn::parse_quote!(#field_type: ::ua_core::encoding::binary::Decode));
     }
 
     let decode_fields = field_accesses.iter().map(|member| {
         quote! {
-            #member: ::ua_core::msg::binary::Decode::decode(buf)?
+            #member: ::ua_core::encoding::binary::Decode::decode(buf)?
         }
     });
 
@@ -64,8 +64,8 @@ pub fn expand_struct(
 
     let expanded = quote! {
         #[automatically_derived]
-        impl #impl_generics ::ua_core::msg::binary::Decode for #name #ty_generics #where_clause {
-            fn decode<B: ::bytes::Buf>(buf: &mut B) -> Result<Self, ::ua_core::msg::binary::DecodingError> {
+        impl #impl_generics ::ua_core::encoding::binary::Decode for #name #ty_generics #where_clause {
+            fn decode<B: ::bytes::Buf>(buf: &mut B) -> Result<Self, ::ua_core::encoding::binary::DecodingError> {
                 Ok(Self {
                     #(#decode_fields),*
                 })
@@ -122,13 +122,13 @@ fn expand_enum(
         }
 
         #[automatically_derived]
-        impl #impl_generics ::ua_core::msg::binary::Decode for #name #ty_generics #where_clause {
-            fn decode<B: ::ua_core::msg::binary::Buf>(
+        impl #impl_generics ::ua_core::encoding::binary::Decode for #name #ty_generics #where_clause {
+            fn decode<B: ::ua_core::encoding::binary::Buf>(
                 buf: &mut B,
-            ) -> Result<Self, ::ua_core::msg::binary::DecodingError> {
-                let value = <#repr_type as ::ua_core::msg::binary::Decode>::decode(buf)?;
+            ) -> Result<Self, ::ua_core::encoding::binary::DecodingError> {
+                let value = <#repr_type as ::ua_core::encoding::binary::Decode>::decode(buf)?;
                 Self::#from_fn_name(value)
-                    .ok_or_else(|| ::ua_core::msg::binary::DecodingError::InvalidData)
+                    .ok_or_else(|| ::ua_core::encoding::binary::DecodingError::InvalidData)
             }
         }
     })

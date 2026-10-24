@@ -1,7 +1,7 @@
 use std::fmt;
 
 use crate::DataType;
-use crate::msg::binary;
+use crate::encoding::binary;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Guid {

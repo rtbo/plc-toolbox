@@ -1,7 +1,7 @@
 use bytes::BufMut;
 
 use crate::DataType;
-use crate::msg::binary;
+use crate::encoding::binary;
 use crate::ua::builtins::nodeid::{
     NodeIdRef, nodeid_decode, nodeidref_encode, nodeidref_encoded_len,
 };
