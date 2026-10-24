@@ -44,14 +44,6 @@ int main(void) {
   config->clientDescription.applicationUri =
       UA_STRING_ALLOC("urn:plc-toolbox:ua-lab:client");
 
-  // // 4. Forcer explicitement le mode de sécurité et l'URI de la politique si
-  // // nécessaire (Par défaut, UA_ClientConfig_setDefaultEncryption configure
-  // // Basic256Sha256)
-  // config->securityMode = UA_MESSAGESECURITYMODE_SIGNANDENCRYPT;
-  // UA_String_clear(&config->securityPolicyUri);
-  // config->securityPolicyUri = UA_STRING_ALLOC(
-  //     "http://opcfoundation.org/UA/SecurityPolicy#Basic256Sha256");
-
   // 5. Connexion au serveur via la méthode standard UA_Client_connect
   retval = UA_Client_connect(client, "opc.tcp://127.0.0.1:4840");
 
@@ -73,8 +65,9 @@ int main(void) {
 
   if (retval == UA_STATUSCODE_GOOD &&
       UA_Variant_hasScalarType(&value, &UA_TYPES[UA_TYPES_DATETIME])) {
-    UA_DateTime dateTime = *(UA_DateTime *)value.data;
-    printf("Heure courante lue avec succès sur le serveur sécurisé !\n");
+    UA_DateTime dt = *(UA_DateTime *)value.data;
+    UA_DateTimeStruct dts = UA_DateTime_toStruct(dt);
+    printf("Heure courante du serveur : %04u-%02u-%02u %02u:%02u:%02u\n", dts.year, dts.month, dts.day, dts.hour, dts.min, dts.sec);
   }
 
   UA_Variant_clear(&value);
