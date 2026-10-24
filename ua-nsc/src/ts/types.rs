@@ -5,7 +5,7 @@ use tokio::io::{self, AsyncWriteExt};
 
 use crate::codegen::CodeGen;
 use crate::parse::NodeId;
-use crate::parse::types::{EnumValue, Field, Type, TypeDescription, TypeDictionary};
+use crate::parse::types::{EnumValue, Field, QualName, Type, TypeDescription, TypeDictionary};
 
 pub async fn generate<W>(
     types: &TypeDictionary,
@@ -183,7 +183,7 @@ where
     async fn generate_structured(
         &mut self,
         desc: &TypeDescription,
-        base_type: &Option<String>,
+        base_type: &Option<QualName>,
         fields: &[Field],
     ) -> io::Result<()> {
         self.write_line("").await?;
@@ -191,14 +191,18 @@ where
         self.write_type_doc_comment(desc, "structure").await?;
 
         let extends = if let Some(base_type) = base_type {
-            format!(" extends {}", remove_namespace(base_type))
+            format!(" extends {}", base_type.name)
         } else {
             String::new()
         };
         self.start_block(&format!("export interface {}{} ", desc.name, extends))
             .await?;
 
-        if base_type.as_deref() == Some("ua:ExtensionObject") {
+        if base_type
+            .as_ref()
+            .map(|b| (b.ns_shorthand.as_deref(), b.name.as_str()))
+            == Some((Some("ua"), "ExtensionObject"))
+        {
             let node_id_str = self.ua_type_ids.get(&desc.name).map(|id| id.node_id_str());
             if let Some(node_id_str) = node_id_str {
                 self.write_line(&format!("UaTypeId?: \"{}\",", node_id_str))
@@ -231,13 +235,8 @@ where
 
             let is_array = field.length_field.is_some();
             let array_suffix = if is_array { "[]" } else { "" };
-            self.write_line(&format!(
-                "{}?: {}{};",
-                name,
-                remove_namespace(type_name),
-                array_suffix
-            ))
-            .await?;
+            self.write_line(&format!("{}?: {}{};", name, type_name.name, array_suffix))
+                .await?;
         }
 
         self.end_block().await?;

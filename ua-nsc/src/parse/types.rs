@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::sync::Arc;
 /// OPC Binary Schema definition (BSD) types and parsing utilities.
 use std::{fmt, path};
@@ -119,10 +120,58 @@ pub struct EnumValue {
     pub doc: Option<String>,
 }
 
+/// Qualified name (`prefix:name` in the BSD), with the prefix resolved to its namespace URI.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct QualName {
+    pub namespace: Option<String>,
+    pub ns_shorthand: Option<String>,
+    pub name: String,
+}
+
+impl fmt::Display for QualName {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match &self.ns_shorthand {
+            Some(ns) => write!(f, "{}:{}", ns, self.name),
+            None => write!(f, "{}", self.name),
+        }
+    }
+}
+
+/// Maps every `xmlns` prefix declared on the dictionary (the default one under `""`) to its URI.
+type Prefixes = HashMap<String, String>;
+
+impl QualName {
+    fn parse(value: &str, prefixes: &Prefixes) -> Result<Self> {
+        let (ns_shorthand, name) = match value.split_once(':') {
+            Some((prefix, name)) => (Some(prefix.to_string()), name),
+            None => (None, value),
+        };
+        let namespace = match &ns_shorthand {
+            Some(prefix) => {
+                Some(
+                    prefixes
+                        .get(prefix)
+                        .cloned()
+                        .ok_or_else(|| Error::InvalidValue {
+                            typ: "QName".to_string(),
+                            value: value.to_string(),
+                        })?,
+                )
+            }
+            None => prefixes.get("").cloned(),
+        };
+        Ok(QualName {
+            namespace,
+            ns_shorthand,
+            name: name.to_string(),
+        })
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct Field {
     pub name: String,
-    pub type_name: Option<String>,
+    pub type_name: Option<QualName>,
     pub length: Option<u32>,
     pub length_field: Option<String>,
     pub is_length_in_bytes: bool,
@@ -148,7 +197,7 @@ pub enum Type {
         values: Vec<EnumValue>,
     },
     Structured {
-        base_type: Option<String>,
+        base_type: Option<QualName>,
         desc: TypeDescription,
         fields: Vec<Field>,
     },
@@ -175,6 +224,11 @@ impl Type {
 #[derive(Debug, Clone)]
 pub struct TypeDictionary {
     pub target_namespace: String,
+    /// `(namespace URI, short name)` pairs in declaration order, duplicates included
+    /// (future module names in generated code).
+    pub ns_table: Vec<(String, String)>,
+    /// Optional caller-provided namespace short names, kept as-is for later use.
+    pub ns_overrides: HashMap<String, String>,
     pub default_byte_order: Option<ByteOrder>,
     pub doc: Option<String>,
     pub imports: Vec<ImportDirective>,
@@ -258,7 +312,53 @@ fn parse_type_description(e: &BytesStart) -> Result<TypeDescription> {
     })
 }
 
-pub async fn parse_types_bsd(bsd_path: &path::Path) -> Result<TypeDictionary> {
+const BSD_NAMESPACE: &str = "http://opcfoundation.org/BinarySchema/";
+const XSI_NAMESPACE: &str = "http://www.w3.org/2001/XMLSchema-instance";
+
+fn parse_prefixes(e: &BytesStart) -> Result<Prefixes> {
+    let mut prefixes = Prefixes::new();
+    for attr in e.attributes() {
+        let attr = attr.map_err(quick_xml::Error::from)?;
+        let key = attr.key.as_ref();
+        let prefix = if key == "xmlns" {
+            ""
+        } else if let Some(prefix) = key.strip_prefix("xmlns:") {
+            prefix
+        } else {
+            continue;
+        };
+        let uri = attr.normalized_value(Default::default())?.into_owned();
+        prefixes.entry(prefix.to_string()).or_insert(uri);
+    }
+    Ok(prefixes)
+}
+
+/// Builds the namespace table from the `xmlns:*` declarations of a tag.
+/// The schema infrastructure namespaces are skipped; several prefixes
+/// declaring the same namespace are all kept.
+fn parse_ns_table(e: &BytesStart) -> Result<Vec<(String, String)>> {
+    let mut table = Vec::new();
+    for attr in e.attributes() {
+        let attr = attr.map_err(quick_xml::Error::from)?;
+        let Some(prefix) = attr.key.as_ref().strip_prefix("xmlns:") else {
+            continue;
+        };
+        let prefix = prefix.to_string();
+        let uri = attr.normalized_value(Default::default())?.into_owned();
+        if uri == BSD_NAMESPACE || uri == XSI_NAMESPACE {
+            continue;
+        }
+        table.push((uri, prefix));
+    }
+    Ok(table)
+}
+
+/// Parses a BSD file. `ns_overrides` maps namespace URIs to short names and
+/// are stored as-is in the dictionary and do not alter `ns_table`.
+pub async fn parse_types_bsd(
+    bsd_path: &path::Path,
+    ns_overrides: Option<&HashMap<String, String>>,
+) -> Result<TypeDictionary> {
     let file = fs::File::open(bsd_path).await?;
     let file = io::BufReader::new(file);
     let mut reader = Reader::from_reader(file);
@@ -272,10 +372,16 @@ pub async fn parse_types_bsd(bsd_path: &path::Path) -> Result<TypeDictionary> {
             Event::Start(e) if e.name().as_ref() == "opc:TypeDictionary" => {
                 let target_namespace = get_attr_required(&e, "TargetNamespace")?;
                 let default_byte_order = get_attr_byte_order(&e, "DefaultByteOrder")?;
+                let ns_table = parse_ns_table(&e)?;
+                let prefixes = parse_prefixes(&e)?;
+                let ns_overrides = ns_overrides.cloned().unwrap_or_default();
                 return parse_type_dictionary(
                     &mut reader,
                     &mut buf,
+                    &prefixes,
                     target_namespace,
+                    ns_table,
+                    ns_overrides,
                     default_byte_order,
                 )
                 .await;
@@ -295,7 +401,10 @@ fn parse_import_directive(e: &BytesStart) -> ImportDirective {
 async fn parse_type_dictionary<R>(
     reader: &mut Reader<R>,
     buf: &mut Vec<u8>,
+    prefixes: &Prefixes,
     target_namespace: String,
+    ns_table: Vec<(String, String)>,
+    ns_overrides: HashMap<String, String>,
     default_byte_order: Option<ByteOrder>,
 ) -> Result<TypeDictionary>
 where
@@ -320,7 +429,7 @@ where
                 imports.push(parse_import_directive(&e));
             }
             Event::Start(e) if e.name().as_ref() == "opc:StructuredType" => {
-                types.push(parse_structured_type(reader, &mut buf2, &e).await?);
+                types.push(parse_structured_type(reader, &mut buf2, &e, prefixes).await?);
             }
             Event::Start(e) if e.name().as_ref() == "opc:EnumeratedType" => {
                 types.push(parse_enumerated_type(reader, &mut buf2, &e).await?);
@@ -338,6 +447,8 @@ where
 
     Ok(TypeDictionary {
         target_namespace,
+        ns_table,
+        ns_overrides,
         default_byte_order,
         doc,
         imports,
@@ -377,10 +488,12 @@ where
     Ok(doc)
 }
 
-fn parse_field(e: &BytesStart) -> Result<Field> {
+fn parse_field(e: &BytesStart, prefixes: &Prefixes) -> Result<Field> {
     Ok(Field {
         name: get_attr_required(e, "Name")?,
-        type_name: get_attr(e, "TypeName"),
+        type_name: get_attr(e, "TypeName")
+            .map(|v| QualName::parse(&v, prefixes))
+            .transpose()?,
         length: get_attr_u32(e, "Length")?,
         length_field: get_attr(e, "LengthField"),
         is_length_in_bytes: get_attr_bool(e, "IsLengthInBytes", false)?,
@@ -396,12 +509,15 @@ async fn parse_structured_type<R>(
     reader: &mut Reader<R>,
     buf: &mut Vec<u8>,
     start: &BytesStart<'_>,
+    prefixes: &Prefixes,
 ) -> Result<Type>
 where
     R: io::AsyncBufRead + Unpin,
 {
     let desc = parse_type_description(start)?;
-    let base_type = get_attr(start, "BaseType");
+    let base_type = get_attr(start, "BaseType")
+        .map(|v| QualName::parse(&v, prefixes))
+        .transpose()?;
 
     let mut doc = None;
     let mut in_doc = false;
@@ -417,12 +533,12 @@ where
                 in_doc = false;
             }
             Ok(Event::Start(e)) if e.name().as_ref() == "opc:Field" => {
-                let mut field = parse_field(&e)?;
+                let mut field = parse_field(&e, prefixes)?;
                 field.doc = read_doc_and_skip_to_end(reader, buf, "opc:Field").await?;
                 fields.push(field);
             }
             Ok(Event::Empty(e)) if e.name().as_ref() == "opc:Field" => {
-                fields.push(parse_field(&e)?);
+                fields.push(parse_field(&e, prefixes)?);
             }
             Ok(Event::Eof) => break,
             Ok(Event::Text(e)) if in_doc => {

@@ -5,6 +5,8 @@ use tokio::io;
 use crate::codegen::CodeGen;
 use crate::parse::{NodeId, types};
 
+const UA_NS: &str = "http://opcfoundation.org/UA/";
+
 pub struct Options {
     pub ua_core_module: String,
 }
@@ -19,7 +21,7 @@ where
     W: io::AsyncWrite + Unpin,
 {
     let mut ctx = Ctx {
-        _types: types,
+        types,
         ua_type_ids,
         options,
         cg: super::RsCodeGen::new(out),
@@ -95,7 +97,7 @@ struct Ctx<'a, W>
 where
     W: io::AsyncWrite + Unpin,
 {
-    _types: &'a types::TypeDictionary,
+    types: &'a types::TypeDictionary,
     ua_type_ids: &'a HashMap<String, NodeId>,
     options: &'a Options,
     cg: super::RsCodeGen<W>,
@@ -117,21 +119,17 @@ where
         None
     }
 
-    fn translate_ns_name(&self, qname: &str) -> String {
-        let colon = qname.find(':');
-        if let Some(idx) = colon {
-            let (ns, name) = qname.split_at(idx);
-            let name = &name[1..]; // Skip the colon
-            if ns == "opc" {
-                return self.translate_opc_name(name);
-            }
-            if let Some(translated_ns) = self.translate_namespace(ns) {
-                format!("{}::{}", translated_ns, name)
-            } else {
-                name.to_string()
-            }
-        } else {
-            qname.to_string()
+    fn translate_ns_name(&self, qname: &types::QualName) -> String {
+        let Some(ns) = qname.ns_shorthand.as_deref() else {
+            return qname.name.clone();
+        };
+        let name = qname.name.as_str();
+        if ns == "opc" {
+            return self.translate_opc_name(name);
+        }
+        match self.translate_namespace(ns) {
+            Some(translated_ns) => format!("{}::{}", translated_ns, name),
+            None => name.to_string(),
         }
     }
 
@@ -221,7 +219,7 @@ where
                 fields,
                 base_type,
             } => {
-                self.generate_structured_type(desc, fields, base_type.as_deref())
+                self.generate_structured_type(desc, fields, base_type.as_ref())
                     .await?;
             }
         }
@@ -305,7 +303,7 @@ where
         &mut self,
         desc: &types::TypeDescription,
         fields: &[types::Field],
-        _base_type: Option<&str>,
+        _base_type: Option<&types::QualName>,
     ) -> io::Result<()> {
         if let Some(doc) = desc.doc.as_deref() {
             self.cg.write_doc_comment(doc).await?;
@@ -347,6 +345,33 @@ where
         }
         self.cg.end_block().await?;
         self.cg.write_line("").await?;
+        if is_msg_struct(fields) {
+            self.cg
+                .start_block(&format!(
+                    "impl {}::uasc::Msg for {} ",
+                    self.options.ua_core_module, &desc.name
+                ))
+                .await?;
+            let msg_type = if self.types.target_namespace.as_str() == UA_NS
+                && desc.name == "OpenSecureChannelRequest"
+            {
+                "Open"
+            } else if self.types.target_namespace.as_str() == UA_NS
+                && desc.name == "CloseSecureChannelRequest"
+            {
+                "Close"
+            } else {
+                "Msg"
+            };
+            self.cg
+                .write_line(&format!(
+                    "const MSG_TYPE: {}::uasc::MsgType = {}::uasc::MsgType::{};",
+                    self.options.ua_core_module, self.options.ua_core_module, msg_type
+                ))
+                .await?;
+            self.cg.end_block().await?;
+            self.cg.write_line("").await?;
+        }
         Ok(())
     }
 
@@ -444,4 +469,22 @@ fn is_length_field(fields: &[types::Field], idx: usize) -> bool {
         }
     }
     false
+}
+
+fn is_request_type(field: &types::Field) -> bool {
+    let Some(type_name) = &field.type_name else {
+        return false;
+    };
+    type_name.namespace.as_deref() == Some(UA_NS) && type_name.name == "RequestHeader"
+}
+
+fn is_response_type(field: &types::Field) -> bool {
+    let Some(type_name) = &field.type_name else {
+        return false;
+    };
+    type_name.namespace.as_deref() == Some(UA_NS) && type_name.name == "ResponseHeader"
+}
+
+fn is_msg_struct(fields: &[types::Field]) -> bool {
+    fields.len() > 1 && (is_request_type(&fields[0]) || is_response_type(&fields[0]))
 }

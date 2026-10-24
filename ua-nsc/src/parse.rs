@@ -4,8 +4,8 @@ use tokio::io;
 
 pub mod attribute_ids;
 pub mod node_ids;
-pub mod types;
 pub mod status_code;
+pub mod types;
 
 pub use attribute_ids::AttributeId;
 pub use node_ids::{NodeClass, NodeId};
