@@ -179,8 +179,8 @@ impl std::str::FromStr for NodeId {
 }
 
 impl DataType for NodeId {
-    fn type_id() -> ua::NodeId {
-        ua::NodeId::Numeric(0, 17)
+    fn type_id() -> u32 {
+        17
     }
 
     fn nullable() -> bool {

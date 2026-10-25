@@ -107,8 +107,8 @@ impl From<Guid> for uuid::Uuid {
 }
 
 impl DataType for Guid {
-    fn type_id() -> crate::ua::NodeId {
-        crate::ua::NodeId::Numeric(0, 14)
+    fn type_id() -> u32 {
+        14
     }
 
     fn nullable() -> bool {

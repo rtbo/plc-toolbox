@@ -1,14 +1,14 @@
 use bytes::{Buf, BufMut};
 
 use crate::encoding::binary;
-use crate::{DataType, ua};
+use crate::DataType;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct XmlElement(pub String);
 
 impl DataType for XmlElement {
-    fn type_id() -> ua::NodeId {
-        ua::NodeId::Numeric(0, 16)
+    fn type_id() -> u32 {
+        16
     }
 
     fn nullable() -> bool {

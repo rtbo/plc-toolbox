@@ -77,7 +77,10 @@ impl<T> binary::Decode for Vec<T>
 where
     T: binary::Decode,
 {
-    fn decode<B: bytes::Buf>(buf: &mut B, ctx: &binary::DecodingCtx) -> Result<Self, binary::DecodingError> {
+    fn decode<B: bytes::Buf>(
+        buf: &mut B,
+        ctx: &binary::DecodingCtx,
+    ) -> Result<Self, binary::DecodingError> {
         binary::check_remaining(buf, 4)?;
         let len = buf.get_i32_le();
         if len == -1 {
@@ -94,7 +97,10 @@ impl<T> binary::Decode for Option<Vec<T>>
 where
     T: binary::Decode,
 {
-    fn decode<B: bytes::Buf>(buf: &mut B, ctx: &binary::DecodingCtx) -> Result<Self, binary::DecodingError> {
+    fn decode<B: bytes::Buf>(
+        buf: &mut B,
+        ctx: &binary::DecodingCtx,
+    ) -> Result<Self, binary::DecodingError> {
         binary::check_remaining(buf, 4)?;
         let len = buf.get_i32_le();
         if len == -1 {

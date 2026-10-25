@@ -12,7 +12,7 @@ pub struct Transport {
     stream: net::TcpStream,
     send_buf: BytesMut,
     recv_buf: BytesMut,
-    decoding_ctx: binary::DecodingCtx
+    decoding_ctx: binary::DecodingCtx,
 }
 
 impl Transport {

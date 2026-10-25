@@ -115,8 +115,8 @@ impl From<NodeId> for ExpandedNodeId {
 }
 
 impl DataType for ExpandedNodeId {
-    fn type_id() -> ua::NodeId {
-        ua::NodeId::Numeric(0, 18)
+    fn type_id() -> u32 {
+        18
     }
 
     fn nullable() -> bool {

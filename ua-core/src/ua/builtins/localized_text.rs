@@ -1,5 +1,5 @@
 use crate::encoding::binary;
-use crate::{DataType, ua};
+use crate::DataType;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LocaleId(pub String);
@@ -11,8 +11,8 @@ pub struct LocalizedText {
 }
 
 impl DataType for LocalizedText {
-    fn type_id() -> ua::NodeId {
-        ua::NodeId::Numeric(0, 21)
+    fn type_id() -> u32 {
+        21
     }
     fn nullable() -> bool {
         true

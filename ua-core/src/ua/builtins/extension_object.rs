@@ -111,6 +111,29 @@ pub type BinaryDecodingFn =
         &binary::DecodingCtx,
     ) -> Result<Option<Box<dyn ua::ExtensionObject>>, binary::DecodingError>;
 
+/// Generic decoding function for the body of an extension object of type `T`.
+/// Can be registered in the `DecodingCtx` type table.
+pub fn decode_body<T>(
+    mut buf: &mut dyn binary::Buf,
+    encoding: &Encoding,
+    length: i32,
+    ctx: &binary::DecodingCtx,
+) -> Result<Option<Box<dyn ua::ExtensionObject>>, binary::DecodingError>
+where
+    T: binary::Decode + ExtensionObject,
+{
+    if *encoding != Encoding::ByteString {
+        return Err(binary::DecodingError::InvalidData);
+    }
+    let length = usize::try_from(length).map_err(|_| binary::DecodingError::InvalidLengthPrefix)?;
+    let before = binary::Buf::remaining(&buf);
+    let value = T::decode(&mut buf, ctx)?;
+    if before - binary::Buf::remaining(&buf) != length {
+        return Err(binary::DecodingError::InvalidData);
+    }
+    Ok(Some(Box::new(value)))
+}
+
 impl binary::Decode for Option<Box<dyn ExtensionObject>> {
     fn decode<B: binary::Buf>(
         buf: &mut B,
@@ -131,8 +154,8 @@ impl binary::Decode for Option<Box<dyn ExtensionObject>> {
 }
 
 impl crate::DataType for Option<Box<dyn ExtensionObject>> {
-    fn type_id() -> ua::NodeId {
-        ua::NodeId::Numeric(0, 22)
+    fn type_id() -> u32 {
+        22
     }
 
     fn nullable() -> bool {
@@ -155,8 +178,8 @@ pub struct UnknownExtensionObject {
 }
 
 impl DataType for UnknownExtensionObject {
-    fn type_id() -> ua::NodeId {
-        ua::NodeId::Numeric(0, 22)
+    fn type_id() -> u32 {
+        22
     }
 
     fn nullable() -> bool {

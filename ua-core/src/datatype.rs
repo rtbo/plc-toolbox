@@ -1,7 +1,8 @@
 use crate::encoding::binary;
-use crate::ua;
 
 pub trait DataType: Sized + binary::Encode + binary::Decode {
-    fn type_id() -> ua::NodeId;
+    /// Identifier of the data type, without its namespace.
+    /// The namespace index depends on the server's namespace array.
+    fn type_id() -> u32;
     fn nullable() -> bool;
 }

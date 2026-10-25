@@ -26,6 +26,7 @@ where
         ua_type_ids,
         options,
         cg: super::RsCodeGen::new(out),
+        extension_objects: Vec::new(),
     };
 
     if let Some(doc) = &types.doc {
@@ -46,6 +47,8 @@ where
         // Generate Rust definitions for each type here.
         ctx.generate_type_def(type_def).await?;
     }
+
+    ctx.generate_register_fn().await?;
 
     ctx.cg.flush().await
 }
@@ -102,6 +105,8 @@ where
     ua_type_ids: &'a HashMap<String, NodeId>,
     options: &'a Options,
     cg: super::RsCodeGen<W>,
+    /// (type name, type identifier) of the generated types deriving from ExtensionObject.
+    extension_objects: Vec<(String, u32)>,
 }
 
 impl<'a, W> Ctx<'a, W>
@@ -222,6 +227,156 @@ where
             }
         }
         self.generate_datatype_impl(type_def).await?;
+        if let types::Type::Structured {
+            desc, base_type, ..
+        } = type_def
+        {
+            if self.derives_extension_object(base_type.as_ref()) {
+                self.generate_extension_object_impl(&desc.name).await?;
+            }
+        }
+        Ok(())
+    }
+
+    fn is_local_namespace(&self, qname: &types::QualName) -> bool {
+        match qname.namespace.as_deref() {
+            None => true,
+            Some(ns) => ns == self.types.target_namespace,
+        }
+    }
+
+    /// Whether the type has ExtensionObject as base type, directly or through other types of the dictionary.
+    fn derives_extension_object(&self, base_type: Option<&types::QualName>) -> bool {
+        let mut base = base_type;
+        // The depth limit protects against cyclic definitions.
+        for _ in 0..32 {
+            let Some(b) = base else {
+                return false;
+            };
+            if is_extension_object_type(b) {
+                return true;
+            }
+            if !self.is_local_namespace(b) {
+                return false;
+            }
+            base = self
+                .types
+                .types
+                .iter()
+                .find_map(|t| match t {
+                    types::Type::Structured {
+                        desc, base_type, ..
+                    } if desc.name == b.name => Some(base_type.as_ref()),
+                    _ => None,
+                })
+                .flatten();
+        }
+        false
+    }
+
+    fn namespace_index_expr(&self) -> &'static str {
+        if self.types.target_namespace == UA_NS {
+            "0"
+        } else {
+            "NAMESPACE_INDEX.load(std::sync::atomic::Ordering::Relaxed)"
+        }
+    }
+
+    async fn generate_extension_object_impl(&mut self, name: &str) -> io::Result<()> {
+        let Some(type_id) = self.ua_type_ids.get(name) else {
+            return Ok(());
+        };
+        let core = self.options.ua_core_module.clone();
+        self.extension_objects
+            .push((name.to_string(), type_id.numeric_id));
+
+        self.cg
+            .start_block(&format!("impl {}::ua::ExtensionObject for {} ", core, name))
+            .await?;
+        self.cg
+            .start_block("fn ua_type_id(&self) -> ua::NodeId ")
+            .await?;
+        let ns_expr = self.namespace_index_expr();
+        self.cg
+            .write_line(&format!(
+                "ua::NodeId::Numeric({}, <Self as {}::DataType>::type_id())",
+                ns_expr, core
+            ))
+            .await?;
+        self.cg.end_block().await?;
+        self.cg
+            .start_block("fn binary_encoded_len_body(&self) -> u32 ")
+            .await?;
+        self.cg
+            .write_line(&format!(
+                "{}::encoding::binary::Encode::encoded_len(self)",
+                core
+            ))
+            .await?;
+        self.cg.end_block().await?;
+        self.cg
+            .start_block(&format!(
+                "fn binary_encode_body(&self, mut buf: &mut dyn {}::encoding::binary::BufMut) ",
+                core
+            ))
+            .await?;
+        self.cg
+            .write_line(&format!(
+                "{}::encoding::binary::Encode::encode(self, &mut buf)",
+                core
+            ))
+            .await?;
+        self.cg.end_block().await?;
+        self.cg.end_block().await?;
+        self.cg.write_line("").await?;
+        Ok(())
+    }
+
+    async fn generate_register_fn(&mut self) -> io::Result<()> {
+        if self.extension_objects.is_empty() {
+            return Ok(());
+        }
+        let core = self.options.ua_core_module.clone();
+        let is_ua = self.types.target_namespace == UA_NS;
+
+        if !is_ua {
+            self.cg
+                .write_line(
+                    "static NAMESPACE_INDEX: std::sync::atomic::AtomicU16 = std::sync::atomic::AtomicU16::new(0);",
+                )
+                .await?;
+            self.cg.write_line("").await?;
+        }
+        self.cg
+            .write_doc_comment(
+                "Registers the decoding functions of the extension objects of this namespace.\n\
+                 `namespace_index` is the index of the namespace in the server's namespace array \
+                 (0 for the OPC UA namespace).",
+            )
+            .await?;
+        self.cg
+            .start_block(&format!(
+                "pub fn register_decoders(ctx: &mut {}::encoding::binary::DecodingCtx, namespace_index: u16) ",
+                core
+            ))
+            .await?;
+        if !is_ua {
+            self.cg
+                .write_line(
+                    "NAMESPACE_INDEX.store(namespace_index, std::sync::atomic::Ordering::Relaxed);",
+                )
+                .await?;
+        }
+        let entries = std::mem::take(&mut self.extension_objects);
+        for (name, id) in &entries {
+            self.cg
+                .write_line(&format!(
+                    "ctx.register_type(ua::NodeId::Numeric(namespace_index, {}), {}::ua::extension_object::decode_body::<{}>);",
+                    id, core, name
+                ))
+                .await?;
+        }
+        self.cg.end_block().await?;
         Ok(())
     }
 
@@ -306,9 +461,7 @@ where
         if let Some(doc) = desc.doc.as_deref() {
             self.cg.write_doc_comment(doc).await?;
         }
-        self.cg
-            .write_line("#[derive(Debug)]")
-            .await?;
+        self.cg.write_line("#[derive(Debug)]").await?;
         self.cg
             .write_line("#[derive(DecodeBinary, EncodeBinary)]")
             .await?;
@@ -389,11 +542,8 @@ where
                 ))
                 .await?;
 
-            self.cg.start_block("fn type_id() -> ua::NodeId ").await?;
-            // FIXME: handle other namespaces
-            self.cg
-                .write_line(&format!("ua::NodeId::Numeric(0, {})", type_id.numeric_id))
-                .await?;
+            self.cg.start_block("fn type_id() -> u32 ").await?;
+            self.cg.write_line(&type_id.numeric_id.to_string()).await?;
             self.cg.end_block().await?; // fn type_id
 
             self.cg.start_block("fn nullable() -> bool ").await?;

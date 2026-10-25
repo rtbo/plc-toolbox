@@ -86,7 +86,10 @@ impl<M: MsgType + Encode> Encode for Msg<M> {
 }
 
 impl<M: MsgType + Decode> Decode for Msg<M> {
-    fn decode<B: bytes::Buf>(buf: &mut B, ctx: &binary::DecodingCtx) -> Result<Self, DecodingError> {
+    fn decode<B: bytes::Buf>(
+        buf: &mut B,
+        ctx: &binary::DecodingCtx,
+    ) -> Result<Self, DecodingError> {
         let mut msg_type = [0u8; 3];
         check_remaining(buf, 8)?;
         buf.copy_to_slice(&mut msg_type);
@@ -120,7 +123,8 @@ mod tests {
         assert_eq!(encoded.len(), value.encoded_len() as usize);
 
         let mut remaining = encoded.clone();
-        let decoded = T::decode(&mut remaining, &Default::default()).expect("encoded value should decode");
+        let decoded =
+            T::decode(&mut remaining, &Default::default()).expect("encoded value should decode");
         assert!(remaining.is_empty());
         assert_eq!(&decoded, value);
 

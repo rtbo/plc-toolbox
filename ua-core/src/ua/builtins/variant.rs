@@ -38,8 +38,8 @@ pub enum Variant {
 }
 
 impl DataType for Variant {
-    fn type_id() -> ua::NodeId {
-        ua::NodeId::Numeric(0, 24)
+    fn type_id() -> u32 {
+        24
     }
 
     fn nullable() -> bool {

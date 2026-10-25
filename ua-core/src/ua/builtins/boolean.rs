@@ -1,15 +1,15 @@
 use bytes::{Buf, BufMut};
 
 use crate::encoding::binary;
-use crate::{DataType, ua};
+use crate::DataType;
 
 /// Boolean data type, representing a true or false value.
 /// Type node Id: `i=1`
 pub type Boolean = bool;
 
 impl DataType for Boolean {
-    fn type_id() -> ua::NodeId {
-        ua::NodeId::Numeric(0, 1)
+    fn type_id() -> u32 {
+        1
     }
 
     fn nullable() -> bool {

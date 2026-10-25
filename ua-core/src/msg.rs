@@ -62,7 +62,10 @@ impl binary::Encode for BinaryHeader {
 }
 
 impl binary::Decode for BinaryHeader {
-    fn decode<B: bytes::Buf>(buf: &mut B, _ctx: &binary::DecodingCtx) -> Result<Self, binary::DecodingError> {
+    fn decode<B: bytes::Buf>(
+        buf: &mut B,
+        _ctx: &binary::DecodingCtx,
+    ) -> Result<Self, binary::DecodingError> {
         let mut msg_type_bytes = [0u8; 3];
         buf.copy_to_slice(&mut msg_type_bytes);
         let msg_type = match &msg_type_bytes {

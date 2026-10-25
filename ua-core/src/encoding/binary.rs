@@ -82,7 +82,11 @@ pub trait Decode: Sized {
 
     /// Decodes `len` consecutive items (without the length prefix).
     /// Types implementing `ReprEncoded` override this with a raw byte copy.
-    fn decode_vec<B: Buf>(buf: &mut B, len: usize, ctx: &DecodingCtx) -> Result<Vec<Self>, DecodingError> {
+    fn decode_vec<B: Buf>(
+        buf: &mut B,
+        len: usize,
+        ctx: &DecodingCtx,
+    ) -> Result<Vec<Self>, DecodingError> {
         // Do not trust `len` for the allocation: it comes from the wire.
         // This assumes a one byte length size, which is often incorrect.
         // It is only a preflight check though.
@@ -205,7 +209,8 @@ mod tests {
         assert_eq!(encoded.len(), value.encoded_len() as usize);
 
         let mut remaining = encoded.clone();
-        let decoded = T::decode(&mut remaining, &Default::default()).expect("encoded value should decode");
+        let decoded =
+            T::decode(&mut remaining, &Default::default()).expect("encoded value should decode");
         assert!(remaining.is_empty());
         assert_eq!(&decoded, value);
 
@@ -222,7 +227,10 @@ mod tests {
         assert_eq!(small.encoded_len(), 1);
         small.encode(&mut buf);
         assert_eq!(&buf[..], &[0xab]);
-        assert!(matches!(SmallCode::decode(&mut buf, &Default::default()), Ok(SmallCode::Value)));
+        assert!(matches!(
+            SmallCode::decode(&mut buf, &Default::default()),
+            Ok(SmallCode::Value)
+        ));
 
         buf.clear();
         let medium = MediumCode::Value;

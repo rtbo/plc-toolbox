@@ -13,8 +13,8 @@ pub struct DiagnosticInfo {
 }
 
 impl DataType for DiagnosticInfo {
-    fn type_id() -> ua::NodeId {
-        ua::NodeId::Numeric(0, 25)
+    fn type_id() -> u32 {
+        25
     }
 
     fn nullable() -> bool {

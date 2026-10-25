@@ -1,13 +1,13 @@
 use bytes::{Buf, BufMut};
 
 use crate::encoding::binary;
-use crate::{DataType, ua};
+use crate::DataType;
 
 pub type Byte = u8;
 
 impl DataType for Byte {
-    fn type_id() -> ua::NodeId {
-        ua::NodeId::Numeric(0, 3)
+    fn type_id() -> u32 {
+        3
     }
 
     fn nullable() -> bool {

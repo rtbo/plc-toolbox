@@ -53,8 +53,8 @@ impl From<transport::Error> for StatusCode {
 }
 
 impl DataType for StatusCode {
-    fn type_id() -> crate::ua::NodeId {
-        crate::ua::NodeId::Numeric(0, 19)
+    fn type_id() -> u32 {
+        19
     }
 
     fn nullable() -> bool {

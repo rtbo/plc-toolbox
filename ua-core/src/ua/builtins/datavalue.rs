@@ -10,8 +10,8 @@ pub struct DataValue {
 }
 
 impl DataType for DataValue {
-    fn type_id() -> ua::NodeId {
-        ua::NodeId::Numeric(0, 23)
+    fn type_id() -> u32 {
+        23
     }
 
     fn nullable() -> bool {

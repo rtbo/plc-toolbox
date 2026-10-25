@@ -1,13 +1,13 @@
 use bytes::{Buf, BufMut};
 
 use crate::encoding::binary;
-use crate::{DataType, ua};
+use crate::DataType;
 
 pub type Int64 = i64;
 
 impl DataType for Int64 {
-    fn type_id() -> ua::NodeId {
-        ua::NodeId::Numeric(0, 8)
+    fn type_id() -> u32 {
+        8
     }
 
     fn nullable() -> bool {

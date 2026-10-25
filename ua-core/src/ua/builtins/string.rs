@@ -1,13 +1,13 @@
 use bytes::{Buf, BufMut};
 
 use crate::encoding::binary;
-use crate::{DataType, ua};
+use crate::DataType;
 
 pub type String = std::string::String;
 
 impl DataType for String {
-    fn type_id() -> ua::NodeId {
-        ua::NodeId::Numeric(0, 12)
+    fn type_id() -> u32 {
+        12
     }
 
     fn nullable() -> bool {

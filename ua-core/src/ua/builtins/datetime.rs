@@ -1,7 +1,7 @@
 use bytes::{Buf, BufMut};
 
 use crate::encoding::binary;
-use crate::{DataType, ua};
+use crate::DataType;
 
 /// OPC/UA DateTime: number of 100ns intervals since 1601-01-01T00:00:00Z.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -15,8 +15,8 @@ impl Default for DateTime {
 }
 
 impl DataType for DateTime {
-    fn type_id() -> ua::NodeId {
-        ua::NodeId::Numeric(0, 13)
+    fn type_id() -> u32 {
+        13
     }
 
     fn nullable() -> bool {
@@ -168,7 +168,8 @@ impl TryFrom<DateTimeParts> for DateTime {
         if p.hour > 23 || p.minute > 59 || p.second > 60 || i64::from(p.ticks) >= TICKS_PER_SEC {
             return Err(err("time out of range"));
         }
-        let days = days_from_civil(p.year, i64::from(p.month), i64::from(p.day)) + DAYS_1601_TO_1970;
+        let days =
+            days_from_civil(p.year, i64::from(p.month), i64::from(p.day)) + DAYS_1601_TO_1970;
         let secs = i64::from(p.hour) * 3600 + i64::from(p.minute) * 60 + i64::from(p.second)
             - i64::from(p.offset_minutes) * 60;
         days.checked_mul(86_400)
@@ -379,7 +380,10 @@ mod str_tests {
         assert_eq!(unix.to_string(), "1970-01-01T00:00:00Z");
         let dt: DateTime = "2024-02-29T12:34:56.789Z".parse().unwrap();
         assert_eq!(dt.to_string(), "2024-02-29T12:34:56.789Z");
-        assert_eq!("1970-01-01T01:00:00+01:00".parse::<DateTime>().unwrap(), unix);
+        assert_eq!(
+            "1970-01-01T01:00:00+01:00".parse::<DateTime>().unwrap(),
+            unix
+        );
         assert_eq!("1970-01-01".parse::<DateTime>().unwrap(), unix);
         let x = DateTime::from_timestamp(123_456_789_012_345_678);
         assert_eq!(x.to_string().parse::<DateTime>().unwrap(), x);
@@ -390,7 +394,10 @@ mod str_tests {
     #[test]
     fn parts() {
         let p: DateTimeParts = "2024-02-29T12:34:56.5-05:30".parse().unwrap();
-        assert_eq!((p.year, p.month, p.day, p.hour, p.minute, p.second), (2024, 2, 29, 12, 34, 56));
+        assert_eq!(
+            (p.year, p.month, p.day, p.hour, p.minute, p.second),
+            (2024, 2, 29, 12, 34, 56)
+        );
         assert_eq!((p.ticks, p.offset_minutes), (5_000_000, -330));
         assert_eq!(p.to_string(), "2024-02-29T12:34:56.5-05:30");
     }

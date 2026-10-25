@@ -1,13 +1,13 @@
 use bytes::{Buf, BufMut};
 
 use crate::encoding::binary;
-use crate::{DataType, ua};
+use crate::DataType;
 
 pub type UInt32 = u32;
 
 impl DataType for UInt32 {
-    fn type_id() -> ua::NodeId {
-        ua::NodeId::Numeric(0, 7)
+    fn type_id() -> u32 {
+        7
     }
 
     fn nullable() -> bool {
