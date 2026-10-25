@@ -14,10 +14,6 @@ impl DataType for XmlElement {
     fn nullable() -> bool {
         true
     }
-
-    fn default() -> Self {
-        XmlElement(String::new())
-    }
 }
 
 impl binary::Encode for XmlElement {

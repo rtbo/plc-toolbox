@@ -13,10 +13,6 @@ impl DataType for DateTime {
     fn nullable() -> bool {
         true
     }
-
-    fn default() -> Self {
-        DT_MIN
-    }
 }
 
 impl binary::Encode for DateTime {
@@ -40,8 +36,6 @@ impl binary::Decode for DateTime {
         Ok(from_opcua(timestamp))
     }
 }
-
-const DT_MIN: chrono::DateTime<chrono::Utc> = from_opcua(i64::MIN);
 
 /// Convert from chrono::DateTime<chrono::Utc> to OPC/UA timestamp (hnsecs since 1601-01-01T00:00:00Z)
 const fn to_opcua(dt: &chrono::DateTime<chrono::Utc>) -> i64 {

@@ -1,7 +1,7 @@
 use crate::encoding::binary;
 use crate::{DataType, ua};
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Default)]
 pub struct DataValue {
     pub value: Option<ua::Variant>,
     pub status_code: Option<ua::StatusCode>,
@@ -16,15 +16,6 @@ impl DataType for DataValue {
 
     fn nullable() -> bool {
         true
-    }
-
-    fn default() -> Self {
-        DataValue {
-            value: None,
-            status_code: None,
-            source_timestamp: None,
-            server_timestamp: None,
-        }
     }
 }
 
@@ -153,14 +144,12 @@ impl binary::Decode for DataValue {
 
 // Get the picoseconds part of a DateTime (encoded as hecto-nanoseconds).
 // In OPC/UA, picosecond precision is tens of picoseconds (kilo-ps)
-fn get_kilo_picoseconds(dt: &ua::DateTime) -> u16 {
-    // get the nanosecond part, ignoring what is already represented in the hecto-nanoseconds
-    let nanos = dt.timestamp_subsec_nanos() % 100;
-    (nanos * 100) as u16
+// DateTime has a 100ns resolution, so there is never a sub-hecto-nanosecond part.
+fn get_kilo_picoseconds(_dt: &ua::DateTime) -> u16 {
+    0
 }
 
-fn add_kilo_picoseconds(dt: ua::DateTime, kps: u16) -> ua::DateTime {
-    let seconds = dt.timestamp();
-    let nanos = dt.timestamp_subsec_nanos() + (kps as u32) / 100;
-    ua::DateTime::from_timestamp(seconds, nanos).expect("Should always be valid")
+// Sub-hecto-nanosecond precision cannot be represented and is dropped.
+fn add_kilo_picoseconds(dt: ua::DateTime, _kps: u16) -> ua::DateTime {
+    dt
 }

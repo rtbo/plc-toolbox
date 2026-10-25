@@ -15,10 +15,6 @@ impl DataType for Boolean {
     fn nullable() -> bool {
         false
     }
-
-    fn default() -> Self {
-        false
-    }
 }
 
 impl binary::Encode for Boolean {

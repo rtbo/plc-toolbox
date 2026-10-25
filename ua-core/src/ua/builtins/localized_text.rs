@@ -4,7 +4,7 @@ use crate::{DataType, ua};
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LocaleId(pub String);
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct LocalizedText {
     pub locale: Option<LocaleId>,
     pub text: String,
@@ -16,13 +16,6 @@ impl DataType for LocalizedText {
     }
     fn nullable() -> bool {
         true
-    }
-
-    fn default() -> Self {
-        LocalizedText {
-            locale: None,
-            text: String::new(),
-        }
     }
 }
 

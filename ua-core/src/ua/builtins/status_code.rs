@@ -3,6 +3,12 @@ use crate::{DataType, transport};
 
 include!(concat!(env!("OUT_DIR"), "/status_code.rs"));
 
+impl Default for StatusCode {
+    fn default() -> Self {
+        StatusCode::Good
+    }
+}
+
 impl StatusCode {
     pub fn is_good(&self) -> bool {
         let code = *self as u32;
@@ -53,10 +59,6 @@ impl DataType for StatusCode {
 
     fn nullable() -> bool {
         false
-    }
-
-    fn default() -> Self {
-        StatusCode::Good
     }
 }
 

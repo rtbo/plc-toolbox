@@ -394,64 +394,13 @@ where
             self.cg
                 .write_line(&format!("ua::NodeId::Numeric(0, {})", type_id.numeric_id))
                 .await?;
-            self.cg.end_block().await?;
+            self.cg.end_block().await?; // fn type_id
 
             self.cg.start_block("fn nullable() -> bool ").await?;
             self.cg.write_line("false").await?;
-            self.cg.end_block().await?;
+            self.cg.end_block().await?; // fn nullable
 
-            self.cg.start_block("fn default() -> Self ").await?;
-            match type_def {
-                types::Type::Opaque { .. } => {
-                    self.cg
-                        .write_line(&format!(
-                            "{}(<ua::ByteString as {}::DataType>::default())",
-                            type_def.name(),
-                            self.options.ua_core_module
-                        ))
-                        .await?;
-                }
-                types::Type::Enumerated { values, .. } => {
-                    if let Some(first_value) = values.first() {
-                        self.cg
-                            .write_line(&format!(
-                                "{}::{}",
-                                type_def.name(),
-                                first_value.name.as_deref().unwrap_or("default()")
-                            ))
-                            .await?;
-                    }
-                }
-                types::Type::Structured { fields, .. } => {
-                    self.cg
-                        .start_block(&format!("{} ", type_def.name()))
-                        .await?;
-                    for i in 0..fields.len() {
-                        let field = &fields[i];
-                        if is_length_field(fields, i) {
-                            continue;
-                        }
-                        let field_name = self.to_snake_case(&field.name);
-                        let is_array = field.length_field.is_some();
-                        if is_array {
-                            self.cg
-                                .write_line(&format!("{}: Vec::new(),", field_name))
-                                .await?;
-                        } else {
-                            self.cg
-                                .write_line(&format!(
-                                    "{}: {}::DataType::default(),",
-                                    field_name, self.options.ua_core_module
-                                ))
-                                .await?;
-                        }
-                    }
-                    self.cg.end_block().await?;
-                }
-            }
-            self.cg.end_block().await?;
-
-            self.cg.end_block().await?;
+            self.cg.end_block().await?; // impl DataType
             self.cg.write_line("").await?;
         }
         Ok(())

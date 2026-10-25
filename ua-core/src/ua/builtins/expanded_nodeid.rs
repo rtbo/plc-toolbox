@@ -21,6 +21,12 @@ pub enum ExpandedNodeId {
     Opaque(Ns, Vec<u8>, Option<u32>),
 }
 
+impl Default for ExpandedNodeId {
+    fn default() -> Self {
+        ExpandedNodeId::Numeric(Ns::Index(0), 0, None)
+    }
+}
+
 impl ExpandedNodeId {
     pub fn namespace(&self) -> &Ns {
         match self {
@@ -115,10 +121,6 @@ impl DataType for ExpandedNodeId {
 
     fn nullable() -> bool {
         true
-    }
-
-    fn default() -> Self {
-        NodeId::Numeric(0, 0).into()
     }
 }
 

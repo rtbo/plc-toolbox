@@ -13,10 +13,6 @@ impl DataType for UInt64 {
     fn nullable() -> bool {
         false
     }
-
-    fn default() -> Self {
-        0
-    }
 }
 
 impl binary::Encode for UInt64 {

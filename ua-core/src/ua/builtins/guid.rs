@@ -3,7 +3,7 @@ use std::fmt;
 use crate::DataType;
 use crate::encoding::binary;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub struct Guid {
     pub data1: u32,
     pub data2: u16,
@@ -113,15 +113,6 @@ impl DataType for Guid {
 
     fn nullable() -> bool {
         true
-    }
-
-    fn default() -> Self {
-        Guid {
-            data1: 0,
-            data2: 0,
-            data3: 0,
-            data4: [0; 8],
-        }
     }
 }
 

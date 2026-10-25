@@ -12,8 +12,4 @@ impl DataType for Vec<u8> {
     fn nullable() -> bool {
         true
     }
-
-    fn default() -> Self {
-        Vec::new()
-    }
 }

@@ -186,10 +186,6 @@ impl DataType for NodeId {
     fn nullable() -> bool {
         true
     }
-
-    fn default() -> Self {
-        NodeId::Numeric(0, 0)
-    }
 }
 
 impl binary::Encode for NodeId {

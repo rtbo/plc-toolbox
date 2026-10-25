@@ -13,10 +13,6 @@ impl DataType for Int32 {
     fn nullable() -> bool {
         false
     }
-
-    fn default() -> Self {
-        0
-    }
 }
 
 impl binary::Encode for Int32 {

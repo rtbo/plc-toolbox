@@ -13,10 +13,6 @@ impl DataType for SByte {
     fn nullable() -> bool {
         false
     }
-
-    fn default() -> Self {
-        0
-    }
 }
 
 impl binary::Encode for SByte {

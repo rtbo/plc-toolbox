@@ -13,10 +13,6 @@ impl DataType for String {
     fn nullable() -> bool {
         true
     }
-
-    fn default() -> Self {
-        String::new()
-    }
 }
 
 impl binary::Encode for &str {

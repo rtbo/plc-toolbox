@@ -1,7 +1,7 @@
 use crate::encoding::binary;
 use crate::{DataType, ua};
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct DiagnosticInfo {
     pub symbolic_id: Option<i32>,
     pub namespace_uri: Option<i32>,
@@ -19,18 +19,6 @@ impl DataType for DiagnosticInfo {
 
     fn nullable() -> bool {
         true
-    }
-
-    fn default() -> Self {
-        DiagnosticInfo {
-            symbolic_id: None,
-            namespace_uri: None,
-            localized_text: None,
-            locale: None,
-            additional_info: None,
-            inner_status_code: None,
-            inner_diagnostic_info: None,
-        }
     }
 }
 

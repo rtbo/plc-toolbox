@@ -138,20 +138,17 @@ impl crate::DataType for Option<Box<dyn ExtensionObject>> {
     fn nullable() -> bool {
         true
     }
-
-    fn default() -> Self {
-        None
-    }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub enum UnknownBody {
+    #[default]
     None,
     ByteString(ua::ByteString),
     XmlElement(ua::XmlElement),
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct UnknownExtensionObject {
     pub type_id: ua::NodeId,
     pub body: UnknownBody,
@@ -164,13 +161,6 @@ impl DataType for UnknownExtensionObject {
 
     fn nullable() -> bool {
         true
-    }
-
-    fn default() -> Self {
-        UnknownExtensionObject {
-            type_id: ua::NodeId::Numeric(0, 0),
-            body: UnknownBody::None,
-        }
     }
 }
 

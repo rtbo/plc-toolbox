@@ -45,10 +45,6 @@ impl DataType for Variant {
     fn nullable() -> bool {
         true
     }
-
-    fn default() -> Self {
-        Variant::Null
-    }
 }
 
 impl binary::Encode for Variant {
