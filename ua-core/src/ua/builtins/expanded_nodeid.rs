@@ -1,3 +1,5 @@
+use std::fmt::{self, Write as _};
+
 use bytes::BufMut;
 
 use crate::DataType;
@@ -196,5 +198,128 @@ impl binary::Decode for ExpandedNodeId {
             expanded_nodeid = expanded_nodeid.with_server_index(server_index);
         }
         Ok(expanded_nodeid)
+    }
+}
+
+fn escape_uri(f: &mut fmt::Formatter<'_>, uri: &str) -> fmt::Result {
+    for c in uri.chars() {
+        match c {
+            ';' => f.write_str("%3B")?,
+            '%' => f.write_str("%25")?,
+            c => f.write_char(c)?,
+        }
+    }
+    Ok(())
+}
+
+fn unescape_uri(s: &str) -> Result<String, &'static str> {
+    let bytes = s.as_bytes();
+    let mut out = Vec::with_capacity(bytes.len());
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i] == b'%' {
+            let hex = s
+                .get(i + 1..i + 3)
+                .ok_or("Invalid escape in namespace URI")?;
+            out.push(u8::from_str_radix(hex, 16).map_err(|_| "Invalid escape in namespace URI")?);
+            i += 3;
+        } else {
+            out.push(bytes[i]);
+            i += 1;
+        }
+    }
+    String::from_utf8(out).map_err(|_| "Invalid UTF-8 in namespace URI")
+}
+
+/// Formats as `svr=<serverindex>;ns=<namespaceindex>;<type>=<value>` or
+/// `svr=<serverindex>;nsu=<uri>;<type>=<value>` (OPC 10000-6, 5.1.12).
+impl fmt::Display for ExpandedNodeId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if let Some(svr) = self.server_index().filter(|s| *s != 0) {
+            write!(f, "svr={};", svr)?;
+        }
+        match self.namespace() {
+            Ns::Index(0) => {}
+            Ns::Index(ns) => write!(f, "ns={};", ns)?,
+            Ns::Uri(uri) => {
+                f.write_str("nsu=")?;
+                escape_uri(f, uri)?;
+                f.write_char(';')?;
+            }
+        }
+        match self {
+            ExpandedNodeId::Numeric(_, id, _) => write!(f, "i={}", id),
+            ExpandedNodeId::String(_, id, _) => write!(f, "s={}", id),
+            ExpandedNodeId::Guid(_, id, _) => write!(f, "g={}", id),
+            ExpandedNodeId::Opaque(_, id, _) => {
+                use base64::Engine;
+                write!(
+                    f,
+                    "b={}",
+                    base64::engine::general_purpose::STANDARD.encode(id)
+                )
+            }
+        }
+    }
+}
+
+impl std::str::FromStr for ExpandedNodeId {
+    type Err = &'static str;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let mut rest = s;
+        let mut server_index = None;
+        if let Some(r) = rest.strip_prefix("svr=") {
+            let (svr, r) = r.split_once(';').ok_or("Invalid ExpandedNodeId format")?;
+            server_index = Some(svr.parse().map_err(|_| "Invalid server index")?);
+            rest = r;
+        }
+        let mut uri = None;
+        if let Some(r) = rest.strip_prefix("nsu=") {
+            let (u, r) = r.split_once(';').ok_or("Invalid ExpandedNodeId format")?;
+            uri = Some(unescape_uri(u)?);
+            rest = r;
+        }
+        let mut result: ExpandedNodeId = rest.parse::<NodeId>()?.into();
+        if uri.is_some() && result.namespace_index() != Some(0) {
+            return Err("Both namespace index and URI specified");
+        }
+        if let Some(uri) = uri {
+            result = result.with_namespace_uri(uri);
+        }
+        if let Some(svr) = server_index {
+            result = result.with_server_index(svr);
+        }
+        Ok(result)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn display_and_parse() {
+        let cases = [
+            (ExpandedNodeId::Numeric(Ns::Index(0), 42, None), "i=42"),
+            (
+                ExpandedNodeId::Numeric(Ns::Index(2), 42, Some(3)),
+                "svr=3;ns=2;i=42",
+            ),
+            (
+                ExpandedNodeId::String(Ns::Uri("http://a/b;c%".into()), "x;y".into(), None),
+                "nsu=http://a/b%3Bc%25;s=x;y",
+            ),
+            (
+                ExpandedNodeId::Opaque(Ns::Uri("urn:x".into()), vec![1, 2, 3, 4], Some(1)),
+                "svr=1;nsu=urn:x;b=AQIDBA==",
+            ),
+        ];
+        for (id, s) in cases {
+            assert_eq!(id.to_string(), s);
+            assert_eq!(s.parse::<ExpandedNodeId>().unwrap(), id);
+        }
+        assert!("ns=1;nsu=urn:x;i=1".parse::<ExpandedNodeId>().is_err());
+        assert!("svr=x;i=1".parse::<ExpandedNodeId>().is_err());
     }
 }
