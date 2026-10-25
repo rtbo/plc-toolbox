@@ -1,7 +1,7 @@
 use bytes::{Buf, BufMut};
 
-use crate::encoding::binary;
 use crate::DataType;
+use crate::encoding::binary;
 
 pub type UInt32 = u32;
 

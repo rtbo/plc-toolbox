@@ -1,7 +1,7 @@
 use bytes::{Buf, BufMut};
 
-use crate::encoding::binary;
 use crate::DataType;
+use crate::encoding::binary;
 
 /// Boolean data type, representing a true or false value.
 /// Type node Id: `i=1`

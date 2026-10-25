@@ -1,7 +1,7 @@
 use bytes::{Buf, BufMut};
 
-use crate::encoding::binary;
 use crate::DataType;
+use crate::encoding::binary;
 
 /// OPC/UA DateTime: number of 100ns intervals since 1601-01-01T00:00:00Z.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]

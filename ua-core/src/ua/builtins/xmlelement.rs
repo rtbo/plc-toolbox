@@ -1,7 +1,7 @@
 use bytes::{Buf, BufMut};
 
-use crate::encoding::binary;
 use crate::DataType;
+use crate::encoding::binary;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct XmlElement(pub String);
