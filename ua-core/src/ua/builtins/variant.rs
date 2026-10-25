@@ -1,5 +1,5 @@
 use crate::encoding::binary::{self, Encode};
-use crate::{DataType, ua};
+use crate::ua;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Value<T> {
@@ -35,16 +35,6 @@ pub enum Variant {
     //ExtensionObject(VariantVal<ua::ExtensionObject>),
     DataValue(Box<Value<ua::DataValue>>),
     Variant(Box<Value<Variant>>), // Nested variant
-}
-
-impl DataType for Variant {
-    fn type_id() -> u32 {
-        24
-    }
-
-    fn nullable() -> bool {
-        true
-    }
 }
 
 impl binary::Encode for Variant {
@@ -291,7 +281,7 @@ impl binary::Decode for Variant {
 
 fn value_encoded_len<T>(value: &Value<T>) -> u32
 where
-    T: DataType,
+    T: binary::Encode,
 {
     1 + match value {
         Value::Scalar(val) => val.encoded_len(),
@@ -302,7 +292,7 @@ where
 
 fn encode_value<T, B>(builtin_typeid: u8, value: &Value<T>, buf: &mut B)
 where
-    T: DataType,
+    T: binary::Encode,
     B: bytes::BufMut,
 {
     let encoding_mask = builtin_typeid
@@ -325,7 +315,7 @@ where
     }
 }
 
-fn decode_value<T: DataType, B: bytes::Buf>(
+fn decode_value<T: binary::Decode, B: bytes::Buf>(
     is_array: bool,
     has_multidim: bool,
     buf: &mut B,

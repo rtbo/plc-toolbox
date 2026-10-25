@@ -1,4 +1,3 @@
-use crate::DataType;
 use crate::encoding::binary;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -8,15 +7,6 @@ pub struct LocaleId(pub String);
 pub struct LocalizedText {
     pub locale: Option<LocaleId>,
     pub text: String,
-}
-
-impl DataType for LocalizedText {
-    fn type_id() -> u32 {
-        21
-    }
-    fn nullable() -> bool {
-        true
-    }
 }
 
 impl binary::Encode for LocalizedText {

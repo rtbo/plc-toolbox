@@ -127,9 +127,6 @@ where
         if ns == BINARYSCHEMA_NS {
             return self.translate_opc_name(name).to_string();
         }
-        if is_extension_object_type(qname) {
-            return "Option<Box<dyn ua::ExtensionObject>>".to_string();
-        }
         match self.translate_namespace(ns) {
             Some(translated_ns) => format!("{}::{}", translated_ns, name),
             None => name.to_string(),
@@ -226,7 +223,6 @@ where
                     .await?;
             }
         }
-        self.generate_datatype_impl(type_def).await?;
         if let types::Type::Structured {
             desc, base_type, ..
         } = type_def
@@ -274,14 +270,6 @@ where
         false
     }
 
-    fn namespace_index_expr(&self) -> &'static str {
-        if self.types.target_namespace == UA_NS {
-            "0"
-        } else {
-            "NAMESPACE_INDEX.load(std::sync::atomic::Ordering::Relaxed)"
-        }
-    }
-
     async fn generate_extension_object_impl(&mut self, name: &str) -> io::Result<()> {
         let Some(type_id) = self.ua_type_ids.get(name) else {
             return Ok(());
@@ -291,21 +279,13 @@ where
             .push((name.to_string(), type_id.numeric_id));
 
         self.cg
-            .start_block(&format!("impl {}::ua::ExtensionObject for {} ", core, name))
-            .await?;
-        self.cg
-            .start_block("fn ua_type_id(&self) -> ua::NodeId ")
-            .await?;
-        let ns_expr = self.namespace_index_expr();
-        self.cg
-            .write_line(&format!(
-                "ua::NodeId::Numeric({}, <Self as {}::DataType>::type_id())",
-                ns_expr, core
+            .start_block(&format!(
+                "impl {}::ua::extension_object::Body for {} ",
+                core, name
             ))
             .await?;
-        self.cg.end_block().await?;
         self.cg
-            .start_block("fn binary_encoded_len_body(&self) -> u32 ")
+            .start_block("fn binary_body_encoded_len(&self) -> u32 ")
             .await?;
         self.cg
             .write_line(&format!(
@@ -313,10 +293,10 @@ where
                 core
             ))
             .await?;
-        self.cg.end_block().await?;
+        self.cg.end_block().await?; // fn binary_body_encoded_len
         self.cg
             .start_block(&format!(
-                "fn binary_encode_body(&self, mut buf: &mut dyn {}::encoding::binary::BufMut) ",
+                "fn binary_body_encode(&self, mut buf: &mut dyn {}::encoding::binary::BufMut) ",
                 core
             ))
             .await?;
@@ -326,8 +306,8 @@ where
                 core
             ))
             .await?;
-        self.cg.end_block().await?;
-        self.cg.end_block().await?;
+        self.cg.end_block().await?; // fn binary_body_encode
+        self.cg.end_block().await?; // impl Body
         self.cg.write_line("").await?;
         Ok(())
     }
@@ -521,36 +501,6 @@ where
                 ))
                 .await?;
             self.cg.end_block().await?;
-            self.cg.write_line("").await?;
-        }
-        Ok(())
-    }
-
-    async fn generate_datatype_impl(&mut self, type_def: &types::Type) -> io::Result<()> {
-        if let types::Type::Enumerated { values, .. } = type_def {
-            if values.is_empty() {
-                return Ok(());
-            }
-        }
-
-        if let Some(type_id) = self.ua_type_ids.get(type_def.name()) {
-            self.cg
-                .start_block(&format!(
-                    "impl {}::DataType for {} ",
-                    self.options.ua_core_module,
-                    type_def.name(),
-                ))
-                .await?;
-
-            self.cg.start_block("fn type_id() -> u32 ").await?;
-            self.cg.write_line(&type_id.numeric_id.to_string()).await?;
-            self.cg.end_block().await?; // fn type_id
-
-            self.cg.start_block("fn nullable() -> bool ").await?;
-            self.cg.write_line("false").await?;
-            self.cg.end_block().await?; // fn nullable
-
-            self.cg.end_block().await?; // impl DataType
             self.cg.write_line("").await?;
         }
         Ok(())

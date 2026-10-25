@@ -1,19 +1,8 @@
 use bytes::{Buf, BufMut};
 
-use crate::DataType;
 use crate::encoding::binary;
 
 pub type String = std::string::String;
-
-impl DataType for String {
-    fn type_id() -> u32 {
-        12
-    }
-
-    fn nullable() -> bool {
-        true
-    }
-}
 
 impl binary::Encode for &str {
     fn encoded_len(&self) -> u32 {

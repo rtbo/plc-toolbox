@@ -1,6 +1,5 @@
 use bytes::{Buf, BufMut};
 
-use crate::DataType;
 use crate::encoding::binary;
 
 /// OPC/UA DateTime: number of 100ns intervals since 1601-01-01T00:00:00Z.
@@ -11,16 +10,6 @@ impl Default for DateTime {
     /// OPC/UA `DateTime.MinValue` (1601-01-01T00:00:00Z).
     fn default() -> Self {
         DateTime::MIN
-    }
-}
-
-impl DataType for DateTime {
-    fn type_id() -> u32 {
-        13
-    }
-
-    fn nullable() -> bool {
-        true
     }
 }
 

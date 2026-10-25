@@ -1,19 +1,8 @@
 use bytes::{Buf, BufMut};
 
-use crate::DataType;
 use crate::encoding::binary;
 
 pub type UInt32 = u32;
-
-impl DataType for UInt32 {
-    fn type_id() -> u32 {
-        7
-    }
-
-    fn nullable() -> bool {
-        false
-    }
-}
 
 impl binary::Encode for UInt32 {
     binary::repr_slice_methods!();

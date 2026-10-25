@@ -1,19 +1,8 @@
 use bytes::{Buf, BufMut};
 
-use crate::DataType;
 use crate::encoding::binary;
 
 pub type Float = f32;
-
-impl DataType for Float {
-    fn type_id() -> u32 {
-        10
-    }
-
-    fn nullable() -> bool {
-        false
-    }
-}
 
 impl binary::Encode for Float {
     binary::repr_slice_methods!();

@@ -1,19 +1,8 @@
 use bytes::{Buf, BufMut};
 
-use crate::DataType;
 use crate::encoding::binary;
 
 pub type UInt16 = u16;
-
-impl DataType for UInt16 {
-    fn type_id() -> u32 {
-        5
-    }
-
-    fn nullable() -> bool {
-        false
-    }
-}
 
 impl binary::Encode for UInt16 {
     binary::repr_slice_methods!();

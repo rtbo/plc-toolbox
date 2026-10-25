@@ -3,7 +3,7 @@ use std::fmt;
 use bytes::BufMut;
 
 use crate::encoding::binary::{self, Decode, Encode};
-use crate::{DataType, ua};
+use crate::ua;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum NodeId {
@@ -175,16 +175,6 @@ impl std::str::FromStr for NodeId {
         } else {
             Err("Invalid NodeId format")
         }
-    }
-}
-
-impl DataType for NodeId {
-    fn type_id() -> u32 {
-        17
-    }
-
-    fn nullable() -> bool {
-        true
     }
 }
 

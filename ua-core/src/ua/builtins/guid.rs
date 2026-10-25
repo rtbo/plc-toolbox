@@ -1,6 +1,5 @@
 use std::fmt;
 
-use crate::DataType;
 use crate::encoding::binary;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
@@ -103,16 +102,6 @@ impl From<uuid::Uuid> for Guid {
 impl From<Guid> for uuid::Uuid {
     fn from(guid: Guid) -> Self {
         uuid::Uuid::from_fields(guid.data1, guid.data2, guid.data3, &guid.data4)
-    }
-}
-
-impl DataType for Guid {
-    fn type_id() -> u32 {
-        14
-    }
-
-    fn nullable() -> bool {
-        true
     }
 }
 

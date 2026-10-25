@@ -1,5 +1,5 @@
 use crate::encoding::binary::{self, DecodingError};
-use crate::{DataType, transport};
+use crate::transport;
 
 include!(concat!(env!("OUT_DIR"), "/status_code.rs"));
 
@@ -49,16 +49,6 @@ impl From<transport::Error> for StatusCode {
             transport::Error::UnsupportedProtocol(_) => StatusCode::BadProtocolVersionUnsupported,
             transport::Error::MessageSize { .. } => StatusCode::BadEncodingLimitsExceeded,
         }
-    }
-}
-
-impl DataType for StatusCode {
-    fn type_id() -> u32 {
-        19
-    }
-
-    fn nullable() -> bool {
-        false
     }
 }
 

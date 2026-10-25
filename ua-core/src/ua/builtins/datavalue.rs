@@ -1,5 +1,5 @@
 use crate::encoding::binary;
-use crate::{DataType, ua};
+use crate::ua;
 
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct DataValue {
@@ -7,16 +7,6 @@ pub struct DataValue {
     pub status_code: Option<ua::StatusCode>,
     pub source_timestamp: Option<ua::DateTime>,
     pub server_timestamp: Option<ua::DateTime>,
-}
-
-impl DataType for DataValue {
-    fn type_id() -> u32 {
-        23
-    }
-
-    fn nullable() -> bool {
-        true
-    }
 }
 
 impl binary::Encode for DataValue {

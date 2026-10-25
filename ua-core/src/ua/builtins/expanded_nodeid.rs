@@ -2,7 +2,6 @@ use std::fmt::{self, Write as _};
 
 use bytes::BufMut;
 
-use crate::DataType;
 use crate::encoding::binary;
 use crate::ua::builtins::nodeid::{
     NodeIdRef, nodeid_decode, nodeidref_encode, nodeidref_encoded_len,
@@ -113,16 +112,6 @@ impl From<NodeId> for ExpandedNodeId {
             NodeId::Guid(ns, id) => ExpandedNodeId::Guid(Ns::Index(ns), id, None),
             NodeId::Opaque(ns, id) => ExpandedNodeId::Opaque(Ns::Index(ns), id, None),
         }
-    }
-}
-
-impl DataType for ExpandedNodeId {
-    fn type_id() -> u32 {
-        18
-    }
-
-    fn nullable() -> bool {
-        true
     }
 }
 

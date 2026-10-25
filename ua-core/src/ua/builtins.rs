@@ -34,7 +34,7 @@ pub use datetime::DateTime;
 pub use diagnostic_info::DiagnosticInfo;
 pub use double::Double;
 pub use expanded_nodeid::ExpandedNodeId;
-pub use extension_object::{ExtensionObject, UnknownExtensionObject};
+pub use extension_object::ExtensionObject;
 pub use float::Float;
 pub use guid::Guid;
 pub use int16::Int16;

@@ -1,19 +1,8 @@
 use bytes::{Buf, BufMut};
 
-use crate::DataType;
 use crate::encoding::binary;
 
 pub type Int32 = i32;
-
-impl DataType for Int32 {
-    fn type_id() -> u32 {
-        6
-    }
-
-    fn nullable() -> bool {
-        false
-    }
-}
 
 impl binary::Encode for Int32 {
     binary::repr_slice_methods!();

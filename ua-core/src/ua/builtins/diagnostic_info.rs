@@ -1,5 +1,5 @@
 use crate::encoding::binary;
-use crate::{DataType, ua};
+use crate::ua;
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct DiagnosticInfo {
@@ -10,16 +10,6 @@ pub struct DiagnosticInfo {
     pub additional_info: Option<String>,
     pub inner_status_code: Option<ua::StatusCode>,
     pub inner_diagnostic_info: Option<Box<DiagnosticInfo>>,
-}
-
-impl DataType for DiagnosticInfo {
-    fn type_id() -> u32 {
-        25
-    }
-
-    fn nullable() -> bool {
-        true
-    }
 }
 
 impl binary::Encode for DiagnosticInfo {

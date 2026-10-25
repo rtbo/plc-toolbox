@@ -1,19 +1,8 @@
 use bytes::{Buf, BufMut};
 
-use crate::DataType;
 use crate::encoding::binary;
 
 pub type SByte = i8;
-
-impl DataType for SByte {
-    fn type_id() -> u32 {
-        2
-    }
-
-    fn nullable() -> bool {
-        false
-    }
-}
 
 impl binary::Encode for SByte {
     binary::repr_slice_methods!();

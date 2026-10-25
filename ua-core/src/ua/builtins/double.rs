@@ -1,19 +1,8 @@
 use bytes::{Buf, BufMut};
 
-use crate::DataType;
 use crate::encoding::binary;
 
 pub type Double = f64;
-
-impl DataType for Double {
-    fn type_id() -> u32 {
-        11
-    }
-
-    fn nullable() -> bool {
-        false
-    }
-}
 
 impl binary::Encode for Double {
     binary::repr_slice_methods!();

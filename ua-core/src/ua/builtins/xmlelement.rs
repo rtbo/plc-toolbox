@@ -1,20 +1,9 @@
 use bytes::{Buf, BufMut};
 
-use crate::DataType;
 use crate::encoding::binary;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct XmlElement(pub String);
-
-impl DataType for XmlElement {
-    fn type_id() -> u32 {
-        16
-    }
-
-    fn nullable() -> bool {
-        true
-    }
-}
 
 impl binary::Encode for XmlElement {
     fn encoded_len(&self) -> u32 {
