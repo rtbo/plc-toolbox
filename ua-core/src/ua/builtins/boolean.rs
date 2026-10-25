@@ -32,7 +32,10 @@ impl binary::Encode for Boolean {
 }
 
 impl binary::Decode for Boolean {
-    fn decode<B: Buf>(buf: &mut B) -> Result<Self, binary::DecodingError> {
+    fn decode<B: Buf>(
+        buf: &mut B,
+        _ctx: &binary::DecodingCtx,
+    ) -> Result<Self, binary::DecodingError> {
         binary::check_remaining(buf, 1)?;
         let val = buf.get_u8();
         Ok(val != 0)

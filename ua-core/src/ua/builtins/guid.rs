@@ -139,7 +139,10 @@ impl binary::Encode for Guid {
 }
 
 impl binary::Decode for Guid {
-    fn decode<B: bytes::Buf>(buf: &mut B) -> Result<Self, binary::DecodingError> {
+    fn decode<B: bytes::Buf>(
+        buf: &mut B,
+        _ctx: &binary::DecodingCtx,
+    ) -> Result<Self, binary::DecodingError> {
         binary::check_remaining(buf, 16)?;
         let data1 = buf.get_u32_le();
         let data2 = buf.get_u16_le();

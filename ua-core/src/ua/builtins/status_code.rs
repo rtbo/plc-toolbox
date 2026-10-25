@@ -71,7 +71,10 @@ impl binary::Encode for StatusCode {
 }
 
 impl binary::Decode for StatusCode {
-    fn decode<B: bytes::Buf>(buf: &mut B) -> Result<Self, binary::DecodingError> {
+    fn decode<B: bytes::Buf>(
+        buf: &mut B,
+        _ctx: &binary::DecodingCtx,
+    ) -> Result<Self, binary::DecodingError> {
         binary::check_remaining(buf, 4)?;
         let code = buf.get_u32_le();
         Self::try_from(code).map_err(|_| binary::DecodingError::InvalidData)

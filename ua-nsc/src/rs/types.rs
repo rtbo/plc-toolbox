@@ -6,6 +6,7 @@ use crate::codegen::CodeGen;
 use crate::parse::{NodeId, types};
 
 const UA_NS: &str = "http://opcfoundation.org/UA/";
+const BINARYSCHEMA_NS: &str = "http://opcfoundation.org/BinarySchema/";
 
 pub struct Options {
     pub ua_core_module: String,
@@ -50,7 +51,7 @@ where
 }
 
 fn excluded_types(target_ns: &str) -> HashSet<&'static str> {
-    if target_ns == "http://opcfoundation.org/UA/" {
+    if target_ns == UA_NS {
         let types = &[
             "Boolean",
             "SByte",
@@ -107,25 +108,22 @@ impl<'a, W> Ctx<'a, W>
 where
     W: io::AsyncWrite + Unpin,
 {
-    fn translate_namespace(&self, ns: &str) -> Option<String> {
-        if ns == "ua" {
-            return Some("ua".to_string());
-        }
+    fn translate_namespace(&self, ns: &str) -> Option<&str> {
+        // TODO: handle user supplied NS
 
-        if ns == "opc" {
-            return None;
-        }
-
-        None
+        if ns == UA_NS { Some("ua") } else { None }
     }
 
     fn translate_ns_name(&self, qname: &types::QualName) -> String {
-        let Some(ns) = qname.ns_shorthand.as_deref() else {
-            return qname.name.clone();
-        };
         let name = qname.name.as_str();
-        if ns == "opc" {
-            return self.translate_opc_name(name);
+        let Some(ns) = qname.namespace.as_deref() else {
+            return name.to_string();
+        };
+        if ns == BINARYSCHEMA_NS {
+            return self.translate_opc_name(name).to_string();
+        }
+        if is_extension_object_type(qname) {
+            return "Option<Box<dyn ua::ExtensionObject>>".to_string();
         }
         match self.translate_namespace(ns) {
             Some(translated_ns) => format!("{}::{}", translated_ns, name),
@@ -133,25 +131,25 @@ where
         }
     }
 
-    fn translate_opc_name(&self, name: &str) -> String {
+    fn translate_opc_name<'b>(&self, name: &'b str) -> &'b str {
         match name {
-            "Boolean" => "bool".to_string(),
-            "SByte" => "i8".to_string(),
-            "Byte" => "u8".to_string(),
-            "Int16" => "i16".to_string(),
-            "UInt16" => "u16".to_string(),
-            "Int32" => "i32".to_string(),
-            "UInt32" => "u32".to_string(),
-            "Int64" => "i64".to_string(),
-            "UInt64" => "u64".to_string(),
-            "Float" => "f32".to_string(),
-            "Double" => "f64".to_string(),
-            "String" => "ua::String".to_string(),
-            "DateTime" => "ua::DateTime".to_string(),
-            "Guid" => "ua::Guid".to_string(),
-            "ByteString" => "ua::ByteString".to_string(),
-            "XmlElement" => "ua::XmlElement".to_string(),
-            _ => name.to_string(), // Default case, return the name as is
+            "Boolean" => "bool",
+            "SByte" => "i8",
+            "Byte" => "u8",
+            "Int16" => "i16",
+            "UInt16" => "u16",
+            "Int32" => "i32",
+            "UInt32" => "u32",
+            "Int64" => "i64",
+            "UInt64" => "u64",
+            "Float" => "f32",
+            "Double" => "f64",
+            "String" => "ua::String",
+            "DateTime" => "ua::DateTime",
+            "Guid" => "ua::Guid",
+            "ByteString" => "ua::ByteString",
+            "XmlElement" => "ua::XmlElement",
+            _ => name, // Default case, return the name as is
         }
     }
 
@@ -309,7 +307,7 @@ where
             self.cg.write_doc_comment(doc).await?;
         }
         self.cg
-            .write_line("#[derive(Debug, Clone, PartialEq)]")
+            .write_line("#[derive(Debug)]")
             .await?;
         self.cg
             .write_line("#[derive(DecodeBinary, EncodeBinary)]")
@@ -469,6 +467,10 @@ fn is_length_field(fields: &[types::Field], idx: usize) -> bool {
         }
     }
     false
+}
+
+fn is_extension_object_type(type_name: &types::QualName) -> bool {
+    type_name.namespace.as_deref() == Some(UA_NS) && type_name.name == "ExtensionObject"
 }
 
 fn is_request_type(field: &types::Field) -> bool {

@@ -12,7 +12,8 @@ async fn main() -> std::process::ExitCode {
 }
 
 async fn run() -> Result<(), ua::StatusCode> {
-    let mut _client = ua_client::tcp::TcpClient::connect("opc.tcp://localhost:4840", Default::default()).await?;
+    let mut _client =
+        ua_client::tcp::TcpClient::connect("opc.tcp://localhost:4840", Default::default()).await?;
 
     // let root = "i=84";
     // client.browse(root.to_string()).await?;

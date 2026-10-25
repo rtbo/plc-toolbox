@@ -31,8 +31,11 @@ impl binary::Encode for XmlElement {
 }
 
 impl binary::Decode for XmlElement {
-    fn decode<B: Buf>(buf: &mut B) -> Result<Self, binary::DecodingError> {
-        let s = String::decode(buf)?;
+    fn decode<B: Buf>(
+        buf: &mut B,
+        ctx: &binary::DecodingCtx,
+    ) -> Result<Self, binary::DecodingError> {
+        let s = String::decode(buf, ctx)?;
         Ok(XmlElement(s))
     }
 }

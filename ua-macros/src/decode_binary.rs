@@ -56,7 +56,7 @@ pub fn expand_struct(
 
     let decode_fields = field_accesses.iter().map(|member| {
         quote! {
-            #member: ::ua_core::encoding::binary::Decode::decode(buf)?
+            #member: ::ua_core::encoding::binary::Decode::decode(buf, ctx)?
         }
     });
 
@@ -65,7 +65,7 @@ pub fn expand_struct(
     let expanded = quote! {
         #[automatically_derived]
         impl #impl_generics ::ua_core::encoding::binary::Decode for #name #ty_generics #where_clause {
-            fn decode<B: ::bytes::Buf>(buf: &mut B) -> Result<Self, ::ua_core::encoding::binary::DecodingError> {
+            fn decode<B: ::bytes::Buf>(buf: &mut B, ctx: &::ua_core::encoding::binary::DecodingCtx) -> Result<Self, ::ua_core::encoding::binary::DecodingError> {
                 Ok(Self {
                     #(#decode_fields),*
                 })
@@ -125,8 +125,9 @@ fn expand_enum(
         impl #impl_generics ::ua_core::encoding::binary::Decode for #name #ty_generics #where_clause {
             fn decode<B: ::ua_core::encoding::binary::Buf>(
                 buf: &mut B,
+                ctx: &::ua_core::encoding::binary::DecodingCtx,
             ) -> Result<Self, ::ua_core::encoding::binary::DecodingError> {
-                let value = <#repr_type as ::ua_core::encoding::binary::Decode>::decode(buf)?;
+                let value = <#repr_type as ::ua_core::encoding::binary::Decode>::decode(buf, ctx)?;
                 Self::#from_fn_name(value)
                     .ok_or_else(|| ::ua_core::encoding::binary::DecodingError::InvalidData)
             }

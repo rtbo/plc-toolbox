@@ -105,23 +105,26 @@ impl binary::Encode for DataValue {
 }
 
 impl binary::Decode for DataValue {
-    fn decode<B: binary::Buf>(buf: &mut B) -> Result<Self, binary::DecodingError> {
+    fn decode<B: binary::Buf>(
+        buf: &mut B,
+        ctx: &binary::DecodingCtx,
+    ) -> Result<Self, binary::DecodingError> {
         binary::check_remaining(buf, 1)?;
         let flags = buf.get_u8();
         let value = if flags & 0x01 != 0 {
-            Some(ua::Variant::decode(buf)?)
+            Some(ua::Variant::decode(buf, ctx)?)
         } else {
             None
         };
         let status_code = if flags & 0x02 != 0 {
-            Some(ua::StatusCode::decode(buf)?)
+            Some(ua::StatusCode::decode(buf, ctx)?)
         } else {
             None
         };
         let source_timestamp = if flags & 0x04 != 0 {
-            let mut ts = ua::DateTime::decode(buf)?;
+            let mut ts = ua::DateTime::decode(buf, ctx)?;
             if flags & 0x10 != 0 {
-                let kps = u16::decode(buf)?;
+                let kps = u16::decode(buf, ctx)?;
                 ts = add_kilo_picoseconds(ts, kps)
             }
             Some(ts)
@@ -129,9 +132,9 @@ impl binary::Decode for DataValue {
             None
         };
         let server_timestamp = if flags & 0x08 != 0 {
-            let mut ts = ua::DateTime::decode(buf)?;
+            let mut ts = ua::DateTime::decode(buf, ctx)?;
             if flags & 0x20 != 0 {
-                let kps = u16::decode(buf)?;
+                let kps = u16::decode(buf, ctx)?;
                 ts = add_kilo_picoseconds(ts, kps)
             }
             Some(ts)

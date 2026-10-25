@@ -31,7 +31,10 @@ impl binary::Encode for DateTime {
 }
 
 impl binary::Decode for DateTime {
-    fn decode<B: Buf>(buf: &mut B) -> Result<Self, binary::DecodingError> {
+    fn decode<B: Buf>(
+        buf: &mut B,
+        _ctx: &binary::DecodingCtx,
+    ) -> Result<Self, binary::DecodingError> {
         binary::check_remaining(buf, 8)?;
         let timestamp = buf.get_i64_le();
         Ok(from_opcua(timestamp))

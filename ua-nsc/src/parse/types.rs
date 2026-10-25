@@ -227,8 +227,6 @@ pub struct TypeDictionary {
     /// `(namespace URI, short name)` pairs in declaration order, duplicates included
     /// (future module names in generated code).
     pub ns_table: Vec<(String, String)>,
-    /// Optional caller-provided namespace short names, kept as-is for later use.
-    pub ns_overrides: HashMap<String, String>,
     pub default_byte_order: Option<ByteOrder>,
     pub doc: Option<String>,
     pub imports: Vec<ImportDirective>,
@@ -355,10 +353,7 @@ fn parse_ns_table(e: &BytesStart) -> Result<Vec<(String, String)>> {
 
 /// Parses a BSD file. `ns_overrides` maps namespace URIs to short names and
 /// are stored as-is in the dictionary and do not alter `ns_table`.
-pub async fn parse_types_bsd(
-    bsd_path: &path::Path,
-    ns_overrides: Option<&HashMap<String, String>>,
-) -> Result<TypeDictionary> {
+pub async fn parse_types_bsd(bsd_path: &path::Path) -> Result<TypeDictionary> {
     let file = fs::File::open(bsd_path).await?;
     let file = io::BufReader::new(file);
     let mut reader = Reader::from_reader(file);
@@ -374,14 +369,12 @@ pub async fn parse_types_bsd(
                 let default_byte_order = get_attr_byte_order(&e, "DefaultByteOrder")?;
                 let ns_table = parse_ns_table(&e)?;
                 let prefixes = parse_prefixes(&e)?;
-                let ns_overrides = ns_overrides.cloned().unwrap_or_default();
                 return parse_type_dictionary(
                     &mut reader,
                     &mut buf,
                     &prefixes,
                     target_namespace,
                     ns_table,
-                    ns_overrides,
                     default_byte_order,
                 )
                 .await;
@@ -404,7 +397,6 @@ async fn parse_type_dictionary<R>(
     prefixes: &Prefixes,
     target_namespace: String,
     ns_table: Vec<(String, String)>,
-    ns_overrides: HashMap<String, String>,
     default_byte_order: Option<ByteOrder>,
 ) -> Result<TypeDictionary>
 where
@@ -448,7 +440,6 @@ where
     Ok(TypeDictionary {
         target_namespace,
         ns_table,
-        ns_overrides,
         default_byte_order,
         doc,
         imports,

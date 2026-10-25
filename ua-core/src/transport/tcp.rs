@@ -2,7 +2,7 @@ use bytes::{Buf, BytesMut};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net;
 
-use crate::encoding::binary::{Decode, Encode};
+use crate::encoding::binary::{self, Decode, Encode};
 use crate::uacp::{self, Msg};
 
 const HEADER_LEN: usize = 8;
@@ -12,6 +12,7 @@ pub struct Transport {
     stream: net::TcpStream,
     send_buf: BytesMut,
     recv_buf: BytesMut,
+    decoding_ctx: binary::DecodingCtx
 }
 
 impl Transport {
@@ -31,6 +32,7 @@ impl Transport {
             stream,
             send_buf,
             recv_buf,
+            decoding_ctx: Default::default(),
         })
     }
 
@@ -85,7 +87,7 @@ impl Transport {
         self.fill(size).await?;
 
         let mut data = &self.recv_buf[..size];
-        let msg = Msg::decode(&mut data);
+        let msg = Msg::decode(&mut data, &self.decoding_ctx);
         // Consume the message even in case of decoding error to stay synchronized.
         self.recv_buf.advance(size);
         if self.recv_buf.is_empty() {

@@ -110,41 +110,44 @@ impl binary::Encode for DiagnosticInfo {
 }
 
 impl binary::Decode for DiagnosticInfo {
-    fn decode<B: binary::Buf>(buf: &mut B) -> Result<Self, binary::DecodingError> {
+    fn decode<B: binary::Buf>(
+        buf: &mut B,
+        ctx: &binary::DecodingCtx,
+    ) -> Result<Self, binary::DecodingError> {
         binary::check_remaining(buf, 1)?;
         let flags = buf.get_u8();
         let symbolic_id = if flags & 0x01 != 0 {
-            Some(i32::decode(buf)?)
+            Some(i32::decode(buf, ctx)?)
         } else {
             None
         };
         let namespace_uri = if flags & 0x02 != 0 {
-            Some(i32::decode(buf)?)
+            Some(i32::decode(buf, ctx)?)
         } else {
             None
         };
         let localized_text = if flags & 0x04 != 0 {
-            Some(i32::decode(buf)?)
+            Some(i32::decode(buf, ctx)?)
         } else {
             None
         };
         let locale = if flags & 0x08 != 0 {
-            Some(i32::decode(buf)?)
+            Some(i32::decode(buf, ctx)?)
         } else {
             None
         };
         let additional_info = if flags & 0x10 != 0 {
-            Some(String::decode(buf)?)
+            Some(String::decode(buf, ctx)?)
         } else {
             None
         };
         let inner_status_code = if flags & 0x20 != 0 {
-            Some(ua::StatusCode::decode(buf)?)
+            Some(ua::StatusCode::decode(buf, ctx)?)
         } else {
             None
         };
         let inner_diagnostic_info = if flags & 0x40 != 0 {
-            Some(Box::new(DiagnosticInfo::decode(buf)?))
+            Some(Box::new(DiagnosticInfo::decode(buf, ctx)?))
         } else {
             None
         };

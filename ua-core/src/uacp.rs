@@ -2,7 +2,7 @@
 use bytes::BufMut;
 use ua_macros::{DecodeBinary, EncodeBinary};
 
-use crate::encoding::binary::{Decode, DecodingError, Encode, check_remaining};
+use crate::encoding::binary::{self, Decode, DecodingError, Encode, check_remaining};
 use crate::ua;
 
 pub trait MsgType {
@@ -86,7 +86,7 @@ impl<M: MsgType + Encode> Encode for Msg<M> {
 }
 
 impl<M: MsgType + Decode> Decode for Msg<M> {
-    fn decode<B: bytes::Buf>(buf: &mut B) -> Result<Self, DecodingError> {
+    fn decode<B: bytes::Buf>(buf: &mut B, ctx: &binary::DecodingCtx) -> Result<Self, DecodingError> {
         let mut msg_type = [0u8; 3];
         check_remaining(buf, 8)?;
         buf.copy_to_slice(&mut msg_type);
@@ -98,7 +98,7 @@ impl<M: MsgType + Decode> Decode for Msg<M> {
             return Err(DecodingError::BadMessageType);
         }
 
-        let inner = M::decode(buf)?;
+        let inner = M::decode(buf, ctx)?;
         Ok(Msg(inner))
     }
 }
@@ -120,7 +120,7 @@ mod tests {
         assert_eq!(encoded.len(), value.encoded_len() as usize);
 
         let mut remaining = encoded.clone();
-        let decoded = T::decode(&mut remaining).expect("encoded value should decode");
+        let decoded = T::decode(&mut remaining, &Default::default()).expect("encoded value should decode");
         assert!(remaining.is_empty());
         assert_eq!(&decoded, value);
 

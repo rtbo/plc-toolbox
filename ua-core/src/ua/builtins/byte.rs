@@ -34,7 +34,10 @@ impl binary::Encode for Byte {
 impl binary::Decode for Byte {
     binary::repr_decode_methods!();
 
-    fn decode<B: Buf>(buf: &mut B) -> Result<Self, binary::DecodingError> {
+    fn decode<B: Buf>(
+        buf: &mut B,
+        _ctx: &binary::DecodingCtx,
+    ) -> Result<Self, binary::DecodingError> {
         binary::check_remaining(buf, 1)?;
         let val = buf.get_u8();
         Ok(val)

@@ -60,7 +60,7 @@ async fn types(schema_path: &Path, out_dir: &Path) {
 
     println!("cargo:rerun-if-changed={}", xml_path.display());
 
-    let types = ua_nsc::parse::types::parse_types_bsd(&xml_path, None)
+    let types = ua_nsc::parse::types::parse_types_bsd(&xml_path)
         .await
         .expect("Failed to parse Opc.Ua.Types.bsd.xml");
 

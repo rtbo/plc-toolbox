@@ -53,8 +53,13 @@ pub struct Config {
 pub struct TcpClient {}
 
 impl TcpClient {
-    pub async fn connect(endpoint: &str, config: Config) -> Result<Self, ua_core::transport::Error> {
-        let mut transport = tcp::Transport::connect(endpoint, config.buffer.send_size, config.buffer.recv_size).await?;
+    pub async fn connect(
+        endpoint: &str,
+        config: Config,
+    ) -> Result<Self, ua_core::transport::Error> {
+        let mut transport =
+            tcp::Transport::connect(endpoint, config.buffer.send_size, config.buffer.recv_size)
+                .await?;
 
         let buffer_config = config.buffer.hello_ack(endpoint, &mut transport).await?;
         let _config = Config {

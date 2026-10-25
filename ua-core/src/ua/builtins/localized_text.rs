@@ -50,16 +50,19 @@ impl binary::Encode for LocalizedText {
 }
 
 impl binary::Decode for LocalizedText {
-    fn decode<B: binary::Buf>(buf: &mut B) -> Result<Self, binary::DecodingError> {
+    fn decode<B: binary::Buf>(
+        buf: &mut B,
+        ctx: &binary::DecodingCtx,
+    ) -> Result<Self, binary::DecodingError> {
         binary::check_remaining(buf, 1)?;
         let flags = buf.get_u8();
         let locale = if flags & 0x01 != 0 {
-            Some(LocaleId(String::decode(buf)?))
+            Some(LocaleId(String::decode(buf, ctx)?))
         } else {
             None
         };
         let text = if flags & 0x02 != 0 {
-            String::decode(buf)?
+            String::decode(buf, ctx)?
         } else {
             String::new()
         };

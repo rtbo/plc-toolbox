@@ -77,7 +77,7 @@ impl<T> binary::Decode for Vec<T>
 where
     T: binary::Decode,
 {
-    fn decode<B: bytes::Buf>(buf: &mut B) -> Result<Self, binary::DecodingError> {
+    fn decode<B: bytes::Buf>(buf: &mut B, ctx: &binary::DecodingCtx) -> Result<Self, binary::DecodingError> {
         binary::check_remaining(buf, 4)?;
         let len = buf.get_i32_le();
         if len == -1 {
@@ -86,7 +86,7 @@ where
         if len < 0 {
             return Err(binary::DecodingError::InvalidLengthPrefix);
         }
-        T::decode_vec(buf, len as usize)
+        T::decode_vec(buf, len as usize, ctx)
     }
 }
 
@@ -94,7 +94,7 @@ impl<T> binary::Decode for Option<Vec<T>>
 where
     T: binary::Decode,
 {
-    fn decode<B: bytes::Buf>(buf: &mut B) -> Result<Self, binary::DecodingError> {
+    fn decode<B: bytes::Buf>(buf: &mut B, ctx: &binary::DecodingCtx) -> Result<Self, binary::DecodingError> {
         binary::check_remaining(buf, 4)?;
         let len = buf.get_i32_le();
         if len == -1 {
@@ -103,7 +103,7 @@ where
         if len < 0 {
             return Err(binary::DecodingError::InvalidLengthPrefix);
         }
-        let vec = T::decode_vec(buf, len as usize)?;
+        let vec = T::decode_vec(buf, len as usize, ctx)?;
         Ok(Some(vec))
     }
 }

@@ -13,6 +13,12 @@ pub enum NodeId {
     Opaque(u16, Vec<u8>),
 }
 
+impl Default for NodeId {
+    fn default() -> Self {
+        NodeId::Numeric(0, 0)
+    }
+}
+
 /// A node-id that borrows its identifier instead of owning it. This is useful for encoding node-ids without allocating.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum NodeIdRef<'a> {
@@ -20,6 +26,12 @@ pub enum NodeIdRef<'a> {
     String(u16, &'a str),
     Guid(u16, ua::Guid),
     Opaque(u16, &'a [u8]),
+}
+
+impl Default for NodeIdRef<'_> {
+    fn default() -> Self {
+        NodeIdRef::Numeric(0, 0)
+    }
 }
 
 impl NodeId {
@@ -201,8 +213,11 @@ impl binary::Encode for NodeIdRef<'_> {
 }
 
 impl binary::Decode for NodeId {
-    fn decode<B: bytes::Buf>(buf: &mut B) -> Result<Self, binary::DecodingError> {
-        let (nodeid, _) = nodeid_decode(buf)?;
+    fn decode<B: bytes::Buf>(
+        buf: &mut B,
+        ctx: &binary::DecodingCtx,
+    ) -> Result<Self, binary::DecodingError> {
+        let (nodeid, _) = nodeid_decode(buf, ctx)?;
         Ok(nodeid)
     }
 }
@@ -254,6 +269,7 @@ pub(super) fn nodeid_encode<B: BufMut>(node_id: &NodeId, buf: &mut B, flags: u8)
 
 pub(super) fn nodeid_decode<B: bytes::Buf>(
     buf: &mut B,
+    ctx: &binary::DecodingCtx,
 ) -> Result<(NodeId, u8), binary::DecodingError> {
     let type_byte = buf.get_u8();
     let flags = type_byte & 0xF0;
@@ -276,17 +292,17 @@ pub(super) fn nodeid_decode<B: bytes::Buf>(
         }
         0x03 => {
             let namespace_index = buf.get_u16_le();
-            let identifier = String::decode(buf)?;
+            let identifier = String::decode(buf, ctx)?;
             Ok((NodeId::String(namespace_index, identifier), flags))
         }
         0x04 => {
             let namespace_index = buf.get_u16_le();
-            let identifier = ua::Guid::decode(buf)?;
+            let identifier = ua::Guid::decode(buf, ctx)?;
             Ok((NodeId::Guid(namespace_index, identifier), flags))
         }
         0x05 => {
             let namespace_index = buf.get_u16_le();
-            let identifier = Vec::<u8>::decode(buf)?;
+            let identifier = Vec::<u8>::decode(buf, ctx)?;
             Ok((NodeId::Opaque(namespace_index, identifier), flags))
         }
         _ => Err(binary::DecodingError::InvalidData),

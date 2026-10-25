@@ -140,71 +140,153 @@ impl binary::Encode for Variant {
 }
 
 impl binary::Decode for Variant {
-    fn decode<B: bytes::Buf>(buf: &mut B) -> Result<Self, binary::DecodingError> {
+    fn decode<B: bytes::Buf>(
+        buf: &mut B,
+        ctx: &binary::DecodingCtx,
+    ) -> Result<Self, binary::DecodingError> {
         let encoded_mask = buf.get_u8();
         let builtin_typeid = encoded_mask & 0x3F;
         let is_array = (encoded_mask & 0x40) != 0;
         let has_multidim = (encoded_mask & 0x80) != 0;
         match builtin_typeid {
             0 => Ok(Variant::Null),
-            1 => Ok(Variant::Boolean(decode_value(is_array, has_multidim, buf)?)),
-            2 => Ok(Variant::SByte(decode_value(is_array, has_multidim, buf)?)),
-            3 => Ok(Variant::Byte(decode_value(is_array, has_multidim, buf)?)),
-            4 => Ok(Variant::Int16(decode_value(is_array, has_multidim, buf)?)),
-            5 => Ok(Variant::UInt16(decode_value(is_array, has_multidim, buf)?)),
-            6 => Ok(Variant::Int32(decode_value(is_array, has_multidim, buf)?)),
-            7 => Ok(Variant::UInt32(decode_value(is_array, has_multidim, buf)?)),
-            8 => Ok(Variant::Int64(decode_value(is_array, has_multidim, buf)?)),
-            9 => Ok(Variant::UInt64(decode_value(is_array, has_multidim, buf)?)),
-            10 => Ok(Variant::Float(decode_value(is_array, has_multidim, buf)?)),
-            11 => Ok(Variant::Double(decode_value(is_array, has_multidim, buf)?)),
-            12 => Ok(Variant::String(decode_value(is_array, has_multidim, buf)?)),
+            1 => Ok(Variant::Boolean(decode_value(
+                is_array,
+                has_multidim,
+                buf,
+                ctx,
+            )?)),
+            2 => Ok(Variant::SByte(decode_value(
+                is_array,
+                has_multidim,
+                buf,
+                ctx,
+            )?)),
+            3 => Ok(Variant::Byte(decode_value(
+                is_array,
+                has_multidim,
+                buf,
+                ctx,
+            )?)),
+            4 => Ok(Variant::Int16(decode_value(
+                is_array,
+                has_multidim,
+                buf,
+                ctx,
+            )?)),
+            5 => Ok(Variant::UInt16(decode_value(
+                is_array,
+                has_multidim,
+                buf,
+                ctx,
+            )?)),
+            6 => Ok(Variant::Int32(decode_value(
+                is_array,
+                has_multidim,
+                buf,
+                ctx,
+            )?)),
+            7 => Ok(Variant::UInt32(decode_value(
+                is_array,
+                has_multidim,
+                buf,
+                ctx,
+            )?)),
+            8 => Ok(Variant::Int64(decode_value(
+                is_array,
+                has_multidim,
+                buf,
+                ctx,
+            )?)),
+            9 => Ok(Variant::UInt64(decode_value(
+                is_array,
+                has_multidim,
+                buf,
+                ctx,
+            )?)),
+            10 => Ok(Variant::Float(decode_value(
+                is_array,
+                has_multidim,
+                buf,
+                ctx,
+            )?)),
+            11 => Ok(Variant::Double(decode_value(
+                is_array,
+                has_multidim,
+                buf,
+                ctx,
+            )?)),
+            12 => Ok(Variant::String(decode_value(
+                is_array,
+                has_multidim,
+                buf,
+                ctx,
+            )?)),
             13 => Ok(Variant::DateTime(decode_value(
                 is_array,
                 has_multidim,
                 buf,
+                ctx,
             )?)),
-            14 => Ok(Variant::Guid(decode_value(is_array, has_multidim, buf)?)),
+            14 => Ok(Variant::Guid(decode_value(
+                is_array,
+                has_multidim,
+                buf,
+                ctx,
+            )?)),
             15 => Ok(Variant::ByteString(decode_value(
                 is_array,
                 has_multidim,
                 buf,
+                ctx,
             )?)),
             16 => Ok(Variant::XmlElement(decode_value(
                 is_array,
                 has_multidim,
                 buf,
+                ctx,
             )?)),
-            17 => Ok(Variant::NodeId(decode_value(is_array, has_multidim, buf)?)),
+            17 => Ok(Variant::NodeId(decode_value(
+                is_array,
+                has_multidim,
+                buf,
+                ctx,
+            )?)),
             18 => Ok(Variant::ExpandedNodeId(decode_value(
                 is_array,
                 has_multidim,
                 buf,
+                ctx,
             )?)),
             19 => Ok(Variant::StatusCode(decode_value(
                 is_array,
                 has_multidim,
                 buf,
+                ctx,
             )?)),
             20 => Ok(Variant::QualifiedName(decode_value(
                 is_array,
                 has_multidim,
                 buf,
+                ctx,
             )?)),
             21 => Ok(Variant::LocalizedText(decode_value(
                 is_array,
                 has_multidim,
                 buf,
+                ctx,
             )?)),
             23 => Ok(Variant::Variant(Box::new(decode_value(
                 is_array,
                 has_multidim,
                 buf,
+                ctx,
             )?))),
             24 => Ok(Variant::Variant(Box::new(decode_value(
                 is_array,
                 has_multidim,
                 buf,
+                ctx,
             )?))),
             _ => Err(binary::DecodingError::InvalidData),
         }
@@ -251,22 +333,23 @@ fn decode_value<T: DataType, B: bytes::Buf>(
     is_array: bool,
     has_multidim: bool,
     buf: &mut B,
+    ctx: &binary::DecodingCtx,
 ) -> Result<Value<T>, binary::DecodingError> {
     match (is_array, has_multidim) {
         (true, true) => {
-            let values: Vec<T> = binary::Decode::decode(buf)?;
-            let dimensions: Vec<i32> = binary::Decode::decode(buf)?;
+            let values: Vec<T> = binary::Decode::decode(buf, ctx)?;
+            let dimensions: Vec<i32> = binary::Decode::decode(buf, ctx)?;
             Ok(Value::MultiDimArray(values, dimensions))
         }
         (true, false) => {
-            let values: Vec<T> = binary::Decode::decode(buf)?;
+            let values: Vec<T> = binary::Decode::decode(buf, ctx)?;
             Ok(Value::Array(values))
         }
         (false, true) => {
             return Err(binary::DecodingError::InvalidData);
         }
         (false, false) => {
-            let value: T = binary::Decode::decode(buf)?;
+            let value: T = binary::Decode::decode(buf, ctx)?;
             Ok(Value::Scalar(value))
         }
     }

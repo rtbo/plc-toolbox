@@ -58,15 +58,21 @@ impl binary::Encode for Option<String> {
 }
 
 impl binary::Decode for String {
-    fn decode<B: Buf>(buf: &mut B) -> Result<Self, binary::DecodingError> {
-        let bytes: Vec<u8> = binary::Decode::decode(buf)?;
+    fn decode<B: Buf>(
+        buf: &mut B,
+        ctx: &binary::DecodingCtx,
+    ) -> Result<Self, binary::DecodingError> {
+        let bytes: Vec<u8> = binary::Decode::decode(buf, ctx)?;
         Ok(std::string::String::from_utf8(bytes)?)
     }
 }
 
 impl binary::Decode for Option<String> {
-    fn decode<B: Buf>(buf: &mut B) -> Result<Self, binary::DecodingError> {
-        let bytes: Option<Vec<u8>> = binary::Decode::decode(buf)?;
+    fn decode<B: Buf>(
+        buf: &mut B,
+        ctx: &binary::DecodingCtx,
+    ) -> Result<Self, binary::DecodingError> {
+        let bytes: Option<Vec<u8>> = binary::Decode::decode(buf, ctx)?;
         bytes
             .map(|b| std::string::String::from_utf8(b))
             .transpose()

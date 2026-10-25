@@ -1,23 +1,7 @@
+use std::collections::HashMap;
+
 pub use bytes::{Buf, BufMut};
 use thiserror::Error;
-
-#[derive(Debug, Clone, Error)]
-pub enum DecodingError {
-    #[error("Not enough data to decode the value")]
-    NotEnoughData,
-
-    #[error("The message type is invalid")]
-    BadMessageType,
-
-    #[error("Not UTF-8 data")]
-    NotUtf8(#[from] std::string::FromUtf8Error),
-
-    #[error("Invalid data on the stream")]
-    InvalidData,
-
-    #[error("Invalid length prefix")]
-    InvalidLengthPrefix,
-}
 
 pub trait Encode {
     fn encoded_len(&self) -> u32;
@@ -44,12 +28,61 @@ pub trait Encode {
     }
 }
 
+#[derive(Debug, Clone, Error)]
+pub enum DecodingError {
+    #[error("Not enough data to decode the value")]
+    NotEnoughData,
+
+    #[error("The message type is invalid")]
+    BadMessageType,
+
+    #[error("Not UTF-8 data")]
+    NotUtf8(#[from] std::string::FromUtf8Error),
+
+    #[error("Invalid data on the stream")]
+    InvalidData,
+
+    #[error("Invalid length prefix")]
+    InvalidLengthPrefix,
+
+    #[error("Unknown data type ID")]
+    DataTypeIdUnknown,
+}
+
+#[derive(Debug, Default)]
+pub struct DecodingCtx {
+    type_table: HashMap<ua::NodeId, ua::extension_object::BinaryDecodingFn>,
+}
+
+impl DecodingCtx {
+    pub fn new() -> Self {
+        Self {
+            type_table: HashMap::new(),
+        }
+    }
+
+    pub fn register_type(
+        &mut self,
+        type_id: ua::NodeId,
+        decoding_fn: ua::extension_object::BinaryDecodingFn,
+    ) {
+        self.type_table.insert(type_id, decoding_fn);
+    }
+
+    pub fn get_decoding_fn(
+        &self,
+        type_id: &ua::NodeId,
+    ) -> Option<&ua::extension_object::BinaryDecodingFn> {
+        self.type_table.get(type_id)
+    }
+}
+
 pub trait Decode: Sized {
-    fn decode<B: Buf>(buf: &mut B) -> Result<Self, DecodingError>;
+    fn decode<B: Buf>(buf: &mut B, ctx: &DecodingCtx) -> Result<Self, DecodingError>;
 
     /// Decodes `len` consecutive items (without the length prefix).
     /// Types implementing `ReprEncoded` override this with a raw byte copy.
-    fn decode_vec<B: Buf>(buf: &mut B, len: usize) -> Result<Vec<Self>, DecodingError> {
+    fn decode_vec<B: Buf>(buf: &mut B, len: usize, ctx: &DecodingCtx) -> Result<Vec<Self>, DecodingError> {
         // Do not trust `len` for the allocation: it comes from the wire.
         // This assumes a one byte length size, which is often incorrect.
         // It is only a preflight check though.
@@ -61,7 +94,7 @@ pub trait Decode: Sized {
             .try_reserve(len)
             .map_err(|_| DecodingError::InvalidLengthPrefix)?;
         for _ in 0..len {
-            items.push(Self::decode(buf)?);
+            items.push(Self::decode(buf, ctx)?);
         }
         Ok(items)
     }
@@ -134,12 +167,15 @@ macro_rules! repr_decode_methods {
         fn decode_vec<B: Buf>(
             buf: &mut B,
             len: usize,
+            _ctx: &$crate::encoding::binary::DecodingCtx,
         ) -> Result<Vec<Self>, $crate::encoding::binary::DecodingError> {
             $crate::encoding::binary::repr_decode_vec(buf, len)
         }
     };
 }
 pub(crate) use repr_decode_methods;
+
+use crate::ua;
 
 #[cfg(test)]
 mod tests {
@@ -169,7 +205,7 @@ mod tests {
         assert_eq!(encoded.len(), value.encoded_len() as usize);
 
         let mut remaining = encoded.clone();
-        let decoded = T::decode(&mut remaining).expect("encoded value should decode");
+        let decoded = T::decode(&mut remaining, &Default::default()).expect("encoded value should decode");
         assert!(remaining.is_empty());
         assert_eq!(&decoded, value);
 
@@ -186,7 +222,7 @@ mod tests {
         assert_eq!(small.encoded_len(), 1);
         small.encode(&mut buf);
         assert_eq!(&buf[..], &[0xab]);
-        assert!(matches!(SmallCode::decode(&mut buf), Ok(SmallCode::Value)));
+        assert!(matches!(SmallCode::decode(&mut buf, &Default::default()), Ok(SmallCode::Value)));
 
         buf.clear();
         let medium = MediumCode::Value;
@@ -194,7 +230,7 @@ mod tests {
         medium.encode(&mut buf);
         assert_eq!(&buf[..], &[0xef, 0xcd]);
         assert!(matches!(
-            MediumCode::decode(&mut buf),
+            MediumCode::decode(&mut buf, &Default::default()),
             Ok(MediumCode::Value)
         ));
 
@@ -217,13 +253,13 @@ mod tests {
         let mut buf = BytesMut::from(&0x807d0000u32.to_le_bytes()[..]);
 
         assert!(matches!(
-            ua::StatusCode::decode(&mut buf),
+            ua::StatusCode::decode(&mut buf, &Default::default()),
             Ok(ua::StatusCode::BadTcpServerTooBusy)
         ));
 
         let mut buf = BytesMut::from(&0x12345678u32.to_le_bytes()[..]);
         assert!(matches!(
-            ua::StatusCode::decode(&mut buf),
+            ua::StatusCode::decode(&mut buf, &Default::default()),
             Err(DecodingError::InvalidData)
         ));
     }

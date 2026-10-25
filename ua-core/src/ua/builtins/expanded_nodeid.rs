@@ -179,15 +179,18 @@ impl binary::Encode for ExpandedNodeId {
 }
 
 impl binary::Decode for ExpandedNodeId {
-    fn decode<B: bytes::Buf>(buf: &mut B) -> Result<Self, binary::DecodingError> {
-        let (nodeid, flags) = nodeid_decode(buf)?;
+    fn decode<B: bytes::Buf>(
+        buf: &mut B,
+        ctx: &binary::DecodingCtx,
+    ) -> Result<Self, binary::DecodingError> {
+        let (nodeid, flags) = nodeid_decode(buf, ctx)?;
         let mut expanded_nodeid: ExpandedNodeId = nodeid.into();
         if flags & 0x80 != 0 {
-            let ns_uri = super::String::decode(buf)?;
+            let ns_uri = super::String::decode(buf, ctx)?;
             expanded_nodeid = expanded_nodeid.with_namespace_uri(ns_uri);
         }
         if flags & 0x40 != 0 {
-            let server_index = u32::decode(buf)?;
+            let server_index = u32::decode(buf, ctx)?;
             expanded_nodeid = expanded_nodeid.with_server_index(server_index);
         }
         Ok(expanded_nodeid)
