@@ -15,6 +15,7 @@ thiserror.workspace = true
 tokio.workspace = true
 uuid = { workspace = true, optional = true }
 base64 = "0.23.1"
+phf = "0.14.0"
 
 [build-dependencies]
 tokio.workspace = true

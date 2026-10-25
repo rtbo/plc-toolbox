@@ -126,11 +126,12 @@ where
     }
 }
 
-pub type BinaryDecodingFn = fn(
-    &mut dyn binary::Buf,
-    &Header,
-    &binary::DecodingCtx,
-) -> Result<Option<Box<dyn ua::extension_object::Body>>, binary::DecodingError>;
+pub type BinaryDecodingFn =
+    fn(
+        &mut dyn binary::Buf,
+        &Header,
+        &binary::DecodingCtx,
+    ) -> Result<Option<Box<dyn ua::extension_object::Body>>, binary::DecodingError>;
 
 /// Generic decoding function for the body of an extension object of type `T`.
 /// Can be registered in the `DecodingCtx` type table.
@@ -169,7 +170,7 @@ impl binary::Decode for ExtensionObject<Box<dyn Body>> {
             }),
             Encoding::ByteString => {
                 let decoding_fn = ctx
-                    .get_decoding_fn(&header.type_id)
+                    .get_decoding_fn(header.type_id.namespace_index())
                     .ok_or(binary::DecodingError::DataTypeIdUnknown)?;
                 let body = decoding_fn(buf, &header, ctx)?;
                 Ok(ExtensionObject {

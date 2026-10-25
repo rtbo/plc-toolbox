@@ -48,7 +48,7 @@ where
         ctx.generate_type_def(type_def).await?;
     }
 
-    ctx.generate_register_fn().await?;
+    ctx.generate_decode_fn().await?;
 
     ctx.cg.flush().await
 }
@@ -179,6 +179,9 @@ where
     }
 
     async fn write_module_imports(&mut self) -> io::Result<()> {
+        self.cg
+            .write_line(&format!("use {}::encoding::binary;", self.options.ua_core_module))
+            .await?;
         self.cg
             .write_line(&format!("use {}::ua;", self.options.ua_core_module))
             .await?;
@@ -312,51 +315,38 @@ where
         Ok(())
     }
 
-    async fn generate_register_fn(&mut self) -> io::Result<()> {
+    async fn generate_decode_fn(&mut self) -> io::Result<()> {
         if self.extension_objects.is_empty() {
             return Ok(());
         }
         let core = self.options.ua_core_module.clone();
-        let is_ua = self.types.target_namespace == UA_NS;
 
-        if !is_ua {
-            self.cg
-                .write_line(
-                    "static NAMESPACE_INDEX: std::sync::atomic::AtomicU16 = std::sync::atomic::AtomicU16::new(0);",
-                )
-                .await?;
-            self.cg.write_line("").await?;
+        let mut map = phf_codegen::Map::new();
+        for (name, id) in &self.extension_objects {
+            map.entry(
+                *id,
+                format!("{}::ua::extension_object::decode_body::<{}>", core, name),
+            );
         }
+
+        self.cg.write_line(&format!("static DECODING_FNS: phf::Map<u32, {}::ua::extension_object::BinaryDecodingFn> = {};", core, map.build())).await?;
+
         self.cg
             .write_doc_comment(
-                "Registers the decoding functions of the extension objects of this namespace.\n\
-                 `namespace_index` is the index of the namespace in the server's namespace array \
-                 (0 for the OPC UA namespace).",
+                "Decode an extension object from the byte stream, using the provided header to identify the type to decode."
             )
             .await?;
         self.cg
             .start_block(&format!(
-                "pub fn register_decoders(ctx: &mut {}::encoding::binary::DecodingCtx, namespace_index: u16) ",
-                core
+                "pub fn decode_extension_object(buf: &mut dyn binary::Buf, header: &ua::extension_object::Header, ctx: &binary::DecodingCtx) -> Result<Option<Box<dyn ua::extension_object::Body>>, binary::DecodingError> ",
             ))
             .await?;
-        if !is_ua {
-            self.cg
-                .write_line(
-                    "NAMESPACE_INDEX.store(namespace_index, std::sync::atomic::Ordering::Relaxed);",
-                )
-                .await?;
-        }
-        let entries = std::mem::take(&mut self.extension_objects);
-        for (name, id) in &entries {
-            self.cg
-                .write_line(&format!(
-                    "ctx.register_type(ua::NodeId::Numeric(namespace_index, {}), {}::ua::extension_object::decode_body::<{}>);",
-                    id, core, name
-                ))
-                .await?;
-        }
-        self.cg.end_block().await?;
+        self.cg.write_line("header.type_id.numeric_identifier()").await?;
+        self.cg.write_line("    .and_then(|id| DECODING_FNS.get(&id))").await?;
+        self.cg.write_line("    .and_then(|dfn| dfn(buf, header, ctx).transpose())").await?;
+        self.cg.write_line("    .transpose()").await?;
+
+        self.cg.end_block().await?; // fn decode_extension_object
         Ok(())
     }
 

@@ -1,5 +1,3 @@
-use std::collections::HashMap;
-
 pub use bytes::{Buf, BufMut};
 use thiserror::Error;
 
@@ -51,29 +49,34 @@ pub enum DecodingError {
 
 #[derive(Debug, Default)]
 pub struct DecodingCtx {
-    type_table: HashMap<ua::NodeId, ua::extension_object::BinaryDecodingFn>,
+    ns_type_lookups: Vec<Option<ua::extension_object::BinaryDecodingFn>>,
 }
 
 impl DecodingCtx {
     pub fn new() -> Self {
         Self {
-            type_table: HashMap::new(),
+            ns_type_lookups: Vec::new(),
         }
     }
 
-    pub fn register_type(
+    pub fn register_ns(
         &mut self,
-        type_id: ua::NodeId,
-        decoding_fn: ua::extension_object::BinaryDecodingFn,
+        ns_index: u16,
+        lookup_fn: ua::extension_object::BinaryDecodingFn,
     ) {
-        self.type_table.insert(type_id, decoding_fn);
+        if ns_index as usize >= self.ns_type_lookups.len() {
+            self.ns_type_lookups.resize(ns_index as usize + 1, None);
+        }
+        self.ns_type_lookups[ns_index as usize] = Some(lookup_fn);
     }
 
     pub fn get_decoding_fn(
         &self,
-        type_id: &ua::NodeId,
+        ns_index: u16,
     ) -> Option<&ua::extension_object::BinaryDecodingFn> {
-        self.type_table.get(type_id)
+        self.ns_type_lookups
+            .get(ns_index as usize)
+            .and_then(|opt| opt.as_ref())
     }
 }
 
