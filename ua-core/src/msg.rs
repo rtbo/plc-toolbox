@@ -46,7 +46,7 @@ pub enum IsFinal {
 pub struct BinaryHeader {
     msg_type: Type,
     is_final: IsFinal,
-    size: u32,
+    msg_size: u32,
 }
 
 impl binary::Encode for BinaryHeader {
@@ -57,7 +57,7 @@ impl binary::Encode for BinaryHeader {
     fn encode<B: bytes::BufMut>(&self, buf: &mut B) {
         buf.put_slice(self.msg_type.as_bytes());
         buf.put_u8(self.is_final as u8);
-        buf.put_u32(self.size);
+        buf.put_u32(self.msg_size);
     }
 }
 
@@ -85,11 +85,14 @@ impl binary::Decode for BinaryHeader {
             b'A' => IsFinal::Abort,
             _ => return Err(binary::DecodingError::InvalidData),
         };
-        let size = buf.get_u32();
+        let msg_size = buf.get_u32();
         Ok(Self {
             msg_type,
             is_final,
-            size,
+            msg_size,
         })
     }
+}
+
+pub trait BinaryMsg: binary::Encode + binary::Decode {
 }

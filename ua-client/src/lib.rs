@@ -1,3 +1,4 @@
+pub mod secure_channel;
 pub mod tcp;
 
 // pub struct Client<T> {

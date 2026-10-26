@@ -63,10 +63,19 @@ impl binary::Decode for Header {
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct ExtensionObject<T = Box<dyn Body>> {
     pub type_id: ua::NodeId,
     pub body: Option<T>,
+}
+
+impl<T> Default for ExtensionObject<T> {
+    fn default() -> Self {
+        ExtensionObject {
+            type_id: ua::NodeId::default(),
+            body: None,
+        }
+    }
 }
 
 pub trait Body: Any + std::fmt::Debug {

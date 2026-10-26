@@ -55,7 +55,7 @@ impl Transport {
 
     pub async fn send_uacp<M>(&mut self, msg: uacp::Msg<M>) -> Result<(), super::Error>
     where
-        M: uacp::MsgType + Encode,
+        M: uacp::TypedMsg + Encode,
     {
         let size = msg.encoded_len() as usize;
         let max_send_size = self.max_send_size();
@@ -73,7 +73,7 @@ impl Transport {
 
     pub async fn recv_uacp<M>(&mut self) -> Result<Msg<M>, super::Error>
     where
-        M: uacp::MsgType + Decode,
+        M: uacp::TypedMsg + Decode,
     {
         self.fill(HEADER_LEN).await?;
         let size = u32::from_le_bytes(self.recv_buf[4..8].try_into().unwrap()) as usize;

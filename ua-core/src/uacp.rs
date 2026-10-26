@@ -5,8 +5,60 @@ use ua_macros::{DecodeBinary, EncodeBinary};
 use crate::encoding::binary::{self, Decode, DecodingError, Encode, check_remaining};
 use crate::ua;
 
-pub trait MsgType {
-    const MSG_TYPE: &'static [u8; 3];
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MsgType {
+    Hello,
+    Acknowledge,
+    Error,
+}
+
+pub trait TypedMsg {
+    const MSG_TYPE: MsgType;
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Header {
+    pub msg_type: MsgType,
+    pub length: u32,
+}
+
+impl binary::Encode for Header {
+    fn encoded_len(&self) -> u32 {
+        8
+    }
+
+    fn encode<B: BufMut>(&self, buf: &mut B) {
+        match self.msg_type {
+            MsgType::Hello => buf.put_slice(b"HELF"),
+            MsgType::Acknowledge => buf.put_slice(b"ACKF"),
+            MsgType::Error => buf.put_slice(b"ERRF"),
+        }
+        buf.put_u32_le(self.length);
+    }
+}
+
+impl binary::Decode for Header {
+    fn decode<B: bytes::Buf>(
+        buf: &mut B,
+        _ctx: &binary::DecodingCtx,
+    ) -> Result<Self, binary::DecodingError> {
+        check_remaining(buf, 8)?;
+        let mut typ: [u8; 3] = [0u8; 3];
+        buf.copy_to_slice(&mut typ);
+        let _reserved = buf.get_u8();
+        let length = buf.get_u32_le();
+
+        let msg_type = match &typ {
+            b"HEL" => MsgType::Hello,
+            b"ACK" => MsgType::Acknowledge,
+            b"ERR" => MsgType::Error,
+            _ => return Err(binary::DecodingError::InvalidData),
+        };
+        Ok(Header {
+            msg_type,
+            length,
+        })
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, EncodeBinary, DecodeBinary)]
@@ -19,8 +71,8 @@ pub struct Hello {
     pub endpoint_url: String,
 }
 
-impl MsgType for Hello {
-    const MSG_TYPE: &'static [u8; 3] = b"HEL";
+impl TypedMsg for Hello {
+    const MSG_TYPE: MsgType = MsgType::Hello;
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, EncodeBinary, DecodeBinary)]
@@ -32,8 +84,8 @@ pub struct Acknowledge {
     pub max_chunk_count: u32,
 }
 
-impl MsgType for Acknowledge {
-    const MSG_TYPE: &'static [u8; 3] = b"ACK";
+impl TypedMsg for Acknowledge {
+    const MSG_TYPE: MsgType = MsgType::Acknowledge;
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, EncodeBinary, DecodeBinary)]
@@ -42,8 +94,8 @@ pub struct Error {
     pub reason: String,
 }
 
-impl MsgType for Error {
-    const MSG_TYPE: &'static [u8; 3] = b"ERR";
+impl TypedMsg for Error {
+    const MSG_TYPE: MsgType = MsgType::Error;
 }
 
 impl Error {
@@ -70,34 +122,32 @@ impl From<ua::StatusCode> for Error {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Msg<M: MsgType>(pub M);
+pub struct Msg<M: TypedMsg>(pub M);
 
-impl<M: MsgType + Encode> Encode for Msg<M> {
+impl<M: TypedMsg + Encode> Encode for Msg<M> {
     fn encoded_len(&self) -> u32 {
         8 + self.0.encoded_len()
     }
 
     fn encode<B: BufMut>(&self, buf: &mut B) {
-        buf.put_slice(M::MSG_TYPE);
-        buf.put_u8(b'F');
-        buf.put_u32_le(self.0.encoded_len() + 8);
+        let header = Header {
+            msg_type: M::MSG_TYPE,
+            length: self.encoded_len(),
+        };
+        header.encode(buf);
         self.0.encode(buf);
     }
 }
 
-impl<M: MsgType + Decode> Decode for Msg<M> {
+impl<M: TypedMsg + Decode> Decode for Msg<M> {
     fn decode<B: bytes::Buf>(
         buf: &mut B,
         ctx: &binary::DecodingCtx,
     ) -> Result<Self, DecodingError> {
-        let mut msg_type = [0u8; 3];
-        check_remaining(buf, 8)?;
-        buf.copy_to_slice(&mut msg_type);
-        let _reserved = buf.get_u8();
-        let message_size = buf.get_u32_le();
-        check_remaining(buf, message_size as usize - 8)?;
+        let header = Header::decode(buf, ctx)?;
+        check_remaining(buf, header.length as usize - 8)?;
 
-        if &msg_type != M::MSG_TYPE {
+        if header.msg_type != M::MSG_TYPE {
             return Err(DecodingError::BadMessageType);
         }
 

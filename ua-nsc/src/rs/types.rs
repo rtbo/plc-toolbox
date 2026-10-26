@@ -180,7 +180,10 @@ where
 
     async fn write_module_imports(&mut self) -> io::Result<()> {
         self.cg
-            .write_line(&format!("use {}::encoding::binary;", self.options.ua_core_module))
+            .write_line(&format!(
+                "use {}::encoding::binary;",
+                self.options.ua_core_module
+            ))
             .await?;
         self.cg
             .write_line(&format!("use {}::ua;", self.options.ua_core_module))
@@ -341,9 +344,15 @@ where
                 "pub fn decode_extension_object(buf: &mut dyn binary::Buf, header: &ua::extension_object::Header, ctx: &binary::DecodingCtx) -> Result<Option<Box<dyn ua::extension_object::Body>>, binary::DecodingError> ",
             ))
             .await?;
-        self.cg.write_line("header.type_id.numeric_identifier()").await?;
-        self.cg.write_line("    .and_then(|id| DECODING_FNS.get(&id))").await?;
-        self.cg.write_line("    .and_then(|dfn| dfn(buf, header, ctx).transpose())").await?;
+        self.cg
+            .write_line("header.type_id.numeric_identifier()")
+            .await?;
+        self.cg
+            .write_line("    .and_then(|id| DECODING_FNS.get(&id))")
+            .await?;
+        self.cg
+            .write_line("    .and_then(|dfn| dfn(buf, header, ctx).transpose())")
+            .await?;
         self.cg.write_line("    .transpose()").await?;
 
         self.cg.end_block().await?; // fn decode_extension_object
@@ -360,7 +369,7 @@ where
             self.cg.write_doc_comment(doc).await?;
         }
         self.cg
-            .write_line("#[derive(Debug, Clone, PartialEq)]")
+            .write_line("#[derive(Debug, Clone, PartialEq, Default)]")
             .await?;
         self.cg
             .write_line("#[derive(DecodeBinary, EncodeBinary)]")
@@ -388,7 +397,7 @@ where
             self.cg.write_doc_comment(doc).await?;
         }
         self.cg
-            .write_line("#[derive(Debug, Clone, Copy, PartialEq)]")
+            .write_line("#[derive(Debug, Clone, Copy, PartialEq, Default)]")
             .await?;
         self.cg
             .write_line("#[derive(DecodeBinary, EncodeBinary)]")
@@ -401,10 +410,15 @@ where
         self.cg
             .start_block(&format!("pub enum {} ", &desc.name))
             .await?;
+        let mut default_issued = false;
         for val in values {
             if let (Some(name), Some(value)) = (&val.name, val.value) {
                 if let Some(doc) = val.doc.as_deref() {
                     self.cg.write_doc_comment(doc).await?;
+                }
+                if !default_issued {
+                    self.cg.write_line("#[default]").await?;
+                    default_issued = true;
                 }
                 if is_option_set {
                     self.cg
@@ -431,7 +445,7 @@ where
         if let Some(doc) = desc.doc.as_deref() {
             self.cg.write_doc_comment(doc).await?;
         }
-        self.cg.write_line("#[derive(Debug)]").await?;
+        self.cg.write_line("#[derive(Debug, Default)]").await?;
         self.cg
             .write_line("#[derive(DecodeBinary, EncodeBinary)]")
             .await?;
@@ -469,7 +483,7 @@ where
         if is_msg_struct(fields) {
             self.cg
                 .start_block(&format!(
-                    "impl {}::uasc::Msg for {} ",
+                    "impl {}::uasc::TypedMsg for {} ",
                     self.options.ua_core_module, &desc.name
                 ))
                 .await?;

@@ -8,8 +8,9 @@ pub enum Value<T> {
     MultiDimArray(Vec<T>, Vec<i32>),
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Default)]
 pub enum Variant {
+    #[default]
     Null,
     Boolean(Value<bool>),
     SByte(Value<i8>),
