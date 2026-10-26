@@ -2,6 +2,7 @@ use crate::encoding::binary;
 use crate::ua;
 
 pub mod tcp;
+pub mod uacp;
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {

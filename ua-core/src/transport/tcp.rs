@@ -1,18 +1,15 @@
-use bytes::{Buf, BytesMut};
+use bytes::BytesMut;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net;
 
-use crate::encoding::binary::{self, Decode, Encode};
-use crate::uacp::{self, Msg};
 
 const HEADER_LEN: usize = 8;
 
-/// A TCP transport for OPC UA messages.
+/// A TCP transport for raw OPC UA message chunks (UACP or UACS).
 pub struct Transport {
     stream: net::TcpStream,
     send_buf: BytesMut,
     recv_buf: BytesMut,
-    decoding_ctx: binary::DecodingCtx,
 }
 
 impl Transport {
@@ -32,7 +29,6 @@ impl Transport {
             stream,
             send_buf,
             recv_buf,
-            decoding_ctx: Default::default(),
         })
     }
 
@@ -53,28 +49,54 @@ impl Transport {
         }
     }
 
-    pub async fn send_uacp<M>(&mut self, msg: uacp::Msg<M>) -> Result<(), super::Error>
+    /// Appends one chunk to the send buffer without sending it.
+    ///
+    /// `write` must append exactly one complete chunk (UACP or UACS) directly to the
+    /// buffer, including its 8-byte header whose bytes 4..8 hold the total chunk length.
+    /// The transport does not interpret anything else, so the chunk may be encrypted.
+    /// If previously buffered chunks leave no room for the new one, they are flushed first.
+    /// On error, the buffer is left unchanged.
+    pub async fn send_msg_chunk<F>(&mut self, write: F) -> Result<(), super::Error>
     where
-        M: uacp::TypedMsg + Encode,
+        F: FnOnce(&mut BytesMut),
     {
-        let size = msg.encoded_len() as usize;
-        let max_send_size = self.max_send_size();
-        if size > max_send_size {
-            return Err(super::Error::MessageSize {
-                size,
-                max: max_send_size,
-            });
+        let start = self.send_buf.len();
+        write(&mut self.send_buf);
+        let max = self.max_send_size();
+        let size = self.send_buf.len() - start;
+        let declared = match self.send_buf[start..].get(4..8) {
+            Some(b) => u32::from_le_bytes(b.try_into().unwrap()) as usize,
+            None => 0,
+        };
+        if size < HEADER_LEN || size != declared || size > max {
+            self.send_buf.truncate(start);
+            return Err(super::Error::MessageSize { size, max });
         }
-        self.send_buf.clear();
-        msg.encode(&mut self.send_buf);
-        self.stream.write_all(&self.send_buf).await?;
+        if start > 0 && start + size > max {
+            // Send the previous chunks, then move the new one to the front of the buffer.
+            self.stream.write_all(&self.send_buf[..start]).await?;
+            self.send_buf.copy_within(start.., 0);
+            self.send_buf.truncate(size);
+        }
         Ok(())
     }
 
-    pub async fn recv_uacp<M>(&mut self) -> Result<Msg<M>, super::Error>
-    where
-        M: uacp::TypedMsg + Decode,
-    {
+    /// Sends all buffered chunks.
+    pub async fn flush(&mut self) -> Result<(), super::Error> {
+        if !self.send_buf.is_empty() {
+            self.stream.write_all(&self.send_buf).await?;
+            self.send_buf.clear();
+        }
+        self.stream.flush().await?;
+        Ok(())
+    }
+
+    /// Returns the next entire chunk as-is (header included).
+    ///
+    /// Several chunks may be received at once; they are handed out one by one.
+    /// The returned buffer is split off without copying, so it can be decoded or
+    /// decrypted in place by the upper layers.
+    pub async fn recv_msg_chunk(&mut self) -> Result<BytesMut, super::Error> {
         self.fill(HEADER_LEN).await?;
         let size = u32::from_le_bytes(self.recv_buf[4..8].try_into().unwrap()) as usize;
         let max_recv_size = self.max_recv_size();
@@ -85,16 +107,7 @@ impl Transport {
             });
         }
         self.fill(size).await?;
-
-        let mut data = &self.recv_buf[..size];
-        let msg = Msg::decode(&mut data, &self.decoding_ctx);
-        // Consume the message even in case of decoding error to stay synchronized.
-        self.recv_buf.advance(size);
-        if self.recv_buf.is_empty() {
-            // Set the cursor back to the beginning: the initial capacity is reused.
-            self.recv_buf.clear();
-        }
-        Ok(msg?)
+        Ok(self.recv_buf.split_to(size))
     }
 
     /// Reads from the socket until at least `n` bytes are available in `recv_buf`.

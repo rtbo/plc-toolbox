@@ -1,5 +1,5 @@
 //! This module contains the implementation of UA Connection Protocol (UACP)
-use bytes::BufMut;
+use bytes::{BufMut, BytesMut};
 use ua_macros::{DecodeBinary, EncodeBinary};
 
 use crate::encoding::binary::{self, Decode, DecodingError, Encode, check_remaining};
@@ -153,6 +153,117 @@ impl<M: TypedMsg + Decode> Decode for Msg<M> {
 
         let inner = M::decode(buf, ctx)?;
         Ok(Msg(inner))
+    }
+}
+
+/// Any UACP message, decoded.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum AnyMsg {
+    Hello(Hello),
+    Acknowledge(Acknowledge),
+    Error(Error),
+}
+
+/// What the UACP layer hands to the layer above.
+#[derive(Debug)]
+pub enum Incoming {
+    /// A decoded UACP message.
+    Uacp(AnyMsg),
+    /// A chunk that is not UACP (e.g. a chunk of secure conversation message), passed through as-is.
+    Chunk(bytes::BytesMut),
+}
+
+/// Returns the UACP message type of a chunk, or `None` if it is not a UACP chunk.
+pub fn msg_type(chunk: &[u8]) -> Option<MsgType> {
+    match chunk.get(..4)? {
+        b"HELF" => Some(MsgType::Hello),
+        b"ACKF" => Some(MsgType::Acknowledge),
+        b"ERRF" => Some(MsgType::Error),
+        _ => None,
+    }
+}
+
+/// UACP layer: encodes/decodes UACP messages on top of the raw chunk transport.
+pub struct Uacp {
+    transport: super::tcp::Transport,
+    decoding_ctx: binary::DecodingCtx,
+}
+
+impl Uacp {
+    pub fn new(transport: super::tcp::Transport) -> Self {
+        Self {
+            transport,
+            decoding_ctx: Default::default(),
+        }
+    }
+
+    pub fn transport_mut(&mut self) -> &mut super::tcp::Transport {
+        &mut self.transport
+    }
+
+    pub fn into_transport(self) -> super::tcp::Transport {
+        self.transport
+    }
+
+    /// Encodes a UACP message directly into the send buffer (not flushed).
+    pub async fn send<M>(&mut self, msg: Msg<M>) -> Result<(), super::Error>
+    where
+        M: TypedMsg + Encode,
+    {
+        self.transport.send_msg_chunk(|buf| msg.encode(buf)).await
+    }
+
+    /// Buffers a chunk from an upper layer (e.g. secure channel) as-is (not flushed).
+    pub async fn send_chunk<F>(&mut self, write: F) -> Result<(), super::Error>
+    where
+        F: FnOnce(&mut BytesMut),
+    {
+        self.transport.send_msg_chunk(write).await
+    }
+
+    pub async fn flush(&mut self) -> Result<(), super::Error> {
+        self.transport.flush().await
+    }
+
+    /// Receives the next chunk: UACP messages are decoded, others are passed through.
+    pub async fn recv(&mut self) -> Result<Incoming, super::Error> {
+        let mut chunk = self.transport.recv_msg_chunk().await?;
+        let Some(msg_type) = msg_type(&chunk) else {
+            return Ok(Incoming::Chunk(chunk));
+        };
+        let ctx = &self.decoding_ctx;
+        let msg = match msg_type {
+            MsgType::Hello => Msg::<Hello>::decode(&mut chunk, ctx)?.0.into(),
+            MsgType::Acknowledge => Msg::<Acknowledge>::decode(&mut chunk, ctx)?.0.into(),
+            MsgType::Error => Msg::<Error>::decode(&mut chunk, ctx)?.0.into(),
+        };
+        Ok(Incoming::Uacp(msg))
+    }
+
+    /// Receives a UACP message of a specific type (e.g. during the handshake).
+    /// Any other chunk is a `BadMessageType` decoding error.
+    pub async fn recv_typed<M>(&mut self) -> Result<Msg<M>, super::Error>
+    where
+        M: TypedMsg + Decode,
+    {
+        let mut chunk = self.transport.recv_msg_chunk().await?;
+        Ok(Msg::decode(&mut chunk, &self.decoding_ctx)?)
+    }
+}
+
+impl From<Hello> for AnyMsg {
+    fn from(m: Hello) -> Self {
+        AnyMsg::Hello(m)
+    }
+}
+impl From<Acknowledge> for AnyMsg {
+    fn from(m: Acknowledge) -> Self {
+        AnyMsg::Acknowledge(m)
+    }
+}
+impl From<Error> for AnyMsg {
+    fn from(m: Error) -> Self {
+        AnyMsg::Error(m)
     }
 }
 

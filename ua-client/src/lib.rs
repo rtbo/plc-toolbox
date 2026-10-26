@@ -14,7 +14,7 @@ pub mod tcp;
 //     }
 //
 //     pub async fn connect(&mut self, endpoint: &str) -> Result<(), ua_core::transport::Error> {
-//         use ua_core::uacp;
+//         use ua_core::transport::uacp;
 //
 //         let mut conn = T::connect(endpoint).await?;
 //

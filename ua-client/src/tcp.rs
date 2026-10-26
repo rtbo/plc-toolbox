@@ -1,4 +1,5 @@
 use ua_core::transport::tcp;
+use ua_core::transport::uacp::{self, Uacp};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct BufferConfig {
@@ -21,10 +22,8 @@ impl BufferConfig {
     async fn hello_ack(
         self,
         endpoint: &str,
-        transport: &mut tcp::Transport,
+        uacp: &mut Uacp,
     ) -> Result<Self, ua_core::transport::Error> {
-        use ua_core::uacp;
-
         let hello_msg = uacp::Msg(uacp::Hello {
             protocol_version: 0,
             receive_buffer_size: self.recv_size as u32,
@@ -33,9 +32,10 @@ impl BufferConfig {
             max_chunk_count: 16,
             endpoint_url: endpoint.to_string(),
         });
-        transport.send_uacp(hello_msg).await?;
+        uacp.send(hello_msg).await?;
+        uacp.flush().await?;
 
-        let ack_msg: uacp::Msg<uacp::Acknowledge> = transport.recv_uacp().await?;
+        let ack_msg: uacp::Msg<uacp::Acknowledge> = uacp.recv_typed().await?;
 
         Ok(Self {
             send_size: ack_msg.0.send_buffer_size as usize,
@@ -57,15 +57,16 @@ impl TcpClient {
         endpoint: &str,
         config: Config,
     ) -> Result<Self, ua_core::transport::Error> {
-        let mut transport =
+        let transport =
             tcp::Transport::connect(endpoint, config.buffer.send_size, config.buffer.recv_size)
                 .await?;
+        let mut uacp = Uacp::new(transport);
 
-        let buffer_config = config.buffer.hello_ack(endpoint, &mut transport).await?;
+        let buffer_config = config.buffer.hello_ack(endpoint, &mut uacp).await?;
         let _config = Config {
             buffer: buffer_config,
         };
-        transport.adjust_buffer_sizes(config.buffer.send_size, config.buffer.recv_size);
+        uacp.transport_mut().adjust_buffer_sizes(config.buffer.send_size, config.buffer.recv_size);
 
         Ok(Self {})
     }
