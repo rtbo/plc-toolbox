@@ -253,25 +253,7 @@ where
                 self.generate_extension_object_impl(&desc.name).await?;
             }
         }
-        if let Some(ua_type_id) = self.ua_type_ids.get(type_def.name()) {
-            self.cg
-                .start_block(&format!(
-                    "impl {}::msg::DataTypeId for {} ",
-                    self.options.ua_core_module,
-                    type_def.name()
-                ))
-                .await?;
-            self.cg
-                .write_line("const NS_URI: &'static str = NS_URI;")
-                .await?;
-            self.cg
-                .write_line(&format!(
-                    "const DATATYPE_ID: u32 = {};",
-                    ua_type_id.numeric_id
-                ))
-                .await?;
-            self.cg.end_block().await?; // impl DataTypeId
-        }
+        self.write_data_type_id_impl(type_def).await?;
 
         self.cg.write_line("").await?;
 
@@ -353,6 +335,71 @@ where
         self.cg.end_block().await?; // fn binary_body_encode
         self.cg.end_block().await?; // impl Body
         self.cg.write_line("").await?;
+        Ok(())
+    }
+
+    async fn write_data_type_id_impl(&mut self, type_def: &types::Type) -> io::Result<()> {
+        let Some(type_id) = self.ua_type_ids.get(type_def.name()) else {
+            return Ok(());
+        };
+        let core = self.options.ua_core_module.clone();
+        self.cg
+            .start_block(&format!(
+                "impl {}::msg::DataTypeId for {} ",
+                core,
+                type_def.name()
+            ))
+            .await?;
+        self.cg
+            .write_line("const NS_URI: &'static str = NS_URI;")
+            .await?;
+        self.cg
+            .write_line(&format!("const DATATYPE_ID: u32 = {};", type_id.numeric_id))
+            .await?;
+        self.cg.end_block().await?; // impl DataTypeId
+        self.cg.write_line("").await?;
+
+        if let Some(xml_type_id) = self
+            .ua_type_ids
+            .get(&format!("{}_Encoding_DefaultXml", type_def.name()))
+        {
+            self.cg
+                .start_block(&format!(
+                    "impl {}::msg::XmlEncodingId for {} ",
+                    core,
+                    type_def.name()
+                ))
+                .await?;
+            self.cg
+                .write_line(&format!(
+                    "const XML_ENCODING_ID: u32 = {};",
+                    xml_type_id.numeric_id
+                ))
+                .await?;
+            self.cg.end_block().await?; // impl XmlEncodingId
+            self.cg.write_line("").await?;
+        }
+
+        if let Some(bin_type_id) = self
+            .ua_type_ids
+            .get(&format!("{}_Encoding_DefaultBinary", type_def.name()))
+        {
+            self.cg
+                .start_block(&format!(
+                    "impl {}::msg::BinaryEncodingId for {} ",
+                    core,
+                    type_def.name()
+                ))
+                .await?;
+            self.cg
+                .write_line(&format!(
+                    "const BINARY_ENCODING_ID: u32 = {};",
+                    bin_type_id.numeric_id
+                ))
+                .await?;
+            self.cg.end_block().await?; // impl BinaryEncodingId
+            self.cg.write_line("").await?;
+        }
         Ok(())
     }
 

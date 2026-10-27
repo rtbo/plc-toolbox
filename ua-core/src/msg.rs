@@ -2,19 +2,44 @@ use crate::ua;
 
 pub mod uasc;
 
-/// A trait that provides the namespace and ID of the DataTypeEncoding for a given type.
-/// The namespace index is not always stable across different servers,
-/// so the namespace index is not included in this trait.
+/// A trait that provides the namespace and ID for a DataType.
+/// The namespace index is not always stable across different servers and is therefore not included in this trait.,
 /// It must be retrieved from the server's NamespaceArray at runtime.
 pub trait DataTypeId {
-    /// The namespace URI that defines the DataTypeEncoding.
+    /// The namespace URI that defines the DataType.
     const NS_URI: &'static str;
-    /// The ID of the DataTypeEncoding for this type.
+
+    /// The ID of the DataType for this type.
     const DATATYPE_ID: u32;
 
-    /// Construct the NodeID of the DataTypeEncoding for this type, provided the namespace index.
-    fn node_id(namespace_index: u16) -> ua::NodeId {
+    /// Construct the NodeID of the DataType for this type, provided the namespace index.
+    /// The index must be retrieved from the server's NamespaceArray at runtime and isn't checked by this function.
+    fn datatype_node_id(namespace_index: u16) -> ua::NodeId {
         ua::NodeId::Numeric(namespace_index, Self::DATATYPE_ID)
+    }
+}
+
+/// A trait that provides ID for a binary DataTypeEncoding.
+pub trait BinaryEncodingId: DataTypeId {
+    /// The ID of the binary DataTypeEncoding Object for this type.
+    const BINARY_ENCODING_ID: u32;
+
+    /// Construct the NodeID of the DataTypeEncoding for this type, provided the namespace index.
+    /// The index must be retrieved from the server's NamespaceArray at runtime and isn't checked by this function.
+    fn binary_encoding_node_id(namespace_index: u16) -> ua::NodeId {
+        ua::NodeId::Numeric(namespace_index, Self::BINARY_ENCODING_ID)
+    }
+}
+
+/// A trait that provides ID for a XML DataTypeEncoding.
+pub trait XmlEncodingId: DataTypeId {
+    /// The ID of the XML DataTypeEncoding Object for this type.
+    const XML_ENCODING_ID: u32;
+
+    /// Construct the NodeID of the DataTypeEncoding for this type, provided the namespace index.
+    /// The index must be retrieved from the server's NamespaceArray at runtime and isn't checked by this function.
+    fn xml_encoding_node_id(namespace_index: u16) -> ua::NodeId {
+        ua::NodeId::Numeric(namespace_index, Self::XML_ENCODING_ID)
     }
 }
 
