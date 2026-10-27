@@ -2,8 +2,10 @@
 use bytes::{BufMut, BytesMut};
 use ua_macros::{DecodeBinary, EncodeBinary};
 
-use crate::encoding::binary::{self, Decode, DecodingError, Encode, check_remaining};
+use crate::encoding::binary::{self, DecodingError};
 use crate::ua;
+
+use binary::{Decode, Encode};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MsgType {
@@ -12,8 +14,48 @@ pub enum MsgType {
     Error,
 }
 
-pub trait TypedMsg {
+pub trait Msg : binary::Encode + std::fmt::Debug {
+    fn msg_type(&self) -> MsgType;
+    fn msg_encoded_len(&self) -> u32 {
+        8 + self.encoded_len()
+    }
+    fn msg_encode<B: BufMut>(&self, buf: &mut B) {
+        let header = Header {
+            msg_type: self.msg_type(),
+            length: self.msg_encoded_len(),
+        };
+        header.encode(buf);
+        self.encode(buf);
+    }
+
+    fn msg_decode<B: bytes::Buf>(
+        buf: &mut B,
+        ctx: &binary::DecodingCtx,
+    ) -> Result<Self, binary::DecodingError>
+    where
+        Self: Sized;
+}
+
+pub trait StaticMsg: Msg + binary::Decode {
     const MSG_TYPE: MsgType;
+}
+
+impl<T: StaticMsg> Msg for T {
+    fn msg_type(&self) -> MsgType {
+        Self::MSG_TYPE
+    }
+
+    fn msg_decode<B: bytes::Buf>(
+        buf: &mut B,
+        ctx: &binary::DecodingCtx,
+    ) -> Result<Self, binary::DecodingError> {
+        let header = Header::decode(buf, ctx)?;
+        if header.msg_type != Self::MSG_TYPE {
+            return Err(binary::DecodingError::InvalidData);
+        }
+        let msg = T::decode(buf, ctx)?;
+        Ok(msg)
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -42,7 +84,7 @@ impl binary::Decode for Header {
         buf: &mut B,
         _ctx: &binary::DecodingCtx,
     ) -> Result<Self, binary::DecodingError> {
-        check_remaining(buf, 8)?;
+        binary::check_remaining(buf, 8)?;
         let mut typ: [u8; 3] = [0u8; 3];
         buf.copy_to_slice(&mut typ);
         let _reserved = buf.get_u8();
@@ -68,7 +110,7 @@ pub struct Hello {
     pub endpoint_url: String,
 }
 
-impl TypedMsg for Hello {
+impl StaticMsg for Hello {
     const MSG_TYPE: MsgType = MsgType::Hello;
 }
 
@@ -81,7 +123,7 @@ pub struct Acknowledge {
     pub max_chunk_count: u32,
 }
 
-impl TypedMsg for Acknowledge {
+impl StaticMsg for Acknowledge {
     const MSG_TYPE: MsgType = MsgType::Acknowledge;
 }
 
@@ -91,7 +133,7 @@ pub struct Error {
     pub reason: String,
 }
 
-impl TypedMsg for Error {
+impl StaticMsg for Error {
     const MSG_TYPE: MsgType = MsgType::Error;
 }
 
@@ -118,47 +160,80 @@ impl From<ua::StatusCode> for Error {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Msg<M: TypedMsg>(pub M);
-
-impl<M: TypedMsg + Encode> Encode for Msg<M> {
-    fn encoded_len(&self) -> u32 {
-        8 + self.0.encoded_len()
-    }
-
-    fn encode<B: BufMut>(&self, buf: &mut B) {
-        let header = Header {
-            msg_type: M::MSG_TYPE,
-            length: self.encoded_len(),
-        };
-        header.encode(buf);
-        self.0.encode(buf);
-    }
-}
-
-impl<M: TypedMsg + Decode> Decode for Msg<M> {
-    fn decode<B: bytes::Buf>(
-        buf: &mut B,
-        ctx: &binary::DecodingCtx,
-    ) -> Result<Self, DecodingError> {
-        let header = Header::decode(buf, ctx)?;
-        check_remaining(buf, header.length as usize - 8)?;
-
-        if header.msg_type != M::MSG_TYPE {
-            return Err(DecodingError::BadMessageType);
-        }
-
-        let inner = M::decode(buf, ctx)?;
-        Ok(Msg(inner))
-    }
-}
-
 /// Any UACP message, decoded.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum AnyMsg {
     Hello(Hello),
     Acknowledge(Acknowledge),
     Error(Error),
+}
+
+impl From<Hello> for AnyMsg {
+    fn from(m: Hello) -> Self {
+        AnyMsg::Hello(m)
+    }
+}
+impl From<Acknowledge> for AnyMsg {
+    fn from(m: Acknowledge) -> Self {
+        AnyMsg::Acknowledge(m)
+    }
+}
+impl From<Error> for AnyMsg {
+    fn from(m: Error) -> Self {
+        AnyMsg::Error(m)
+    }
+}
+
+impl binary::Encode for AnyMsg {
+    fn encoded_len(&self) -> u32 {
+        match self {
+            AnyMsg::Hello(m) => m.encoded_len(),
+            AnyMsg::Acknowledge(m) => m.encoded_len(),
+            AnyMsg::Error(m) => m.encoded_len(),
+        }
+    }
+
+    fn encode<B: BufMut>(&self, buf: &mut B) {
+        match self {
+            AnyMsg::Hello(m) => m.encode(buf),
+            AnyMsg::Acknowledge(m) => m.encode(buf),
+            AnyMsg::Error(m) => m.encode(buf),
+        }
+    }
+}
+
+impl Msg for AnyMsg {
+    fn msg_type(&self) -> MsgType {
+        match self {
+            AnyMsg::Hello(_) => MsgType::Hello,
+            AnyMsg::Acknowledge(_) => MsgType::Acknowledge,
+            AnyMsg::Error(_) => MsgType::Error,
+        }
+    }
+
+    fn msg_decode<B: bytes::Buf>(
+        buf: &mut B,
+        ctx: &binary::DecodingCtx,
+    ) -> Result<Self, binary::DecodingError>
+    where
+        Self: Sized,
+    {
+        let header = Header::decode(buf, ctx)?;
+        match header.msg_type {
+            MsgType::Hello => {
+                let m = Hello::decode(buf, ctx)?;
+                Ok(AnyMsg::Hello(m))
+            }
+            MsgType::Acknowledge => {
+                let m = Acknowledge::decode(buf, ctx)?;
+                Ok(AnyMsg::Acknowledge(m))
+            }
+            MsgType::Error => {
+                let m = Error::decode(buf, ctx)?;
+                Ok(AnyMsg::Error(m))
+            }
+        }
+    }
 }
 
 /// What the UACP layer hands to the layer above.
@@ -172,15 +247,16 @@ pub enum Incoming {
 
 /// Returns the UACP message type of a chunk, or `None` if it is not a UACP chunk.
 pub fn msg_type(chunk: &[u8]) -> Option<MsgType> {
-    match chunk.get(..4)? {
-        b"HELF" => Some(MsgType::Hello),
-        b"ACKF" => Some(MsgType::Acknowledge),
-        b"ERRF" => Some(MsgType::Error),
+    match chunk.get(..3)? {
+        b"HEL" => Some(MsgType::Hello),
+        b"ACK" => Some(MsgType::Acknowledge),
+        b"ERR" => Some(MsgType::Error),
         _ => None,
     }
 }
 
 /// UACP layer: encodes/decodes UACP messages on top of the raw chunk transport.
+#[derive(Debug)]
 pub struct Uacp {
     transport: super::tcp::Transport,
     decoding_ctx: binary::DecodingCtx,
@@ -203,11 +279,11 @@ impl Uacp {
     }
 
     /// Encodes a UACP message directly into the send buffer (not flushed).
-    pub async fn send<M>(&mut self, msg: Msg<M>) -> Result<(), super::Error>
+    pub async fn send<M>(&mut self, msg: M) -> Result<(), super::Error>
     where
-        M: TypedMsg + Encode,
+        M: Msg,
     {
-        self.transport.send_msg_chunk(|buf| msg.encode(buf)).await
+        self.transport.send_msg_chunk(|buf| msg.msg_encode(buf)).await
     }
 
     /// Buffers a chunk from an upper layer (e.g. secure channel) as-is (not flushed).
@@ -225,42 +301,42 @@ impl Uacp {
     /// Receives the next chunk: UACP messages are decoded, others are passed through.
     pub async fn recv(&mut self) -> Result<Incoming, super::Error> {
         let mut chunk = self.transport.recv_msg_chunk().await?;
-        let Some(msg_type) = msg_type(&chunk) else {
-            return Ok(Incoming::Chunk(chunk));
-        };
         let ctx = &self.decoding_ctx;
-        let msg = match msg_type {
-            MsgType::Hello => Msg::<Hello>::decode(&mut chunk, ctx)?.0.into(),
-            MsgType::Acknowledge => Msg::<Acknowledge>::decode(&mut chunk, ctx)?.0.into(),
-            MsgType::Error => Msg::<Error>::decode(&mut chunk, ctx)?.0.into(),
+        let header = match Header::decode(&mut chunk, ctx) {
+            Ok(header) =>  header,
+            Err(DecodingError::BadMessageType) => {
+                // Not a UACP chunk, pass through
+                return Ok(Incoming::Chunk(chunk));
+            }
+            Err(err) => {
+                return Err(super::Error::Decoding(err));
+            }
+        };
+        let msg = match header.msg_type {
+            MsgType::Hello => {
+                let m = Hello::decode(&mut chunk, ctx)?;
+                AnyMsg::Hello(m)
+            }
+            MsgType::Acknowledge => {
+                let m = Acknowledge::decode(&mut chunk, ctx)?;
+                AnyMsg::Acknowledge(m)
+            }
+            MsgType::Error => {
+                let m = Error::decode(&mut chunk, ctx)?;
+                AnyMsg::Error(m)
+            }
         };
         Ok(Incoming::Uacp(msg))
     }
 
     /// Receives a UACP message of a specific type (e.g. during the handshake).
-    /// Any other chunk is a `BadMessageType` decoding error.
-    pub async fn recv_typed<M>(&mut self) -> Result<Msg<M>, super::Error>
+    /// Any other chunk is a `BadMessageType`
+    pub async fn recv_typed<M>(&mut self) -> Result<M, super::Error>
     where
-        M: TypedMsg + Decode,
+        M: Msg,
     {
         let mut chunk = self.transport.recv_msg_chunk().await?;
-        Ok(Msg::decode(&mut chunk, &self.decoding_ctx)?)
-    }
-}
-
-impl From<Hello> for AnyMsg {
-    fn from(m: Hello) -> Self {
-        AnyMsg::Hello(m)
-    }
-}
-impl From<Acknowledge> for AnyMsg {
-    fn from(m: Acknowledge) -> Self {
-        AnyMsg::Acknowledge(m)
-    }
-}
-impl From<Error> for AnyMsg {
-    fn from(m: Error) -> Self {
-        AnyMsg::Error(m)
+        Ok(M::msg_decode(&mut chunk, &self.decoding_ctx)?)
     }
 }
 
@@ -291,6 +367,25 @@ mod tests {
         assert_eq!(reencoded, encoded);
     }
 
+    fn assert_roundtrip_msg<T>(value: &T)
+    where
+        T: Msg + PartialEq + std::fmt::Debug,
+    {
+        let mut encoded = BytesMut::new();
+        value.msg_encode(&mut encoded);
+        assert_eq!(encoded.len(), value.msg_encoded_len() as usize);
+
+        let mut remaining = encoded.clone();
+        let decoded =
+            T::msg_decode(&mut remaining, &Default::default()).expect("encoded value should decode");
+        assert!(remaining.is_empty());
+        assert_eq!(&decoded, value);
+
+        let mut reencoded = BytesMut::new();
+        decoded.msg_encode(&mut reencoded);
+        assert_eq!(reencoded, encoded);
+    }
+
     #[test]
     fn hello_encodes_fields_in_declaration_order() {
         let hello = Hello {
@@ -315,18 +410,18 @@ mod tests {
 
     #[test]
     fn hello_msg_encodes_fields_in_declaration_order() {
-        let hello = Msg(Hello {
+        let hello = Hello {
             protocol_version: 1,
             receive_buffer_size: 2,
             send_buffer_size: 3,
             max_message_size: 4,
             max_chunk_count: 5,
             endpoint_url: "x".to_owned(),
-        });
+        };
         let mut buf = BytesMut::new();
 
-        assert_eq!(hello.encoded_len(), 33);
-        hello.encode(&mut buf);
+        assert_eq!(hello.msg_encoded_len(), 33);
+        hello.msg_encode(&mut buf);
         assert_eq!(
             &buf[..],
             &[
@@ -347,7 +442,7 @@ mod tests {
             endpoint_url: "opc.tcp://localhost:4840".to_owned(),
         };
         assert_roundtrip(&hello);
-        assert_roundtrip(&Msg(hello));
+        assert_roundtrip_msg(&hello);
 
         let acknowledge = Acknowledge {
             protocol_version: 1,
@@ -357,11 +452,13 @@ mod tests {
             max_chunk_count: 10,
         };
         assert_roundtrip(&acknowledge);
+        assert_roundtrip_msg(&acknowledge);
 
         let error = Error::new(
             ua::StatusCode::BadTcpMessageTooLarge,
             "message exceeds configured limit".to_owned(),
         );
         assert_roundtrip(&error);
+        assert_roundtrip_msg(&error);
     }
 }

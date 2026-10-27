@@ -4,6 +4,8 @@ use crate::ua;
 pub mod tcp;
 pub mod uacp;
 
+pub use uacp::Uacp;
+
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
     #[error("IO error: {0}")]

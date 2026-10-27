@@ -24,23 +24,23 @@ impl BufferConfig {
         endpoint: &str,
         uacp: &mut Uacp,
     ) -> Result<Self, ua_core::transport::Error> {
-        let hello_msg = uacp::Msg(uacp::Hello {
+        let hello_msg = uacp::Hello {
             protocol_version: 0,
             receive_buffer_size: self.recv_size as u32,
             send_buffer_size: self.send_size as u32,
             max_message_size: self.max_msg_size as u32,
             max_chunk_count: 16,
             endpoint_url: endpoint.to_string(),
-        });
+        };
         uacp.send(hello_msg).await?;
         uacp.flush().await?;
 
-        let ack_msg: uacp::Msg<uacp::Acknowledge> = uacp.recv_typed().await?;
+        let ack_msg: uacp::Acknowledge = uacp.recv_typed().await?;
 
         Ok(Self {
-            send_size: ack_msg.0.send_buffer_size as usize,
-            recv_size: ack_msg.0.receive_buffer_size as usize,
-            max_msg_size: ack_msg.0.max_message_size as usize,
+            send_size: ack_msg.send_buffer_size as usize,
+            recv_size: ack_msg.receive_buffer_size as usize,
+            max_msg_size: ack_msg.max_message_size as usize,
         })
     }
 }

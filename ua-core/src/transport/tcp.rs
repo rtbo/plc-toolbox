@@ -5,6 +5,7 @@ use tokio::net;
 const HEADER_LEN: usize = 8;
 
 /// A TCP transport for raw OPC UA message chunks (UACP or UACS).
+#[derive(Debug)]
 pub struct Transport {
     stream: net::TcpStream,
     send_buf: BytesMut,

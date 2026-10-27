@@ -1,3 +1,4 @@
+use crate::encoding::binary;
 use crate::ua;
 
 pub mod uasc;
@@ -41,6 +42,11 @@ pub trait XmlEncodingId: DataTypeId {
     fn xml_encoding_node_id(namespace_index: u16) -> ua::NodeId {
         ua::NodeId::Numeric(namespace_index, Self::XML_ENCODING_ID)
     }
+}
+
+pub trait Msg:
+    binary::Encode + binary::Decode + BinaryEncodingId + XmlEncodingId + std::fmt::Debug
+{
 }
 
 // #[derive(Debug, Clone, Copy, PartialEq, Eq)]

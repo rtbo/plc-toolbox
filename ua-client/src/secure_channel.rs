@@ -1,6 +1,27 @@
 #![allow(dead_code)]
-use ua_core::transport::tcp;
-use ua_core::ua;
+use ua_core::transport::{Uacp, tcp};
+use ua_core::{msg, ua};
+
+pub trait SecurityPolicy {
+    fn uri(&self) -> &'static str;
+
+    fn send_msg<M: msg::Msg>(&self, msg: M) -> Result<(), ua_core::transport::Error>;
+}
+
+#[derive(Debug)]
+pub struct SecurityPolicyNone {
+    uacp: Uacp,
+}
+
+impl SecurityPolicy for SecurityPolicyNone {
+    fn uri(&self) -> &'static str {
+        "http://opcfoundation.org/UA/SecurityPolicy#None"
+    }
+
+    fn send_msg<M: msg::Msg>(&self, _msg: M) -> Result<(), ua_core::transport::Error> {
+        todo!()
+    }
+}
 
 #[derive(Debug)]
 pub struct SecureChannel {
