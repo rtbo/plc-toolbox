@@ -36,6 +36,8 @@ where
 
     ctx.write_module_imports().await?;
     ctx.cg.write_line("").await?;
+    ctx.write_namespace_def().await?;
+    ctx.cg.write_line("").await?;
 
     let excluded_types = excluded_types(&types.target_namespace);
 
@@ -194,6 +196,16 @@ where
         Ok(())
     }
 
+    async fn write_namespace_def(&mut self) -> io::Result<()> {
+        self.cg
+            .write_line(&format!(
+                "pub const NS_URI: &str = \"{}\";",
+                self.types.target_namespace
+            ))
+            .await?;
+        Ok(())
+    }
+
     async fn generate_type_def(&mut self, type_def: &types::Type) -> io::Result<()> {
         match type_def {
             types::Type::Opaque {
@@ -250,10 +262,7 @@ where
                 ))
                 .await?;
             self.cg
-                .write_line(&format!(
-                    "const NS_URI: &'static str = \"{}\";",
-                    self.types.target_namespace
-                ))
+                .write_line("const NS_URI: &'static str = NS_URI;")
                 .await?;
             self.cg
                 .write_line(&format!(
@@ -263,7 +272,7 @@ where
                 .await?;
             self.cg.end_block().await?; // impl DataTypeId
         }
-        
+
         self.cg.write_line("").await?;
 
         Ok(())
