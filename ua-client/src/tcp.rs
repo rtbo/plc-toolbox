@@ -66,7 +66,8 @@ impl TcpClient {
         let _config = Config {
             buffer: buffer_config,
         };
-        uacp.transport_mut().adjust_buffer_sizes(config.buffer.send_size, config.buffer.recv_size);
+        uacp.transport_mut()
+            .adjust_buffer_sizes(config.buffer.send_size, config.buffer.recv_size);
 
         Ok(Self {})
     }

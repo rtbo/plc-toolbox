@@ -2,7 +2,6 @@ use bytes::BytesMut;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net;
 
-
 const HEADER_LEN: usize = 8;
 
 /// A TCP transport for raw OPC UA message chunks (UACP or UACS).

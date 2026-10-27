@@ -1,7 +1,8 @@
 //! OPC/UA Secure Conversation (UASC) implementation
 
-use crate::encoding::binary;
 use ua_macros::{DecodeBinary, EncodeBinary};
+
+use crate::encoding::binary;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MsgType {
@@ -46,7 +47,10 @@ impl binary::Encode for Header {
 }
 
 impl binary::Decode for Header {
-    fn decode<B: binary::Buf>(buf: &mut B, _ctx: &binary::DecodingCtx) -> Result<Self, binary::DecodingError> {
+    fn decode<B: binary::Buf>(
+        buf: &mut B,
+        _ctx: &binary::DecodingCtx,
+    ) -> Result<Self, binary::DecodingError> {
         binary::check_remaining(buf, 8)?;
         let mut typ: [u8; 3] = [0u8; 3];
         buf.copy_to_slice(&mut typ);
@@ -73,16 +77,14 @@ impl binary::Decode for Header {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-#[derive(EncodeBinary, DecodeBinary)]
+#[derive(Debug, Clone, PartialEq, Eq, EncodeBinary, DecodeBinary)]
 pub struct SecurityHeader {
     security_policy_uri: Option<String>,
     sender_certificate: Option<Vec<u8>>,
     receiver_certificate_thumbprint: Option<Vec<u8>>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-#[derive(EncodeBinary, DecodeBinary)]
+#[derive(Debug, Clone, PartialEq, Eq, EncodeBinary, DecodeBinary)]
 pub struct SequenceHeader {
     sequence_number: u32,
     request_id: u32,

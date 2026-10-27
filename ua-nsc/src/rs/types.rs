@@ -211,6 +211,10 @@ where
                 is_option_set,
                 values,
             } => {
+                if values.is_empty() {
+                    return Ok(());
+                }
+
                 self.generate_enumerated_type(
                     desc,
                     *length_in_bits,
@@ -237,6 +241,31 @@ where
                 self.generate_extension_object_impl(&desc.name).await?;
             }
         }
+        if let Some(ua_type_id) = self.ua_type_ids.get(type_def.name()) {
+            self.cg
+                .start_block(&format!(
+                    "impl {}::msg::DataTypeId for {} ",
+                    self.options.ua_core_module,
+                    type_def.name()
+                ))
+                .await?;
+            self.cg
+                .write_line(&format!(
+                    "const NS_URI: &'static str = \"{}\";",
+                    self.types.target_namespace
+                ))
+                .await?;
+            self.cg
+                .write_line(&format!(
+                    "const DATATYPE_ID: u32 = {};",
+                    ua_type_id.numeric_id
+                ))
+                .await?;
+            self.cg.end_block().await?; // impl DataTypeId
+        }
+        
+        self.cg.write_line("").await?;
+
         Ok(())
     }
 
@@ -483,7 +512,7 @@ where
         if is_msg_struct(fields) {
             self.cg
                 .start_block(&format!(
-                    "impl {}::uasc::TypedMsg for {} ",
+                    "impl {}::msg::uasc::TypedMsg for {} ",
                     self.options.ua_core_module, &desc.name
                 ))
                 .await?;
@@ -500,7 +529,7 @@ where
             };
             self.cg
                 .write_line(&format!(
-                    "const MSG_TYPE: {}::uasc::MsgType = {}::uasc::MsgType::{};",
+                    "const MSG_TYPE: {}::msg::uasc::MsgType = {}::msg::uasc::MsgType::{};",
                     self.options.ua_core_module, self.options.ua_core_module, msg_type
                 ))
                 .await?;

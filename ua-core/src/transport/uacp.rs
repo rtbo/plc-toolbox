@@ -54,10 +54,7 @@ impl binary::Decode for Header {
             b"ERR" => MsgType::Error,
             _ => return Err(binary::DecodingError::InvalidData),
         };
-        Ok(Header {
-            msg_type,
-            length,
-        })
+        Ok(Header { msg_type, length })
     }
 }
 

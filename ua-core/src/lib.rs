@@ -4,6 +4,5 @@ pub mod encoding;
 pub mod msg;
 pub mod transport;
 pub mod ua;
-pub mod uasc;
 //
 // pub use transport::Transport;
