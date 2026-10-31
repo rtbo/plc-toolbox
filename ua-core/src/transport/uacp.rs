@@ -1,11 +1,10 @@
 //! This module contains the implementation of UA Connection Protocol (UACP)
+use binary::{Decode, Encode};
 use bytes::{BufMut, BytesMut};
 use ua_macros::{DecodeBinary, EncodeBinary};
 
 use crate::encoding::binary::{self, DecodingError};
 use crate::ua;
-
-use binary::{Decode, Encode};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MsgType {
@@ -14,7 +13,7 @@ pub enum MsgType {
     Error,
 }
 
-pub trait Msg : binary::Encode + std::fmt::Debug {
+pub trait Msg: binary::Encode + std::fmt::Debug {
     fn msg_type(&self) -> MsgType;
     fn msg_encoded_len(&self) -> u32 {
         8 + self.encoded_len()
@@ -270,6 +269,14 @@ impl Uacp {
         }
     }
 
+    pub fn max_send_size(&self) -> u32 {
+        self.transport.max_send_size() as _
+    }
+
+    pub fn max_recv_size(&self) -> u32 {
+        self.transport.max_recv_size() as _
+    }
+
     pub fn transport_mut(&mut self) -> &mut super::tcp::Transport {
         &mut self.transport
     }
@@ -283,7 +290,9 @@ impl Uacp {
     where
         M: Msg,
     {
-        self.transport.send_msg_chunk(|buf| msg.msg_encode(buf)).await
+        self.transport
+            .send_msg_chunk(|buf| msg.msg_encode(buf))
+            .await
     }
 
     /// Buffers a chunk from an upper layer (e.g. secure channel) as-is (not flushed).
@@ -303,7 +312,7 @@ impl Uacp {
         let mut chunk = self.transport.recv_msg_chunk().await?;
         let ctx = &self.decoding_ctx;
         let header = match Header::decode(&mut chunk, ctx) {
-            Ok(header) =>  header,
+            Ok(header) => header,
             Err(DecodingError::BadMessageType) => {
                 // Not a UACP chunk, pass through
                 return Ok(Incoming::Chunk(chunk));
@@ -376,8 +385,8 @@ mod tests {
         assert_eq!(encoded.len(), value.msg_encoded_len() as usize);
 
         let mut remaining = encoded.clone();
-        let decoded =
-            T::msg_decode(&mut remaining, &Default::default()).expect("encoded value should decode");
+        let decoded = T::msg_decode(&mut remaining, &Default::default())
+            .expect("encoded value should decode");
         assert!(remaining.is_empty());
         assert_eq!(&decoded, value);
 

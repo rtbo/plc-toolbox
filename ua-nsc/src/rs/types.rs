@@ -568,7 +568,7 @@ where
         if is_msg_struct(fields) {
             self.cg
                 .start_block(&format!(
-                    "impl {}::msg::uasc::TypedMsg for {} ",
+                    "impl {}::msg::uasc::StaticMsg for {} ",
                     self.options.ua_core_module, &desc.name
                 ))
                 .await?;

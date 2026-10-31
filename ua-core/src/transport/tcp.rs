@@ -32,11 +32,11 @@ impl Transport {
         })
     }
 
-    fn max_send_size(&self) -> usize {
+    pub fn max_send_size(&self) -> usize {
         self.send_buf.capacity()
     }
 
-    fn max_recv_size(&self) -> usize {
+    pub fn max_recv_size(&self) -> usize {
         self.recv_buf.capacity()
     }
 

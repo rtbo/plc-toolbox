@@ -1,6 +1,8 @@
 pub mod secure_channel;
 pub mod tcp;
 
+pub use secure_channel::SecureChannel;
+
 // pub struct Client<T> {
 //     transport: Option<T>,
 // }

@@ -11,8 +11,18 @@ pub enum MsgType {
     Msg,
 }
 
-pub trait TypedMsg {
+pub trait Msg: std::fmt::Debug + binary::Encode {
+    fn msg_type(&self) -> MsgType;
+}
+
+pub trait StaticMsg: Msg + binary::Decode {
     const MSG_TYPE: MsgType;
+}
+
+impl<T: StaticMsg> Msg for T {
+    fn msg_type(&self) -> MsgType {
+        T::MSG_TYPE
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -25,14 +35,19 @@ pub enum IsFinal {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Header {
-    msg_type: MsgType,
-    is_final: IsFinal,
-    length: u32,
+    pub msg_type: MsgType,
+    pub is_final: IsFinal,
+    pub msg_size: u32,
+    pub secure_channel_id: u32,
+}
+
+impl Header {
+    pub const LEN: u32 = 12;
 }
 
 impl binary::Encode for Header {
     fn encoded_len(&self) -> u32 {
-        8
+        12
     }
 
     fn encode<B: binary::BufMut>(&self, buf: &mut B) {
@@ -42,7 +57,8 @@ impl binary::Encode for Header {
             MsgType::Msg => buf.put_slice(b"MSG"),
         }
         buf.put_u8(self.is_final as u8);
-        buf.put_u32_le(self.length);
+        buf.put_u32_le(self.msg_size);
+        buf.put_u32_le(self.secure_channel_id);
     }
 }
 
@@ -56,6 +72,7 @@ impl binary::Decode for Header {
         buf.copy_to_slice(&mut typ);
         let is_final = buf.get_u8();
         let length = buf.get_u32_le();
+        let secure_channel_id = buf.get_u32_le();
 
         let msg_type = match &typ {
             b"OPN" => MsgType::Open,
@@ -72,20 +89,36 @@ impl binary::Decode for Header {
         Ok(Header {
             msg_type,
             is_final,
-            length,
+            msg_size: length,
+            secure_channel_id,
         })
     }
 }
 
+/// Security header used for asymmetric algorightm negotiation (OpenSecureChannel)
+#[derive(Debug, Clone, PartialEq, Eq, Default, EncodeBinary, DecodeBinary)]
+pub struct AsymmetricSecurityHeader {
+    pub security_policy_uri: Option<String>,
+    pub sender_certificate: Option<Vec<u8>>,
+    pub receiver_certificate_thumbprint: Option<Vec<u8>>,
+}
+
+/// Security header used for symmetric algorightm negotiation (all except OpenSecureChannel)
 #[derive(Debug, Clone, PartialEq, Eq, EncodeBinary, DecodeBinary)]
-pub struct SecurityHeader {
-    security_policy_uri: Option<String>,
-    sender_certificate: Option<Vec<u8>>,
-    receiver_certificate_thumbprint: Option<Vec<u8>>,
+pub struct SymmetricSecurityHeader {
+    pub token_id: u32,
+}
+
+impl SymmetricSecurityHeader {
+    pub const LEN: u32 = 4;
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, EncodeBinary, DecodeBinary)]
 pub struct SequenceHeader {
-    sequence_number: u32,
-    request_id: u32,
+    pub sequence_number: u32,
+    pub request_id: u32,
+}
+
+impl SequenceHeader {
+    pub const LEN: u32 = 8;
 }

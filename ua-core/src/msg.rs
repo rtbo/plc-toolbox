@@ -15,32 +15,32 @@ pub trait DataTypeId {
 
     /// Construct the NodeID of the DataType for this type, provided the namespace index.
     /// The index must be retrieved from the server's NamespaceArray at runtime and isn't checked by this function.
-    fn datatype_node_id(namespace_index: u16) -> ua::NodeId {
-        ua::NodeId::Numeric(namespace_index, Self::DATATYPE_ID)
+    fn datatype_node_id(ns_index: u16) -> ua::NodeId {
+        ua::NodeId::Numeric(ns_index, Self::DATATYPE_ID)
     }
 }
 
 /// A trait that provides ID for a binary DataTypeEncoding.
-pub trait BinaryEncodingId: DataTypeId {
+pub trait BinaryEncodingId {
     /// The ID of the binary DataTypeEncoding Object for this type.
     const BINARY_ENCODING_ID: u32;
 
     /// Construct the NodeID of the DataTypeEncoding for this type, provided the namespace index.
     /// The index must be retrieved from the server's NamespaceArray at runtime and isn't checked by this function.
-    fn binary_encoding_node_id(namespace_index: u16) -> ua::NodeId {
-        ua::NodeId::Numeric(namespace_index, Self::BINARY_ENCODING_ID)
+    fn binary_encoding_node_id(ns_index: u16) -> ua::NodeId {
+        ua::NodeId::Numeric(ns_index, Self::BINARY_ENCODING_ID)
     }
 }
 
 /// A trait that provides ID for a XML DataTypeEncoding.
-pub trait XmlEncodingId: DataTypeId {
+pub trait XmlEncodingId {
     /// The ID of the XML DataTypeEncoding Object for this type.
     const XML_ENCODING_ID: u32;
 
     /// Construct the NodeID of the DataTypeEncoding for this type, provided the namespace index.
     /// The index must be retrieved from the server's NamespaceArray at runtime and isn't checked by this function.
-    fn xml_encoding_node_id(namespace_index: u16) -> ua::NodeId {
-        ua::NodeId::Numeric(namespace_index, Self::XML_ENCODING_ID)
+    fn xml_encoding_node_id(ns_index: u16) -> ua::NodeId {
+        ua::NodeId::Numeric(ns_index, Self::XML_ENCODING_ID)
     }
 }
 

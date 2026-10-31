@@ -1,5 +1,8 @@
 use ua_core::transport::tcp;
 use ua_core::transport::uacp::{self, Uacp};
+use ua_core::{AnySecurityPolicy, SecurityPolicyNone};
+
+use crate::SecureChannel;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct BufferConfig {
@@ -50,7 +53,9 @@ pub struct Config {
     pub buffer: BufferConfig,
 }
 
-pub struct TcpClient {}
+pub struct TcpClient {
+    sc: SecureChannel<AnySecurityPolicy>,
+}
 
 impl TcpClient {
     pub async fn connect(
@@ -69,6 +74,9 @@ impl TcpClient {
         uacp.transport_mut()
             .adjust_buffer_sizes(config.buffer.send_size, config.buffer.recv_size);
 
-        Ok(Self {})
+        let sp = AnySecurityPolicy::None(SecurityPolicyNone::new(uacp));
+        let sc = SecureChannel::open(sp, 1).await?;
+
+        Ok(Self { sc })
     }
 }
