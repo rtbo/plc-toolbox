@@ -1,6 +1,6 @@
 use crate::encoding::binary::Encode;
 use crate::msg::uasc::{self, AsymmetricSecurityHeader, SymmetricSecurityHeader};
-use crate::transport::Uacp;
+use crate::transport::{Uacp, tcp::SendBuffer};
 
 #[derive(Debug)]
 pub struct HeaderInfo {
@@ -43,7 +43,7 @@ pub trait SecurityPolicy: Sized {
         body_encode_fn: F,
     ) -> Result<(), crate::transport::Error>
     where
-        F: FnOnce(&mut bytes::BytesMut) -> ();
+        F: FnOnce(&mut SendBuffer<'_>);
 }
 
 #[derive(Debug)]
@@ -69,7 +69,7 @@ impl SecurityPolicy for SecurityPolicyNone {
         body_encode_fn: F,
     ) -> Result<(), crate::transport::Error>
     where
-        F: FnOnce(&mut bytes::BytesMut) -> (),
+        F: FnOnce(&mut SendBuffer<'_>),
     {
         let security_header = AsymmetricSecurityHeader {
             security_policy_uri: Some(self.uri().to_string()),
@@ -80,7 +80,7 @@ impl SecurityPolicy for SecurityPolicyNone {
         let (header, seq_header) = header_info.into_uasc(security_header.encoded_len());
 
         self.uacp
-            .send_chunk(|buf| {
+            .send_chunk(header.msg_size as usize, |buf| {
                 header.encode(buf);
                 security_header.encode(buf);
                 seq_header.encode(buf);
@@ -120,7 +120,7 @@ impl SecurityPolicy for AnySecurityPolicy {
         body_encode_fn: F,
     ) -> Result<(), crate::transport::Error>
     where
-        F: FnOnce(&mut bytes::BytesMut) -> (),
+        F: FnOnce(&mut SendBuffer<'_>),
     {
         match self {
             AnySecurityPolicy::None(policy) => {

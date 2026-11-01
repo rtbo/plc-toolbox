@@ -1,15 +1,21 @@
-use bytes::BytesMut;
+use bytes::{BufMut, BytesMut};
+use std::mem::MaybeUninit;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net;
 
 const HEADER_LEN: usize = 8;
+
+/// A bounded view into the unused capacity of a transport send buffer.
+pub type SendBuffer<'a> = &'a mut [MaybeUninit<u8>];
 
 /// A TCP transport for raw OPC UA message chunks (UACP or UACS).
 #[derive(Debug)]
 pub struct Transport {
     stream: net::TcpStream,
     send_buf: BytesMut,
+    send_buf_size: usize,
     recv_buf: BytesMut,
+    recv_buf_size: usize,
 }
 
 impl Transport {
@@ -28,55 +34,94 @@ impl Transport {
         Ok(Transport {
             stream,
             send_buf,
+            send_buf_size,
             recv_buf,
+            recv_buf_size,
         })
     }
 
     pub fn max_send_size(&self) -> usize {
-        self.send_buf.capacity()
+        self.send_buf_size
     }
 
     pub fn max_recv_size(&self) -> usize {
-        self.recv_buf.capacity()
+        self.recv_buf_size
     }
 
     pub fn adjust_buffer_sizes(&mut self, send_size: usize, recv_size: usize) {
         if send_size != self.send_buf.capacity() {
             self.send_buf = BytesMut::with_capacity(send_size);
+            self.send_buf_size = send_size;
         }
         if recv_size != self.recv_buf.capacity() {
             self.recv_buf = BytesMut::with_capacity(recv_size);
+            self.recv_buf_size = recv_size;
         }
     }
 
     /// Appends one chunk to the send buffer without sending it.
     ///
-    /// `write` must append exactly one complete chunk (UACP or UACS) directly to the
-    /// buffer, including its 8-byte header whose bytes 4..8 hold the total chunk length.
-    /// The transport does not interpret anything else, so the chunk may be encrypted.
-    /// If previously buffered chunks leave no room for the new one, they are flushed first.
-    /// On error, the buffer is left unchanged.
-    pub async fn send_msg_chunk<F>(&mut self, write: F) -> Result<(), super::Error>
+    /// `write` must append exactly `expected_size` bytes for one complete chunk (UACP or
+    /// UACS), including its 8-byte header whose bytes 4..8 hold the total chunk length.
+    /// The bounded view cannot grow the send buffer. If previously buffered chunks leave
+    /// no room for the new one, they are flushed first.
+    pub async fn send_msg_chunk<F>(
+        &mut self,
+        expected_size: usize,
+        write: F,
+    ) -> Result<(), super::Error>
     where
-        F: FnOnce(&mut BytesMut),
+        F: FnOnce(&mut SendBuffer<'_>),
     {
-        let start = self.send_buf.len();
-        write(&mut self.send_buf);
         let max = self.max_send_size();
+        if expected_size > max {
+            return Err(super::Error::MessageSize {
+                size: expected_size,
+                max,
+            });
+        }
+        if expected_size < HEADER_LEN {
+            return Err(super::Error::MessageSize {
+                size: expected_size,
+                max,
+            });
+        }
+
+        let mut start = self.send_buf.len();
+        if start > max || expected_size > max.saturating_sub(start) {
+            self.stream.write_all(&self.send_buf).await?;
+            self.send_buf.clear();
+            start = 0;
+        }
+        if self.send_buf.capacity().saturating_sub(start) < expected_size {
+            return Err(super::Error::MessageSize {
+                size: expected_size,
+                max,
+            });
+        }
+
+        let written = {
+            let spare = &mut self.send_buf.spare_capacity_mut()[..expected_size];
+            // Initialize the view so even a callback that shortens the slice directly
+            // cannot cause uninitialized bytes to be exposed when the buffer advances.
+            spare.fill(MaybeUninit::new(0));
+            let mut view: SendBuffer<'_> = spare;
+            write(&mut view);
+            expected_size - view.len()
+        };
+        // SAFETY: The entire exposed region was initialized above, and `written` is
+        // bounded by `expected_size`, which is within the send buffer's spare capacity.
+        unsafe {
+            self.send_buf.advance_mut(written);
+        }
         let size = self.send_buf.len() - start;
         let declared = match self.send_buf[start..].get(4..8) {
             Some(b) => u32::from_le_bytes(b.try_into().unwrap()) as usize,
             None => 0,
         };
-        if size < HEADER_LEN || size != declared || size > max {
+        if size != expected_size || size != declared {
             self.send_buf.truncate(start);
             return Err(super::Error::MessageSize { size, max });
-        }
-        if start > 0 && start + size > max {
-            // Send the previous chunks, then move the new one to the front of the buffer.
-            self.stream.write_all(&self.send_buf[..start]).await?;
-            self.send_buf.copy_within(start.., 0);
-            self.send_buf.truncate(size);
         }
         Ok(())
     }
@@ -123,6 +168,33 @@ impl Transport {
                 )));
             }
         }
+
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use bytes::{BufMut, BytesMut};
+
+    use super::SendBuffer;
+
+    #[test]
+    fn send_buffer_view_is_bounded_without_growing_storage() {
+        let mut buffer = BytesMut::with_capacity(8);
+        let capacity = buffer.capacity();
+
+        let written = {
+            let spare = &mut buffer.spare_capacity_mut()[..8];
+            let mut view: SendBuffer<'_> = spare;
+            view.put_slice(b"12345678");
+            8 - view.len()
+        };
+        unsafe {
+            buffer.advance_mut(written);
+        }
+
+        assert_eq!(&buffer[..], b"12345678");
+        assert_eq!(buffer.capacity(), capacity);
     }
 }

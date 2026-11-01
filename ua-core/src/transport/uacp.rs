@@ -1,6 +1,6 @@
 //! This module contains the implementation of UA Connection Protocol (UACP)
 use binary::{Decode, Encode};
-use bytes::{BufMut, BytesMut};
+use bytes::BufMut;
 use ua_macros::{DecodeBinary, EncodeBinary};
 
 use crate::encoding::binary::{self, DecodingError};
@@ -290,17 +290,22 @@ impl Uacp {
     where
         M: Msg,
     {
+        let expected_size = msg.msg_encoded_len() as usize;
         self.transport
-            .send_msg_chunk(|buf| msg.msg_encode(buf))
+            .send_msg_chunk(expected_size, |buf| msg.msg_encode(buf))
             .await
     }
 
     /// Buffers a chunk from an upper layer (e.g. secure channel) as-is (not flushed).
-    pub async fn send_chunk<F>(&mut self, write: F) -> Result<(), super::Error>
+    pub async fn send_chunk<F>(
+        &mut self,
+        expected_size: usize,
+        write: F,
+    ) -> Result<(), super::Error>
     where
-        F: FnOnce(&mut BytesMut),
+        F: FnOnce(&mut super::tcp::SendBuffer<'_>),
     {
-        self.transport.send_msg_chunk(write).await
+        self.transport.send_msg_chunk(expected_size, write).await
     }
 
     pub async fn flush(&mut self) -> Result<(), super::Error> {
