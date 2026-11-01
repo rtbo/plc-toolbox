@@ -16,6 +16,8 @@ pub struct Transport {
     send_buf_size: usize,
     recv_buf: BytesMut,
     recv_buf_size: usize,
+    recv_buf_start: usize,
+    recv_cached_size: Option<usize>,
 }
 
 impl Transport {
@@ -37,6 +39,8 @@ impl Transport {
             send_buf_size,
             recv_buf,
             recv_buf_size,
+            recv_buf_start: 0,
+            recv_cached_size: None,
         })
     }
 
@@ -56,6 +60,8 @@ impl Transport {
         if recv_size != self.recv_buf.capacity() {
             self.recv_buf = BytesMut::with_capacity(recv_size);
             self.recv_buf_size = recv_size;
+            self.recv_buf_start = 0;
+            self.recv_cached_size = None;
         }
     }
 
@@ -88,17 +94,12 @@ impl Transport {
         }
 
         let mut start = self.send_buf.len();
-        if start > max || expected_size > max.saturating_sub(start) {
+        if start > 0 && start + expected_size > max {
             self.stream.write_all(&self.send_buf).await?;
             self.send_buf.clear();
             start = 0;
         }
-        if self.send_buf.capacity().saturating_sub(start) < expected_size {
-            return Err(super::Error::MessageSize {
-                size: expected_size,
-                max,
-            });
-        }
+        debug_assert!(expected_size <= self.send_buf.capacity());
 
         let written = {
             let spare = &mut self.send_buf.spare_capacity_mut()[..expected_size];
@@ -138,21 +139,48 @@ impl Transport {
 
     /// Returns the next entire chunk as-is (header included).
     ///
-    /// Several chunks may be received at once; they are handed out one by one.
-    /// The returned buffer is split off without copying, so it can be decoded or
-    /// decrypted in place by the upper layers.
-    pub async fn recv_msg_chunk(&mut self) -> Result<BytesMut, super::Error> {
-        self.fill(HEADER_LEN).await?;
-        let size = u32::from_le_bytes(self.recv_buf[4..8].try_into().unwrap()) as usize;
+    /// The returned slice borrows the receive buffer and implements `bytes::Buf`.
+    /// Any bytes read beyond this chunk remain buffered for the next call.
+    pub async fn recv_msg_chunk(&mut self) -> Result<&[u8], super::Error> {
+        if self.recv_buf_start > 0 {
+            let remaining = self.recv_buf.len() - self.recv_buf_start;
+            self.recv_buf.copy_within(self.recv_buf_start.., 0);
+            self.recv_buf.truncate(remaining);
+            self.recv_buf_start = 0;
+        }
+
         let max_recv_size = self.max_recv_size();
-        if !(HEADER_LEN..=max_recv_size).contains(&size) {
+        let cached_size = self.recv_cached_size.take();
+        let size = if let Some(size) = cached_size {
+            size
+        } else {
+            self.fill(HEADER_LEN).await?;
+            u32::from_le_bytes(self.recv_buf[4..8].try_into().unwrap()) as usize
+        };
+        if !(HEADER_LEN..max_recv_size).contains(&size) {
             return Err(super::Error::MessageSize {
                 size,
                 max: max_recv_size,
             });
         }
         self.fill(size).await?;
-        Ok(self.recv_buf.split_to(size))
+
+        let next_start = size;
+        if self.recv_buf.len() - next_start >= HEADER_LEN {
+            let next_size = u32::from_le_bytes(
+                self.recv_buf[next_start + 4..next_start + 8]
+                    .try_into()
+                    .unwrap(),
+            ) as usize;
+            if (HEADER_LEN..max_recv_size).contains(&next_size)
+                && next_size <= max_recv_size.saturating_sub(size)
+            {
+                self.recv_cached_size = Some(next_size);
+            }
+        }
+
+        self.recv_buf_start = size;
+        Ok(&self.recv_buf[..size])
     }
 
     /// Reads from the socket until at least `n` bytes are available in `recv_buf`.
@@ -175,9 +203,13 @@ impl Transport {
 
 #[cfg(test)]
 mod tests {
-    use bytes::{BufMut, BytesMut};
+    use bytes::{Buf, BufMut, BytesMut};
+    use tokio::{
+        io::AsyncWriteExt,
+        net::{TcpListener, TcpStream},
+    };
 
-    use super::SendBuffer;
+    use super::{SendBuffer, Transport};
 
     #[test]
     fn send_buffer_view_is_bounded_without_growing_storage() {
@@ -196,5 +228,62 @@ mod tests {
 
         assert_eq!(&buffer[..], b"12345678");
         assert_eq!(buffer.capacity(), capacity);
+    }
+
+    #[tokio::test]
+    async fn receives_one_borrowed_chunk_and_keeps_the_next_buffered() {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let mut writer = TcpStream::connect(listener.local_addr().unwrap())
+            .await
+            .unwrap();
+        let (stream, _) = listener.accept().await.unwrap();
+        let mut transport = Transport {
+            stream,
+            send_buf: BytesMut::with_capacity(16),
+            send_buf_size: 16,
+            recv_buf: BytesMut::with_capacity(16),
+            recv_buf_size: 16,
+            recv_buf_start: 0,
+            recv_cached_size: None,
+        };
+        writer
+            .write_all(&[
+                b'M', b'S', b'G', b'F', 8, 0, 0, 0, b'M', b'S', b'G', b'F', 8, 0, 0, 0,
+            ])
+            .await
+            .unwrap();
+
+        {
+            let mut first = transport.recv_msg_chunk().await.unwrap();
+            assert_eq!(first.remaining(), 8);
+            assert_eq!(first.get_u32_le(), u32::from_le_bytes(*b"MSGF"));
+        }
+
+        let second = transport.recv_msg_chunk().await.unwrap();
+        assert_eq!(second, b"MSGF\x08\0\0\0");
+    }
+
+    #[tokio::test]
+    async fn rejects_chunk_equal_to_max_receive_size() {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let mut writer = TcpStream::connect(listener.local_addr().unwrap())
+            .await
+            .unwrap();
+        let (stream, _) = listener.accept().await.unwrap();
+        let mut transport = Transport {
+            stream,
+            send_buf: BytesMut::with_capacity(16),
+            send_buf_size: 16,
+            recv_buf: BytesMut::with_capacity(16),
+            recv_buf_size: 16,
+            recv_buf_start: 0,
+            recv_cached_size: None,
+        };
+        writer.write_all(b"MSGF\x10\0\0\0").await.unwrap();
+
+        assert!(matches!(
+            transport.recv_msg_chunk().await,
+            Err(super::super::Error::MessageSize { size: 16, max: 16 })
+        ));
     }
 }

@@ -237,11 +237,11 @@ impl Msg for AnyMsg {
 
 /// What the UACP layer hands to the layer above.
 #[derive(Debug)]
-pub enum Incoming {
+pub enum Incoming<'a> {
     /// A decoded UACP message.
     Uacp(AnyMsg),
     /// A chunk that is not UACP (e.g. a chunk of secure conversation message), passed through as-is.
-    Chunk(bytes::BytesMut),
+    Chunk(&'a [u8]),
 }
 
 /// Returns the UACP message type of a chunk, or `None` if it is not a UACP chunk.
@@ -312,18 +312,25 @@ impl Uacp {
         self.transport.flush().await
     }
 
+    pub async fn recv_chunk(&mut self) -> Result<&[u8], super::Error> {
+        self.transport.recv_msg_chunk().await
+    }
+
     /// Receives the next chunk: UACP messages are decoded, others are passed through.
-    pub async fn recv(&mut self) -> Result<Incoming, super::Error> {
+    pub async fn recv(&mut self) -> Result<Incoming<'_>, super::Error> {
         let mut chunk = self.transport.recv_msg_chunk().await?;
         let ctx = &self.decoding_ctx;
-        let header = match Header::decode(&mut chunk, ctx) {
-            Ok(header) => header,
-            Err(DecodingError::BadMessageType) => {
-                // Not a UACP chunk, pass through
-                return Ok(Incoming::Chunk(chunk));
-            }
-            Err(err) => {
-                return Err(super::Error::Decoding(err));
+        let header = {
+            let ck = chunk;
+            match Header::decode(&mut chunk, ctx) {
+                Ok(header) => header,
+                Err(DecodingError::BadMessageType) => {
+                    // Not a UACP chunk, pass through
+                    return Ok(Incoming::Chunk(ck));
+                }
+                Err(err) => {
+                    return Err(super::Error::Decoding(err));
+                }
             }
         };
         let msg = match header.msg_type {
