@@ -1,5 +1,6 @@
-use bytes::{BufMut, BytesMut};
 use std::mem::MaybeUninit;
+
+use bytes::{BufMut, BytesMut};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net;
 
@@ -204,10 +205,8 @@ impl Transport {
 #[cfg(test)]
 mod tests {
     use bytes::{Buf, BufMut, BytesMut};
-    use tokio::{
-        io::AsyncWriteExt,
-        net::{TcpListener, TcpStream},
-    };
+    use tokio::io::AsyncWriteExt;
+    use tokio::net::{TcpListener, TcpStream};
 
     use super::{SendBuffer, Transport};
 

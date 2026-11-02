@@ -258,15 +258,11 @@ pub fn msg_type(chunk: &[u8]) -> Option<MsgType> {
 #[derive(Debug)]
 pub struct Uacp {
     transport: super::tcp::Transport,
-    decoding_ctx: binary::DecodingCtx,
 }
 
 impl Uacp {
     pub fn new(transport: super::tcp::Transport) -> Self {
-        Self {
-            transport,
-            decoding_ctx: Default::default(),
-        }
+        Self { transport }
     }
 
     pub fn max_send_size(&self) -> u32 {
@@ -317,9 +313,8 @@ impl Uacp {
     }
 
     /// Receives the next chunk: UACP messages are decoded, others are passed through.
-    pub async fn recv(&mut self) -> Result<Incoming<'_>, super::Error> {
+    pub async fn recv(&mut self, ctx: &binary::DecodingCtx) -> Result<Incoming<'_>, super::Error> {
         let mut chunk = self.transport.recv_msg_chunk().await?;
-        let ctx = &self.decoding_ctx;
         let header = {
             let ck = chunk;
             match Header::decode(&mut chunk, ctx) {
@@ -352,12 +347,12 @@ impl Uacp {
 
     /// Receives a UACP message of a specific type (e.g. during the handshake).
     /// Any other chunk is a `BadMessageType`
-    pub async fn recv_typed<M>(&mut self) -> Result<M, super::Error>
+    pub async fn recv_typed<M>(&mut self, ctx: &binary::DecodingCtx) -> Result<M, super::Error>
     where
         M: Msg,
     {
         let mut chunk = self.transport.recv_msg_chunk().await?;
-        Ok(M::msg_decode(&mut chunk, &self.decoding_ctx)?)
+        Ok(M::msg_decode(&mut chunk, ctx)?)
     }
 }
 

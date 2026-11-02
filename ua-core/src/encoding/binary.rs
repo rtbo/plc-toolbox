@@ -47,9 +47,17 @@ pub enum DecodingError {
     DataTypeIdUnknown,
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct DecodingCtx {
     ns_type_lookups: Vec<Option<ua::extension_object::BinaryDecodingFn>>,
+}
+
+impl Default for DecodingCtx {
+    fn default() -> Self {
+        let mut ctx = Self::new();
+        ctx.register_ns(0, ua::decode_extension_object);
+        ctx
+    }
 }
 
 impl DecodingCtx {

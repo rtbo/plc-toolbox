@@ -1,100 +1,69 @@
-use crate::encoding::binary::Encode;
 use crate::msg::uasc::{self, AsymmetricSecurityHeader, SymmetricSecurityHeader};
-use crate::transport::{Uacp, tcp::SendBuffer};
-
-#[derive(Debug)]
-pub struct HeaderInfo {
-    pub msg_type: uasc::MsgType,
-    pub is_final: uasc::IsFinal,
-    pub body_len: u32,
-    pub channel_id: u32,
-    pub seq_number: u32,
-    pub request_id: u32,
-}
-
-impl HeaderInfo {
-    fn into_uasc(self, security_header_len: u32) -> (uasc::Header, uasc::SequenceHeader) {
-        let header = uasc::Header {
-            msg_type: self.msg_type,
-            is_final: self.is_final,
-            msg_size: uasc::Header::LEN
-                + security_header_len
-                + uasc::SequenceHeader::LEN
-                + self.body_len,
-            secure_channel_id: self.channel_id,
-        };
-        let seq_header = uasc::SequenceHeader {
-            sequence_number: self.seq_number,
-            request_id: self.request_id,
-        };
-        (header, seq_header)
-    }
-}
+use crate::transport::tcp::SendBuffer;
+use crate::transport::{self, Uacp};
 
 #[allow(async_fn_in_trait)]
 pub trait SecurityPolicy: Sized {
     fn uri(&self) -> &'static str;
 
-    fn max_body_size(&self) -> u32;
+    fn max_body_size(&self, max_send_size: u32) -> u32;
+
+    fn asymmetric_security_header(&self) -> AsymmetricSecurityHeader;
 
     async fn send_msg_chunk<F>(
         &mut self,
-        header_info: HeaderInfo,
-        body_encode_fn: F,
+        uacp: &mut Uacp,
+        msg_size: u32,
+        encode_fn: F,
     ) -> Result<(), crate::transport::Error>
     where
         F: FnOnce(&mut SendBuffer<'_>);
+
+    async fn recv_msg_chunk<'a>(
+        &'a mut self,
+        uacp: &'a mut Uacp,
+    ) -> Result<&'a [u8], transport::Error>;
 }
 
 #[derive(Debug)]
-pub struct SecurityPolicyNone {
-    uacp: Uacp,
-}
+pub struct SecurityPolicyNone;
 
 impl SecurityPolicy for SecurityPolicyNone {
     fn uri(&self) -> &'static str {
         "http://opcfoundation.org/UA/SecurityPolicy#None"
     }
 
-    fn max_body_size(&self) -> u32 {
-        self.uacp.max_send_size()
-            - uasc::Header::LEN
-            - SymmetricSecurityHeader::LEN
-            - uasc::SequenceHeader::LEN
+    fn max_body_size(&self, max_send_size: u32) -> u32 {
+        max_send_size - uasc::Header::LEN - SymmetricSecurityHeader::LEN - uasc::SequenceHeader::LEN
+    }
+
+    fn asymmetric_security_header(&self) -> AsymmetricSecurityHeader {
+        AsymmetricSecurityHeader {
+            security_policy_uri: Some(self.uri().to_string()),
+            sender_certificate: None,
+            receiver_certificate_thumbprint: None,
+        }
     }
 
     async fn send_msg_chunk<F>(
         &mut self,
-        header_info: HeaderInfo,
-        body_encode_fn: F,
+        uacp: &mut Uacp,
+        chunk_size: u32,
+        encode_fn: F,
     ) -> Result<(), crate::transport::Error>
     where
         F: FnOnce(&mut SendBuffer<'_>),
     {
-        let security_header = AsymmetricSecurityHeader {
-            security_policy_uri: Some(self.uri().to_string()),
-            sender_certificate: None,
-            receiver_certificate_thumbprint: None,
-        };
-
-        let (header, seq_header) = header_info.into_uasc(security_header.encoded_len());
-
-        self.uacp
-            .send_chunk(header.msg_size as usize, |buf| {
-                header.encode(buf);
-                security_header.encode(buf);
-                seq_header.encode(buf);
-                body_encode_fn(buf);
-            })
-            .await?;
-
+        uacp.send_chunk(chunk_size as usize, encode_fn).await?;
         Ok(())
     }
-}
 
-impl SecurityPolicyNone {
-    pub fn new(uacp: Uacp) -> Self {
-        Self { uacp }
+    async fn recv_msg_chunk<'a>(
+        &'a mut self,
+        uacp: &'a mut Uacp,
+    ) -> Result<&'a [u8], transport::Error> {
+        let buf = uacp.recv_chunk().await?;
+        Ok(buf)
     }
 }
 
@@ -109,23 +78,38 @@ impl SecurityPolicy for AnySecurityPolicy {
             AnySecurityPolicy::None(policy) => policy.uri(),
         }
     }
-    fn max_body_size(&self) -> u32 {
+    fn max_body_size(&self, max_send_size: u32) -> u32 {
         match self {
-            AnySecurityPolicy::None(policy) => policy.max_body_size(),
+            AnySecurityPolicy::None(policy) => policy.max_body_size(max_send_size),
+        }
+    }
+    fn asymmetric_security_header(&self) -> AsymmetricSecurityHeader {
+        match self {
+            AnySecurityPolicy::None(policy) => policy.asymmetric_security_header(),
         }
     }
     async fn send_msg_chunk<F>(
         &mut self,
-        header_info: HeaderInfo,
-        body_encode_fn: F,
+        uacp: &mut Uacp,
+        msg_size: u32,
+        encode_fn: F,
     ) -> Result<(), crate::transport::Error>
     where
         F: FnOnce(&mut SendBuffer<'_>),
     {
         match self {
             AnySecurityPolicy::None(policy) => {
-                policy.send_msg_chunk(header_info, body_encode_fn).await
+                policy.send_msg_chunk(uacp, msg_size, encode_fn).await
             }
+        }
+    }
+
+    async fn recv_msg_chunk<'a>(
+        &'a mut self,
+        uacp: &'a mut Uacp,
+    ) -> Result<&'a [u8], transport::Error> {
+        match self {
+            AnySecurityPolicy::None(policy) => policy.recv_msg_chunk(uacp).await,
         }
     }
 }
