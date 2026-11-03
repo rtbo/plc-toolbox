@@ -1,6 +1,7 @@
 use bytes::{Buf, BufMut};
 
 use crate::encoding::binary;
+use crate::ua;
 
 /// OPC/UA DateTime: number of 100ns intervals since 1601-01-01T00:00:00Z.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -24,10 +25,7 @@ impl binary::Encode for DateTime {
 }
 
 impl binary::Decode for DateTime {
-    fn decode<B: Buf>(
-        buf: &mut B,
-        _ctx: &binary::DecodingCtx,
-    ) -> Result<Self, binary::DecodingError> {
+    fn decode<B: Buf>(buf: &mut B, _ctx: &binary::DecodingCtx) -> Result<Self, ua::StatusCode> {
         binary::check_remaining(buf, 8)?;
         Ok(DateTime::from_timestamp(buf.get_i64_le()))
     }

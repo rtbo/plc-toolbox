@@ -1,4 +1,5 @@
 use crate::encoding::binary;
+use crate::ua;
 
 impl<T> binary::Encode for &[T]
 where
@@ -80,14 +81,14 @@ where
     fn decode<B: bytes::Buf>(
         buf: &mut B,
         ctx: &binary::DecodingCtx,
-    ) -> Result<Self, binary::DecodingError> {
+    ) -> Result<Self, ua::StatusCode> {
         binary::check_remaining(buf, 4)?;
         let len = buf.get_i32_le();
         if len == -1 {
             return Ok(Vec::new());
         }
         if len < 0 {
-            return Err(binary::DecodingError::InvalidLengthPrefix);
+            return Err(ua::StatusCode::BadDecodingError);
         }
         T::decode_vec(buf, len as usize, ctx)
     }
@@ -100,14 +101,14 @@ where
     fn decode<B: bytes::Buf>(
         buf: &mut B,
         ctx: &binary::DecodingCtx,
-    ) -> Result<Self, binary::DecodingError> {
+    ) -> Result<Self, ua::StatusCode> {
         binary::check_remaining(buf, 4)?;
         let len = buf.get_i32_le();
         if len == -1 {
             return Ok(None);
         }
         if len < 0 {
-            return Err(binary::DecodingError::InvalidLengthPrefix);
+            return Err(ua::StatusCode::BadDecodingError);
         }
         let vec = T::decode_vec(buf, len as usize, ctx)?;
         Ok(Some(vec))

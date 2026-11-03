@@ -1,5 +1,4 @@
-use crate::encoding::binary::{self, DecodingError};
-use crate::transport;
+use crate::encoding::binary;
 
 include!(concat!(env!("OUT_DIR"), "/status_code.rs"));
 
@@ -34,24 +33,6 @@ impl std::fmt::Display for StatusCode {
 
 impl std::error::Error for StatusCode {}
 
-impl From<transport::Error> for StatusCode {
-    fn from(value: transport::Error) -> Self {
-        match value {
-            transport::Error::Io(_) => StatusCode::BadCommunicationError,
-            transport::Error::Ua(code) => code,
-            transport::Error::Decoding(DecodingError::BadMessageType) => {
-                StatusCode::BadTcpMessageTypeInvalid
-            }
-            transport::Error::Decoding(DecodingError::NotEnoughData) => {
-                StatusCode::BadEncodingLimitsExceeded
-            }
-            transport::Error::Decoding(_) => StatusCode::BadDataEncodingInvalid,
-            transport::Error::UnsupportedProtocol(_) => StatusCode::BadProtocolVersionUnsupported,
-            transport::Error::MessageSize { .. } => StatusCode::BadEncodingLimitsExceeded,
-        }
-    }
-}
-
 impl binary::Encode for StatusCode {
     fn encoded_len(&self) -> u32 {
         4
@@ -63,12 +44,9 @@ impl binary::Encode for StatusCode {
 }
 
 impl binary::Decode for StatusCode {
-    fn decode<B: bytes::Buf>(
-        buf: &mut B,
-        _ctx: &binary::DecodingCtx,
-    ) -> Result<Self, binary::DecodingError> {
+    fn decode<B: bytes::Buf>(buf: &mut B, _ctx: &binary::DecodingCtx) -> Result<Self, StatusCode> {
         binary::check_remaining(buf, 4)?;
         let code = buf.get_u32_le();
-        Self::try_from(code).map_err(|_| binary::DecodingError::InvalidData)
+        Self::try_from(code).map_err(|_| StatusCode::BadDecodingError)
     }
 }

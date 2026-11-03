@@ -4,6 +4,8 @@ use bytes::{BufMut, BytesMut};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net;
 
+use crate::ua;
+
 const HEADER_LEN: usize = 8;
 
 /// A bounded view into the unused capacity of a transport send buffer.
@@ -26,12 +28,14 @@ impl Transport {
         endpoint: &str,
         send_buf_size: usize,
         recv_buf_size: usize,
-    ) -> Result<Self, super::Error> {
+    ) -> Result<Self, ua::StatusCode> {
         if !endpoint.starts_with("opc.tcp://") {
-            return Err(super::Error::UnsupportedProtocol(endpoint.to_string()));
+            return Err(ua::StatusCode::BadInvalidArgument);
         }
         let endpoint = &endpoint[10..]; // Remove "opc.tcp://"
-        let stream = net::TcpStream::connect(endpoint).await?;
+        let stream = net::TcpStream::connect(endpoint)
+            .await
+            .map_err(|_| ua::StatusCode::BadConnectionRejected)?;
         let send_buf = BytesMut::with_capacity(send_buf_size);
         let recv_buf = BytesMut::with_capacity(recv_buf_size);
         Ok(Transport {
@@ -76,27 +80,24 @@ impl Transport {
         &mut self,
         expected_size: usize,
         write: F,
-    ) -> Result<(), super::Error>
+    ) -> Result<(), ua::StatusCode>
     where
         F: FnOnce(&mut SendBuffer<'_>),
     {
         let max = self.max_send_size();
         if expected_size > max {
-            return Err(super::Error::MessageSize {
-                size: expected_size,
-                max,
-            });
+            return Err(ua::StatusCode::BadEncodingLimitsExceeded);
         }
         if expected_size < HEADER_LEN {
-            return Err(super::Error::MessageSize {
-                size: expected_size,
-                max,
-            });
+            return Err(ua::StatusCode::BadEncodingError);
         }
 
         let mut start = self.send_buf.len();
         if start > 0 && start + expected_size > max {
-            self.stream.write_all(&self.send_buf).await?;
+            self.stream
+                .write_all(&self.send_buf)
+                .await
+                .map_err(|_| ua::StatusCode::BadConnectionClosed)?;
             self.send_buf.clear();
             start = 0;
         }
@@ -123,18 +124,24 @@ impl Transport {
         };
         if size != expected_size || size != declared {
             self.send_buf.truncate(start);
-            return Err(super::Error::MessageSize { size, max });
+            return Err(ua::StatusCode::BadEncodingError);
         }
         Ok(())
     }
 
     /// Sends all buffered chunks.
-    pub async fn flush(&mut self) -> Result<(), super::Error> {
+    pub async fn flush(&mut self) -> Result<(), ua::StatusCode> {
         if !self.send_buf.is_empty() {
-            self.stream.write_all(&self.send_buf).await?;
+            self.stream
+                .write_all(&self.send_buf)
+                .await
+                .map_err(|_| ua::StatusCode::BadConnectionClosed)?;
             self.send_buf.clear();
         }
-        self.stream.flush().await?;
+        self.stream
+            .flush()
+            .await
+            .map_err(|_| ua::StatusCode::BadConnectionClosed)?;
         Ok(())
     }
 
@@ -142,7 +149,7 @@ impl Transport {
     ///
     /// The returned slice borrows the receive buffer and implements `bytes::Buf`.
     /// Any bytes read beyond this chunk remain buffered for the next call.
-    pub async fn recv_msg_chunk(&mut self) -> Result<&[u8], super::Error> {
+    pub async fn recv_msg_chunk(&mut self) -> Result<&[u8], ua::StatusCode> {
         if self.recv_buf_start > 0 {
             let remaining = self.recv_buf.len() - self.recv_buf_start;
             self.recv_buf.copy_within(self.recv_buf_start.., 0);
@@ -159,10 +166,7 @@ impl Transport {
             u32::from_le_bytes(self.recv_buf[4..8].try_into().unwrap()) as usize
         };
         if !(HEADER_LEN..max_recv_size).contains(&size) {
-            return Err(super::Error::MessageSize {
-                size,
-                max: max_recv_size,
-            });
+            return Err(ua::StatusCode::BadEncodingLimitsExceeded);
         }
         self.fill(size).await?;
 
@@ -185,16 +189,19 @@ impl Transport {
     }
 
     /// Reads from the socket until at least `n` bytes are available in `recv_buf`.
-    async fn fill(&mut self, n: usize) -> Result<(), super::Error> {
+    async fn fill(&mut self, n: usize) -> Result<(), ua::StatusCode> {
         // No allocation is done if n <= self.max_recv_size()
         self.recv_buf
             .reserve(self.max_recv_size().saturating_sub(self.recv_buf.len()));
         while self.recv_buf.len() < n {
-            if self.stream.read_buf(&mut self.recv_buf).await? == 0 {
-                return Err(super::Error::Io(std::io::Error::new(
-                    std::io::ErrorKind::UnexpectedEof,
-                    "Connection closed",
-                )));
+            if self
+                .stream
+                .read_buf(&mut self.recv_buf)
+                .await
+                .map_err(|_| ua::StatusCode::BadCommunicationError)?
+                == 0
+            {
+                return Err(ua::StatusCode::BadConnectionClosed);
             }
         }
 
@@ -209,6 +216,7 @@ mod tests {
     use tokio::net::{TcpListener, TcpStream};
 
     use super::{SendBuffer, Transport};
+    use crate::ua;
 
     #[test]
     fn send_buffer_view_is_bounded_without_growing_storage() {
@@ -282,7 +290,7 @@ mod tests {
 
         assert!(matches!(
             transport.recv_msg_chunk().await,
-            Err(super::super::Error::MessageSize { size: 16, max: 16 })
+            Err(ua::StatusCode::BadEncodingLimitsExceeded)
         ));
     }
 }

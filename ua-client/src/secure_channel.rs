@@ -2,18 +2,6 @@ use ua_core::encoding::binary::{self, Decode, Encode};
 use ua_core::msg::{self, BinaryEncodingId, uasc};
 use ua_core::{SecurityPolicy, SecurityPolicyNone, transport, ua};
 
-#[derive(Debug, thiserror::Error)]
-pub enum Error {
-    #[error("Transport error: {0}")]
-    Transport(#[from] ua_core::transport::Error),
-
-    #[error("Decode error: {0}")]
-    Decode(#[from] binary::DecodingError),
-
-    #[error("Status code: {0}")]
-    StatusCode(#[from] ua::StatusCode),
-}
-
 #[derive(Debug)]
 pub struct SecureChannel<P: SecurityPolicy = SecurityPolicyNone> {
     uacp: transport::Uacp,
@@ -31,7 +19,7 @@ impl<P: SecurityPolicy> SecureChannel<P> {
         request_id: u32,
         msg: ua::OpenSecureChannelRequest,
         decoding_ctx: &binary::DecodingCtx,
-    ) -> Result<Self, Error> {
+    ) -> Result<Self, ua::StatusCode> {
         let mut sc = Self {
             uacp,
             security_policy,
@@ -48,19 +36,19 @@ impl<P: SecurityPolicy> SecureChannel<P> {
         let mut recv_buf = sc.security_policy.recv_msg_chunk(&mut sc.uacp).await?;
         let header = uasc::Header::decode(&mut recv_buf, decoding_ctx)?;
         if header.msg_type != uasc::MsgType::Open || header.is_final != uasc::IsFinal::Final {
-            return Err(binary::DecodingError::InvalidData.into());
+            return Err(ua::StatusCode::BadDecodingError);
         }
         let security_header = uasc::AsymmetricSecurityHeader::decode(&mut recv_buf, decoding_ctx)?;
         if security_header.security_policy_uri.as_deref() != Some(uri) {
-            return Err(binary::DecodingError::InvalidData.into());
+            return Err(ua::StatusCode::BadSecurityChecksFailed);
         }
         let seq_header = uasc::SequenceHeader::decode(&mut recv_buf, decoding_ctx)?;
         if seq_header.request_id != request_id {
-            return Err(binary::DecodingError::InvalidData.into());
+            return Err(ua::StatusCode::BadDecodingError);
         }
         let encoding_node_id = ua::NodeId::decode(&mut recv_buf, decoding_ctx)?;
         if encoding_node_id != ua::OpenSecureChannelResponse::binary_encoding_node_id(0) {
-            return Err(binary::DecodingError::InvalidData.into());
+            return Err(ua::StatusCode::BadDecodingError);
         }
         let rsp = ua::OpenSecureChannelResponse::decode(&mut recv_buf, decoding_ctx)?;
 
@@ -74,7 +62,7 @@ impl<P: SecurityPolicy> SecureChannel<P> {
         &mut self,
         msg: ua::OpenSecureChannelRequest,
         request_id: u32,
-    ) -> Result<(), ua_core::transport::Error> {
+    ) -> Result<(), ua::StatusCode> {
         let encoding_node_id = ua::OpenSecureChannelRequest::binary_encoding_node_id(0);
         let body_len = encoding_node_id.encoded_len() + msg.encoded_len();
 
@@ -110,7 +98,12 @@ impl<P: SecurityPolicy> SecureChannel<P> {
         Ok(())
     }
 
-    pub async fn send_msg<M>(&mut self, ns_index: u16, msg: M, request_id: u32) -> Result<(), Error>
+    pub async fn send_msg<M>(
+        &mut self,
+        ns_index: u16,
+        msg: M,
+        request_id: u32,
+    ) -> Result<(), ua::StatusCode>
     where
         M: binary::Encode + msg::BinaryEncodingId,
     {
@@ -155,21 +148,21 @@ impl<P: SecurityPolicy> SecureChannel<P> {
     pub async fn recv_msg(
         &mut self,
         decoding_ctx: &binary::DecodingCtx,
-    ) -> Result<(ua::NodeId, &[u8]), Error> {
+    ) -> Result<(ua::NodeId, &[u8]), ua::StatusCode> {
         let mut recv_buf = self.security_policy.recv_msg_chunk(&mut self.uacp).await?;
 
         let header = uasc::Header::decode(&mut recv_buf, decoding_ctx)?;
         if header.msg_type != uasc::MsgType::Open || header.is_final != uasc::IsFinal::Final {
-            return Err(binary::DecodingError::InvalidData.into());
+            return Err(ua::StatusCode::BadDecodingError);
         }
         let security_header = uasc::SymmetricSecurityHeader::decode(&mut recv_buf, decoding_ctx)?;
         if security_header.token_id != self.token_id {
-            return Err(ua::StatusCode::BadSecureChannelTokenUnknown.into());
+            return Err(ua::StatusCode::BadSecureChannelTokenUnknown);
         }
 
         let seq_header = uasc::SequenceHeader::decode(&mut recv_buf, decoding_ctx)?;
         if seq_header.sequence_number != self.srv_sequence_number + 1 {
-            return Err(ua::StatusCode::BadSequenceNumberInvalid.into());
+            return Err(ua::StatusCode::BadSequenceNumberInvalid);
         }
         self.srv_sequence_number = seq_header.sequence_number;
 

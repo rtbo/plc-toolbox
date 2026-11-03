@@ -114,7 +114,7 @@ pub trait Msg:
 //     fn decode<B: bytes::Buf>(
 //         buf: &mut B,
 //         _ctx: &binary::DecodingCtx,
-//     ) -> Result<Self, binary::DecodingError> {
+//     ) -> Result<Self, ua::StatusCode> {
 //         let mut msg_type_bytes = [0u8; 3];
 //         buf.copy_to_slice(&mut msg_type_bytes);
 //         let msg_type = match &msg_type_bytes {
@@ -125,14 +125,14 @@ pub trait Msg:
 //             b"OPN" => Type::Open,
 //             b"CLO" => Type::Close,
 //             b"MSG" => Type::Message,
-//             _ => return Err(binary::DecodingError::BadMessageType),
+//             _ => return Err(ua::StatusCode::BadMessageType),
 //         };
 //         let is_final_byte = buf.get_u8();
 //         let is_final = match is_final_byte {
 //             b'C' => IsFinal::Continue,
 //             b'F' => IsFinal::Final,
 //             b'A' => IsFinal::Abort,
-//             _ => return Err(binary::DecodingError::InvalidData),
+//             _ => return Err(ua::StatusCode::InvalidData),
 //         };
 //         let msg_size = buf.get_u32();
 //         Ok(Self {

@@ -202,7 +202,7 @@ impl binary::Decode for NodeId {
     fn decode<B: bytes::Buf>(
         buf: &mut B,
         ctx: &binary::DecodingCtx,
-    ) -> Result<Self, binary::DecodingError> {
+    ) -> Result<Self, ua::StatusCode> {
         let (nodeid, _) = nodeid_decode(buf, ctx)?;
         Ok(nodeid)
     }
@@ -256,7 +256,7 @@ pub(super) fn nodeid_encode<B: BufMut>(node_id: &NodeId, buf: &mut B, flags: u8)
 pub(super) fn nodeid_decode<B: bytes::Buf>(
     buf: &mut B,
     ctx: &binary::DecodingCtx,
-) -> Result<(NodeId, u8), binary::DecodingError> {
+) -> Result<(NodeId, u8), ua::StatusCode> {
     let type_byte = buf.get_u8();
     let flags = type_byte & 0xF0;
     let node_id_type = type_byte & 0x0F;
@@ -291,7 +291,7 @@ pub(super) fn nodeid_decode<B: bytes::Buf>(
             let identifier = Vec::<u8>::decode(buf, ctx)?;
             Ok((NodeId::Opaque(namespace_index, identifier), flags))
         }
-        _ => Err(binary::DecodingError::InvalidData),
+        _ => Err(ua::StatusCode::BadDecodingError),
     }
 }
 

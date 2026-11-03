@@ -1,6 +1,7 @@
 use bytes::{Buf, BufMut};
 
 use crate::encoding::binary;
+use crate::ua;
 
 pub type Double = f64;
 
@@ -19,10 +20,7 @@ impl binary::Encode for Double {
 impl binary::Decode for Double {
     binary::repr_decode_methods!();
 
-    fn decode<B: Buf>(
-        buf: &mut B,
-        _ctx: &binary::DecodingCtx,
-    ) -> Result<Self, binary::DecodingError> {
+    fn decode<B: Buf>(buf: &mut B, _ctx: &binary::DecodingCtx) -> Result<Self, ua::StatusCode> {
         binary::check_remaining(buf, 8)?;
         let val = buf.get_f64_le();
         Ok(val)

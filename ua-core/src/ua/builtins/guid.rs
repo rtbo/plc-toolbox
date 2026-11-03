@@ -1,6 +1,7 @@
 use std::fmt;
 
 use crate::encoding::binary;
+use crate::ua;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub struct Guid {
@@ -122,7 +123,7 @@ impl binary::Decode for Guid {
     fn decode<B: bytes::Buf>(
         buf: &mut B,
         _ctx: &binary::DecodingCtx,
-    ) -> Result<Self, binary::DecodingError> {
+    ) -> Result<Self, ua::StatusCode> {
         binary::check_remaining(buf, 16)?;
         let data1 = buf.get_u32_le();
         let data2 = buf.get_u16_le();

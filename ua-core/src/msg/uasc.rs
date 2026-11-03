@@ -3,6 +3,7 @@
 use ua_macros::{DecodeBinary, EncodeBinary};
 
 use crate::encoding::binary;
+use crate::ua;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MsgType {
@@ -66,7 +67,7 @@ impl binary::Decode for Header {
     fn decode<B: binary::Buf>(
         buf: &mut B,
         _ctx: &binary::DecodingCtx,
-    ) -> Result<Self, binary::DecodingError> {
+    ) -> Result<Self, ua::StatusCode> {
         binary::check_remaining(buf, 8)?;
         let mut typ: [u8; 3] = [0u8; 3];
         buf.copy_to_slice(&mut typ);
@@ -78,13 +79,13 @@ impl binary::Decode for Header {
             b"OPN" => MsgType::Open,
             b"CLO" => MsgType::Close,
             b"MSG" => MsgType::Msg,
-            _ => return Err(binary::DecodingError::InvalidData),
+            _ => return Err(ua::StatusCode::BadTcpMessageTypeInvalid),
         };
         let is_final = match is_final {
             b'C' => IsFinal::Continue,
             b'F' => IsFinal::Final,
             b'A' => IsFinal::Abort,
-            _ => return Err(binary::DecodingError::InvalidData),
+            _ => return Err(ua::StatusCode::BadDecodingError),
         };
         Ok(Header {
             msg_type,

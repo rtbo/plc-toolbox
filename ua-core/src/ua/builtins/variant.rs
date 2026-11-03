@@ -130,7 +130,7 @@ impl binary::Decode for Variant {
     fn decode<B: bytes::Buf>(
         buf: &mut B,
         ctx: &binary::DecodingCtx,
-    ) -> Result<Self, binary::DecodingError> {
+    ) -> Result<Self, ua::StatusCode> {
         let encoded_mask = buf.get_u8();
         let builtin_typeid = encoded_mask & 0x3F;
         let is_array = (encoded_mask & 0x40) != 0;
@@ -275,7 +275,7 @@ impl binary::Decode for Variant {
                 buf,
                 ctx,
             )?))),
-            _ => Err(binary::DecodingError::InvalidData),
+            _ => Err(ua::StatusCode::BadDecodingError),
         }
     }
 }
@@ -321,7 +321,7 @@ fn decode_value<T: binary::Decode, B: bytes::Buf>(
     has_multidim: bool,
     buf: &mut B,
     ctx: &binary::DecodingCtx,
-) -> Result<Value<T>, binary::DecodingError> {
+) -> Result<Value<T>, ua::StatusCode> {
     match (is_array, has_multidim) {
         (true, true) => {
             let values: Vec<T> = binary::Decode::decode(buf, ctx)?;
@@ -333,7 +333,7 @@ fn decode_value<T: binary::Decode, B: bytes::Buf>(
             Ok(Value::Array(values))
         }
         (false, true) => {
-            return Err(binary::DecodingError::InvalidData);
+            return Err(ua::StatusCode::BadDecodingError);
         }
         (false, false) => {
             let value: T = binary::Decode::decode(buf, ctx)?;

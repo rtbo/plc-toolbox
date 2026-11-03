@@ -175,7 +175,7 @@ impl binary::Decode for ExpandedNodeId {
     fn decode<B: bytes::Buf>(
         buf: &mut B,
         ctx: &binary::DecodingCtx,
-    ) -> Result<Self, binary::DecodingError> {
+    ) -> Result<Self, ua::StatusCode> {
         let (nodeid, flags) = nodeid_decode(buf, ctx)?;
         let mut expanded_nodeid: ExpandedNodeId = nodeid.into();
         if flags & 0x80 != 0 {

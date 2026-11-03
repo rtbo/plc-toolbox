@@ -1,6 +1,7 @@
 use bytes::{Buf, BufMut};
 
 use crate::encoding::binary;
+use crate::ua;
 
 /// Boolean data type, representing a true or false value.
 /// Type node Id: `i=1`
@@ -17,10 +18,7 @@ impl binary::Encode for Boolean {
 }
 
 impl binary::Decode for Boolean {
-    fn decode<B: Buf>(
-        buf: &mut B,
-        _ctx: &binary::DecodingCtx,
-    ) -> Result<Self, binary::DecodingError> {
+    fn decode<B: Buf>(buf: &mut B, _ctx: &binary::DecodingCtx) -> Result<Self, ua::StatusCode> {
         binary::check_remaining(buf, 1)?;
         let val = buf.get_u8();
         Ok(val != 0)

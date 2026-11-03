@@ -1,5 +1,4 @@
 pub use bytes::{Buf, BufMut};
-use thiserror::Error;
 
 pub trait Encode {
     fn encoded_len(&self) -> u32;
@@ -24,27 +23,6 @@ pub trait Encode {
             item.encode(buf);
         }
     }
-}
-
-#[derive(Debug, Clone, Error)]
-pub enum DecodingError {
-    #[error("Not enough data to decode the value")]
-    NotEnoughData,
-
-    #[error("The message type is invalid")]
-    BadMessageType,
-
-    #[error("Not UTF-8 data")]
-    NotUtf8(#[from] std::string::FromUtf8Error),
-
-    #[error("Invalid data on the stream")]
-    InvalidData,
-
-    #[error("Invalid length prefix")]
-    InvalidLengthPrefix,
-
-    #[error("Unknown data type ID")]
-    DataTypeIdUnknown,
 }
 
 #[derive(Debug)]
@@ -89,7 +67,7 @@ impl DecodingCtx {
 }
 
 pub trait Decode: Sized {
-    fn decode<B: Buf>(buf: &mut B, ctx: &DecodingCtx) -> Result<Self, DecodingError>;
+    fn decode<B: Buf>(buf: &mut B, ctx: &DecodingCtx) -> Result<Self, ua::StatusCode>;
 
     /// Decodes `len` consecutive items (without the length prefix).
     /// Types implementing `ReprEncoded` override this with a raw byte copy.
@@ -97,17 +75,17 @@ pub trait Decode: Sized {
         buf: &mut B,
         len: usize,
         ctx: &DecodingCtx,
-    ) -> Result<Vec<Self>, DecodingError> {
+    ) -> Result<Vec<Self>, ua::StatusCode> {
         // Do not trust `len` for the allocation: it comes from the wire.
         // This assumes a one byte length size, which is often incorrect.
         // It is only a preflight check though.
         if len > buf.remaining() {
-            return Err(DecodingError::InvalidLengthPrefix);
+            return Err(ua::StatusCode::BadDecodingError);
         }
         let mut items = Vec::new();
         items
             .try_reserve(len)
-            .map_err(|_| DecodingError::InvalidLengthPrefix)?;
+            .map_err(|_| ua::StatusCode::BadDecodingError)?;
         for _ in 0..len {
             items.push(Self::decode(buf, ctx)?);
         }
@@ -128,10 +106,10 @@ pub(crate) unsafe trait ReprEncoded: Sized {}
 pub(crate) fn repr_decode_vec<T: ReprEncoded, B: Buf>(
     buf: &mut B,
     len: usize,
-) -> Result<Vec<T>, DecodingError> {
+) -> Result<Vec<T>, ua::StatusCode> {
     let bytes = len
         .checked_mul(std::mem::size_of::<T>())
-        .ok_or(DecodingError::InvalidData)?;
+        .ok_or(ua::StatusCode::BadDecodingError)?;
     check_remaining(buf, bytes)?;
     let mut items: Vec<T> = Vec::with_capacity(len);
     // SAFETY: `ReprEncoded` guarantees zeroed memory is a valid `T`, capacity is `len`,
@@ -167,9 +145,9 @@ macro_rules! repr_slice_methods {
 }
 pub(crate) use repr_slice_methods;
 
-pub(crate) fn check_remaining<B: Buf>(buf: &mut B, required: usize) -> Result<(), DecodingError> {
+pub(crate) fn check_remaining<B: Buf>(buf: &mut B, required: usize) -> Result<(), ua::StatusCode> {
     if buf.remaining() < required {
-        return Err(DecodingError::NotEnoughData);
+        return Err(ua::StatusCode::BadDecodingError);
     }
     Ok(())
 }
@@ -183,7 +161,7 @@ macro_rules! repr_decode_methods {
             buf: &mut B,
             len: usize,
             _ctx: &$crate::encoding::binary::DecodingCtx,
-        ) -> Result<Vec<Self>, $crate::encoding::binary::DecodingError> {
+        ) -> Result<Vec<Self>, $crate::ua::StatusCode> {
             $crate::encoding::binary::repr_decode_vec(buf, len)
         }
     };
@@ -279,7 +257,7 @@ mod tests {
         let mut buf = BytesMut::from(&0x12345678u32.to_le_bytes()[..]);
         assert!(matches!(
             ua::StatusCode::decode(&mut buf, &Default::default()),
-            Err(DecodingError::InvalidData)
+            Err(ua::StatusCode::BadDecodingError)
         ));
     }
 }

@@ -1,28 +1,7 @@
-use crate::encoding::binary;
-use crate::ua;
-
 pub mod tcp;
 pub mod uacp;
 
 pub use uacp::Uacp;
-
-#[derive(Debug, thiserror::Error)]
-pub enum Error {
-    #[error("IO error: {0}")]
-    Io(#[from] std::io::Error),
-
-    #[error("UA error: {0}")]
-    Ua(#[from] ua::StatusCode),
-
-    #[error("Decoding error: {0}")]
-    Decoding(#[from] binary::DecodingError),
-
-    #[error("Unsupported protocol: {0}")]
-    UnsupportedProtocol(String),
-
-    #[error("Invalid or oversized message: {size} bytes (max {max})")]
-    MessageSize { size: usize, max: usize },
-}
 
 // #[allow(async_fn_in_trait)]
 // pub trait Transport: Sized {

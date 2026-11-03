@@ -1,6 +1,7 @@
 use crate::msg::uasc::{self, AsymmetricSecurityHeader, SymmetricSecurityHeader};
+use crate::transport::Uacp;
 use crate::transport::tcp::SendBuffer;
-use crate::transport::{self, Uacp};
+use crate::ua;
 
 #[allow(async_fn_in_trait)]
 pub trait SecurityPolicy: Sized {
@@ -15,14 +16,14 @@ pub trait SecurityPolicy: Sized {
         uacp: &mut Uacp,
         msg_size: u32,
         encode_fn: F,
-    ) -> Result<(), crate::transport::Error>
+    ) -> Result<(), ua::StatusCode>
     where
         F: FnOnce(&mut SendBuffer<'_>);
 
     async fn recv_msg_chunk<'a>(
         &'a mut self,
         uacp: &'a mut Uacp,
-    ) -> Result<&'a [u8], transport::Error>;
+    ) -> Result<&'a [u8], ua::StatusCode>;
 }
 
 #[derive(Debug)]
@@ -50,7 +51,7 @@ impl SecurityPolicy for SecurityPolicyNone {
         uacp: &mut Uacp,
         chunk_size: u32,
         encode_fn: F,
-    ) -> Result<(), crate::transport::Error>
+    ) -> Result<(), ua::StatusCode>
     where
         F: FnOnce(&mut SendBuffer<'_>),
     {
@@ -61,7 +62,7 @@ impl SecurityPolicy for SecurityPolicyNone {
     async fn recv_msg_chunk<'a>(
         &'a mut self,
         uacp: &'a mut Uacp,
-    ) -> Result<&'a [u8], transport::Error> {
+    ) -> Result<&'a [u8], ua::StatusCode> {
         let buf = uacp.recv_chunk().await?;
         Ok(buf)
     }
@@ -93,7 +94,7 @@ impl SecurityPolicy for AnySecurityPolicy {
         uacp: &mut Uacp,
         msg_size: u32,
         encode_fn: F,
-    ) -> Result<(), crate::transport::Error>
+    ) -> Result<(), ua::StatusCode>
     where
         F: FnOnce(&mut SendBuffer<'_>),
     {
@@ -107,7 +108,7 @@ impl SecurityPolicy for AnySecurityPolicy {
     async fn recv_msg_chunk<'a>(
         &'a mut self,
         uacp: &'a mut Uacp,
-    ) -> Result<&'a [u8], transport::Error> {
+    ) -> Result<&'a [u8], ua::StatusCode> {
         match self {
             AnySecurityPolicy::None(policy) => policy.recv_msg_chunk(uacp).await,
         }

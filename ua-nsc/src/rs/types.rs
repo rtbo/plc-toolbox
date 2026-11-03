@@ -426,7 +426,7 @@ where
             .await?;
         self.cg
             .start_block(&format!(
-                "pub fn decode_extension_object(buf: &mut dyn binary::Buf, header: &ua::extension_object::Header, ctx: &binary::DecodingCtx) -> Result<Option<Box<dyn ua::extension_object::Body>>, binary::DecodingError> ",
+                "pub fn decode_extension_object(buf: &mut dyn binary::Buf, header: &ua::extension_object::Header, ctx: &binary::DecodingCtx) -> Result<Option<Box<dyn ua::extension_object::Body>>, ua::StatusCode> ",
             ))
             .await?;
         self.cg

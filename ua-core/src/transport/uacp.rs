@@ -3,7 +3,7 @@ use binary::{Decode, Encode};
 use bytes::BufMut;
 use ua_macros::{DecodeBinary, EncodeBinary};
 
-use crate::encoding::binary::{self, DecodingError};
+use crate::encoding::binary;
 use crate::ua;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -30,7 +30,7 @@ pub trait Msg: binary::Encode + std::fmt::Debug {
     fn msg_decode<B: bytes::Buf>(
         buf: &mut B,
         ctx: &binary::DecodingCtx,
-    ) -> Result<Self, binary::DecodingError>
+    ) -> Result<Self, ua::StatusCode>
     where
         Self: Sized;
 }
@@ -47,10 +47,10 @@ impl<T: StaticMsg> Msg for T {
     fn msg_decode<B: bytes::Buf>(
         buf: &mut B,
         ctx: &binary::DecodingCtx,
-    ) -> Result<Self, binary::DecodingError> {
+    ) -> Result<Self, ua::StatusCode> {
         let header = Header::decode(buf, ctx)?;
         if header.msg_type != Self::MSG_TYPE {
-            return Err(binary::DecodingError::InvalidData);
+            return Err(ua::StatusCode::BadDecodingError);
         }
         let msg = T::decode(buf, ctx)?;
         Ok(msg)
@@ -82,7 +82,7 @@ impl binary::Decode for Header {
     fn decode<B: bytes::Buf>(
         buf: &mut B,
         _ctx: &binary::DecodingCtx,
-    ) -> Result<Self, binary::DecodingError> {
+    ) -> Result<Self, ua::StatusCode> {
         binary::check_remaining(buf, 8)?;
         let mut typ: [u8; 3] = [0u8; 3];
         buf.copy_to_slice(&mut typ);
@@ -93,7 +93,7 @@ impl binary::Decode for Header {
             b"HEL" => MsgType::Hello,
             b"ACK" => MsgType::Acknowledge,
             b"ERR" => MsgType::Error,
-            _ => return Err(binary::DecodingError::InvalidData),
+            _ => return Err(ua::StatusCode::BadTcpMessageTypeInvalid),
         };
         Ok(Header { msg_type, length })
     }
@@ -213,7 +213,7 @@ impl Msg for AnyMsg {
     fn msg_decode<B: bytes::Buf>(
         buf: &mut B,
         ctx: &binary::DecodingCtx,
-    ) -> Result<Self, binary::DecodingError>
+    ) -> Result<Self, ua::StatusCode>
     where
         Self: Sized,
     {
@@ -282,7 +282,7 @@ impl Uacp {
     }
 
     /// Encodes a UACP message directly into the send buffer (not flushed).
-    pub async fn send<M>(&mut self, msg: M) -> Result<(), super::Error>
+    pub async fn send<M>(&mut self, msg: M) -> Result<(), ua::StatusCode>
     where
         M: Msg,
     {
@@ -297,34 +297,37 @@ impl Uacp {
         &mut self,
         expected_size: usize,
         write: F,
-    ) -> Result<(), super::Error>
+    ) -> Result<(), ua::StatusCode>
     where
         F: FnOnce(&mut super::tcp::SendBuffer<'_>),
     {
         self.transport.send_msg_chunk(expected_size, write).await
     }
 
-    pub async fn flush(&mut self) -> Result<(), super::Error> {
+    pub async fn flush(&mut self) -> Result<(), ua::StatusCode> {
         self.transport.flush().await
     }
 
-    pub async fn recv_chunk(&mut self) -> Result<&[u8], super::Error> {
+    pub async fn recv_chunk(&mut self) -> Result<&[u8], ua::StatusCode> {
         self.transport.recv_msg_chunk().await
     }
 
     /// Receives the next chunk: UACP messages are decoded, others are passed through.
-    pub async fn recv(&mut self, ctx: &binary::DecodingCtx) -> Result<Incoming<'_>, super::Error> {
+    pub async fn recv(
+        &mut self,
+        ctx: &binary::DecodingCtx,
+    ) -> Result<Incoming<'_>, ua::StatusCode> {
         let mut chunk = self.transport.recv_msg_chunk().await?;
         let header = {
             let ck = chunk;
             match Header::decode(&mut chunk, ctx) {
                 Ok(header) => header,
-                Err(DecodingError::BadMessageType) => {
+                Err(ua::StatusCode::BadTcpMessageTypeInvalid) => {
                     // Not a UACP chunk, pass through
                     return Ok(Incoming::Chunk(ck));
                 }
                 Err(err) => {
-                    return Err(super::Error::Decoding(err));
+                    return Err(err);
                 }
             }
         };
@@ -347,7 +350,7 @@ impl Uacp {
 
     /// Receives a UACP message of a specific type (e.g. during the handshake).
     /// Any other chunk is a `BadMessageType`
-    pub async fn recv_typed<M>(&mut self, ctx: &binary::DecodingCtx) -> Result<M, super::Error>
+    pub async fn recv_typed<M>(&mut self, ctx: &binary::DecodingCtx) -> Result<M, ua::StatusCode>
     where
         M: Msg,
     {

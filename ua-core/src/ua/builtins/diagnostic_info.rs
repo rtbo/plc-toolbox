@@ -91,7 +91,7 @@ impl binary::Decode for DiagnosticInfo {
     fn decode<B: binary::Buf>(
         buf: &mut B,
         ctx: &binary::DecodingCtx,
-    ) -> Result<Self, binary::DecodingError> {
+    ) -> Result<Self, ua::StatusCode> {
         binary::check_remaining(buf, 1)?;
         let flags = buf.get_u8();
         let symbolic_id = if flags & 0x01 != 0 {

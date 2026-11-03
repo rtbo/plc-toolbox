@@ -3,16 +3,15 @@ use ua_core::ua;
 #[tokio::main]
 async fn main() -> std::process::ExitCode {
     if let Err(e) = run().await {
-        // eprintln!("Error: {}", e.name());
-        // eprintln!("{}", e.explanation());
-        eprint!("Error: {}", e);
+        eprintln!("Error: {}", e.name());
+        eprintln!("{}", e.explanation());
         std::process::ExitCode::FAILURE
     } else {
         std::process::ExitCode::SUCCESS
     }
 }
 
-async fn run() -> Result<(), Box<dyn std::error::Error>> {
+async fn run() -> Result<(), ua::StatusCode> {
     let mut _client =
         ua_client::tcp::TcpClient::connect("opc.tcp://localhost:4840", Default::default()).await?;
 

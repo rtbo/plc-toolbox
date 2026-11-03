@@ -3,7 +3,7 @@ use ua_core::transport::tcp;
 use ua_core::transport::uacp::{self, Uacp};
 use ua_core::{AnySecurityPolicy, SecurityPolicyNone, ua};
 
-use crate::{SecureChannel, secure_channel};
+use crate::SecureChannel;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct BufferConfig {
@@ -28,7 +28,7 @@ impl BufferConfig {
         endpoint: &str,
         uacp: &mut Uacp,
         decoding_ctx: &binary::DecodingCtx,
-    ) -> Result<Self, ua_core::transport::Error> {
+    ) -> Result<Self, ua::StatusCode> {
         let hello_msg = uacp::Hello {
             protocol_version: 0,
             receive_buffer_size: self.recv_size as u32,
@@ -61,7 +61,7 @@ pub struct TcpClient {
 }
 
 impl TcpClient {
-    pub async fn connect(endpoint: &str, config: Config) -> Result<Self, secure_channel::Error> {
+    pub async fn connect(endpoint: &str, config: Config) -> Result<Self, ua::StatusCode> {
         let transport =
             tcp::Transport::connect(endpoint, config.buffer.send_size, config.buffer.recv_size)
                 .await?;
