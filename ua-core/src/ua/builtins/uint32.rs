@@ -20,7 +20,10 @@ impl binary::Encode for UInt32 {
 impl binary::Decode for UInt32 {
     binary::repr_decode_methods!();
 
-    fn decode<B: Buf>(buf: &mut B, _ctx: &binary::DecodingCtx) -> Result<Self, ua::StatusCode> {
+    fn decode(
+        buf: &mut crate::encoding::binary::DecodeBuf,
+        _ctx: &binary::DecodingCtx,
+    ) -> Result<Self, ua::StatusCode> {
         binary::check_remaining(buf, 4)?;
         let val = buf.get_u32_le();
         Ok(val)

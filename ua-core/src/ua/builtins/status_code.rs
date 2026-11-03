@@ -1,3 +1,5 @@
+use bytes::Buf;
+
 use crate::encoding::binary;
 
 include!(concat!(env!("OUT_DIR"), "/status_code.rs"));
@@ -44,7 +46,10 @@ impl binary::Encode for StatusCode {
 }
 
 impl binary::Decode for StatusCode {
-    fn decode<B: bytes::Buf>(buf: &mut B, _ctx: &binary::DecodingCtx) -> Result<Self, StatusCode> {
+    fn decode(
+        buf: &mut crate::encoding::binary::DecodeBuf,
+        _ctx: &binary::DecodingCtx,
+    ) -> Result<Self, StatusCode> {
         binary::check_remaining(buf, 4)?;
         let code = buf.get_u32_le();
         Self::try_from(code).map_err(|_| StatusCode::BadDecodingError)

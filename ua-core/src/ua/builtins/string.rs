@@ -1,4 +1,4 @@
-use bytes::{Buf, BufMut};
+use bytes::BufMut;
 
 use crate::encoding::binary;
 use crate::ua;
@@ -44,7 +44,10 @@ impl binary::Encode for Option<String> {
 }
 
 impl binary::Decode for String {
-    fn decode<B: Buf>(buf: &mut B, ctx: &binary::DecodingCtx) -> Result<Self, ua::StatusCode> {
+    fn decode(
+        buf: &mut crate::encoding::binary::DecodeBuf,
+        ctx: &binary::DecodingCtx,
+    ) -> Result<Self, ua::StatusCode> {
         let bytes: Vec<u8> = binary::Decode::decode(buf, ctx)?;
         let str =
             std::string::String::from_utf8(bytes).map_err(|_| ua::StatusCode::BadDecodingError)?;
@@ -53,7 +56,10 @@ impl binary::Decode for String {
 }
 
 impl binary::Decode for Option<String> {
-    fn decode<B: Buf>(buf: &mut B, ctx: &binary::DecodingCtx) -> Result<Self, ua::StatusCode> {
+    fn decode(
+        buf: &mut crate::encoding::binary::DecodeBuf,
+        ctx: &binary::DecodingCtx,
+    ) -> Result<Self, ua::StatusCode> {
         let bytes: Option<Vec<u8>> = binary::Decode::decode(buf, ctx)?;
         bytes
             .map(|b| std::string::String::from_utf8(b))

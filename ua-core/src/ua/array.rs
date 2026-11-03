@@ -1,3 +1,5 @@
+use bytes::Buf;
+
 use crate::encoding::binary;
 use crate::ua;
 
@@ -78,8 +80,8 @@ impl<T> binary::Decode for Vec<T>
 where
     T: binary::Decode,
 {
-    fn decode<B: bytes::Buf>(
-        buf: &mut B,
+    fn decode(
+        buf: &mut crate::encoding::binary::DecodeBuf,
         ctx: &binary::DecodingCtx,
     ) -> Result<Self, ua::StatusCode> {
         binary::check_remaining(buf, 4)?;
@@ -98,8 +100,8 @@ impl<T> binary::Decode for Option<Vec<T>>
 where
     T: binary::Decode,
 {
-    fn decode<B: bytes::Buf>(
-        buf: &mut B,
+    fn decode(
+        buf: &mut crate::encoding::binary::DecodeBuf,
         ctx: &binary::DecodingCtx,
     ) -> Result<Self, ua::StatusCode> {
         binary::check_remaining(buf, 4)?;

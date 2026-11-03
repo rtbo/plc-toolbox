@@ -1,6 +1,6 @@
+use crate::encoding::binary;
 use crate::msg::uasc::{self, AsymmetricSecurityHeader, SymmetricSecurityHeader};
 use crate::transport::Uacp;
-use crate::transport::tcp::SendBuffer;
 use crate::ua;
 
 #[allow(async_fn_in_trait)]
@@ -18,7 +18,7 @@ pub trait SecurityPolicy: Sized {
         encode_fn: F,
     ) -> Result<(), ua::StatusCode>
     where
-        F: FnOnce(&mut SendBuffer<'_>);
+        F: FnOnce(&mut binary::EncodeBuf<'_>);
 
     async fn recv_msg_chunk<'a>(
         &'a mut self,
@@ -53,7 +53,7 @@ impl SecurityPolicy for SecurityPolicyNone {
         encode_fn: F,
     ) -> Result<(), ua::StatusCode>
     where
-        F: FnOnce(&mut SendBuffer<'_>),
+        F: FnOnce(&mut binary::EncodeBuf<'_>),
     {
         uacp.send_chunk(chunk_size as usize, encode_fn).await?;
         Ok(())
@@ -96,7 +96,7 @@ impl SecurityPolicy for AnySecurityPolicy {
         encode_fn: F,
     ) -> Result<(), ua::StatusCode>
     where
-        F: FnOnce(&mut SendBuffer<'_>),
+        F: FnOnce(&mut binary::EncodeBuf<'_>),
     {
         match self {
             AnySecurityPolicy::None(policy) => {

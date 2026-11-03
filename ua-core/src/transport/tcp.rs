@@ -1,15 +1,10 @@
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net;
 
+use crate::encoding::binary;
 use crate::ua;
 
 const HEADER_LEN: usize = 8;
-
-/// A bounded view into the unused capacity of a transport send buffer.
-pub type SendBuffer<'a> = &'a mut [u8];
-
-/// A bounded view into the initialized section of a transport receive buffer.
-pub type RecvBuffer<'a> = &'a [u8];
 
 /// A TCP transport for raw OPC UA message chunks (UACP or UACS).
 #[derive(Debug)]
@@ -82,7 +77,7 @@ impl Transport {
         write: F,
     ) -> Result<(), ua::StatusCode>
     where
-        F: FnOnce(&mut SendBuffer<'_>),
+        F: FnOnce(&mut binary::EncodeBuf<'_>),
     {
         let max = self.max_send_size();
         if expected_size > max {

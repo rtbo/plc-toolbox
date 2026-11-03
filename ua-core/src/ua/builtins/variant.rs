@@ -1,3 +1,5 @@
+use bytes::Buf;
+
 use crate::encoding::binary::{self, Encode};
 use crate::ua;
 
@@ -127,8 +129,8 @@ impl binary::Encode for Variant {
 }
 
 impl binary::Decode for Variant {
-    fn decode<B: bytes::Buf>(
-        buf: &mut B,
+    fn decode(
+        buf: &mut crate::encoding::binary::DecodeBuf,
         ctx: &binary::DecodingCtx,
     ) -> Result<Self, ua::StatusCode> {
         let encoded_mask = buf.get_u8();
@@ -316,10 +318,10 @@ where
     }
 }
 
-fn decode_value<T: binary::Decode, B: bytes::Buf>(
+fn decode_value<T: binary::Decode>(
     is_array: bool,
     has_multidim: bool,
-    buf: &mut B,
+    buf: &mut binary::DecodeBuf,
     ctx: &binary::DecodingCtx,
 ) -> Result<Value<T>, ua::StatusCode> {
     match (is_array, has_multidim) {

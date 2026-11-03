@@ -1,4 +1,4 @@
-use bytes::{Buf, BufMut};
+use bytes::BufMut;
 
 use crate::encoding::binary;
 use crate::ua;
@@ -17,7 +17,10 @@ impl binary::Encode for XmlElement {
 }
 
 impl binary::Decode for XmlElement {
-    fn decode<B: Buf>(buf: &mut B, ctx: &binary::DecodingCtx) -> Result<Self, ua::StatusCode> {
+    fn decode(
+        buf: &mut crate::encoding::binary::DecodeBuf,
+        ctx: &binary::DecodingCtx,
+    ) -> Result<Self, ua::StatusCode> {
         let s = String::decode(buf, ctx)?;
         Ok(XmlElement(s))
     }

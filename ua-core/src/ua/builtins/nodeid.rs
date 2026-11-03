@@ -1,6 +1,6 @@
 use std::fmt;
 
-use bytes::BufMut;
+use bytes::{Buf, BufMut};
 
 use crate::encoding::binary::{self, Decode, Encode};
 use crate::ua;
@@ -199,8 +199,8 @@ impl binary::Encode for NodeIdRef<'_> {
 }
 
 impl binary::Decode for NodeId {
-    fn decode<B: bytes::Buf>(
-        buf: &mut B,
+    fn decode(
+        buf: &mut crate::encoding::binary::DecodeBuf,
         ctx: &binary::DecodingCtx,
     ) -> Result<Self, ua::StatusCode> {
         let (nodeid, _) = nodeid_decode(buf, ctx)?;
@@ -253,8 +253,8 @@ pub(super) fn nodeid_encode<B: BufMut>(node_id: &NodeId, buf: &mut B, flags: u8)
     }
 }
 
-pub(super) fn nodeid_decode<B: bytes::Buf>(
-    buf: &mut B,
+pub(super) fn nodeid_decode(
+    buf: &mut crate::encoding::binary::DecodeBuf,
     ctx: &binary::DecodingCtx,
 ) -> Result<(NodeId, u8), ua::StatusCode> {
     let type_byte = buf.get_u8();

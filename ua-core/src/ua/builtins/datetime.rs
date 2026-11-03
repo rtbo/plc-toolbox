@@ -25,7 +25,10 @@ impl binary::Encode for DateTime {
 }
 
 impl binary::Decode for DateTime {
-    fn decode<B: Buf>(buf: &mut B, _ctx: &binary::DecodingCtx) -> Result<Self, ua::StatusCode> {
+    fn decode(
+        buf: &mut crate::encoding::binary::DecodeBuf,
+        _ctx: &binary::DecodingCtx,
+    ) -> Result<Self, ua::StatusCode> {
         binary::check_remaining(buf, 8)?;
         Ok(DateTime::from_timestamp(buf.get_i64_le()))
     }

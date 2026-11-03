@@ -1,5 +1,8 @@
 pub use bytes::{Buf, BufMut};
 
+pub type EncodeBuf<'a> = &'a mut [u8];
+pub type DecodeBuf<'a> = &'a [u8];
+
 pub trait Encode {
     fn encoded_len(&self) -> u32;
     fn encode<B: BufMut>(&self, buf: &mut B);
@@ -67,12 +70,15 @@ impl DecodingCtx {
 }
 
 pub trait Decode: Sized {
-    fn decode<B: Buf>(buf: &mut B, ctx: &DecodingCtx) -> Result<Self, ua::StatusCode>;
+    fn decode(
+        buf: &mut crate::encoding::binary::DecodeBuf,
+        ctx: &DecodingCtx,
+    ) -> Result<Self, ua::StatusCode>;
 
     /// Decodes `len` consecutive items (without the length prefix).
     /// Types implementing `ReprEncoded` override this with a raw byte copy.
-    fn decode_vec<B: Buf>(
-        buf: &mut B,
+    fn decode_vec(
+        buf: &mut crate::encoding::binary::DecodeBuf,
         len: usize,
         ctx: &DecodingCtx,
     ) -> Result<Vec<Self>, ua::StatusCode> {
@@ -103,8 +109,8 @@ pub trait Decode: Sized {
 /// Zeroed memory must also be a valid value, and every bit pattern must be valid.
 pub(crate) unsafe trait ReprEncoded: Sized {}
 
-pub(crate) fn repr_decode_vec<T: ReprEncoded, B: Buf>(
-    buf: &mut B,
+pub(crate) fn repr_decode_vec<T: ReprEncoded>(
+    buf: &mut DecodeBuf,
     len: usize,
 ) -> Result<Vec<T>, ua::StatusCode> {
     let bytes = len
@@ -145,7 +151,10 @@ macro_rules! repr_slice_methods {
 }
 pub(crate) use repr_slice_methods;
 
-pub(crate) fn check_remaining<B: Buf>(buf: &mut B, required: usize) -> Result<(), ua::StatusCode> {
+pub(crate) fn check_remaining(
+    buf: &mut crate::encoding::binary::DecodeBuf,
+    required: usize,
+) -> Result<(), ua::StatusCode> {
     if buf.remaining() < required {
         return Err(ua::StatusCode::BadDecodingError);
     }
@@ -157,8 +166,8 @@ pub(crate) fn check_remaining<B: Buf>(buf: &mut B, required: usize) -> Result<()
 macro_rules! repr_decode_methods {
     () => {
         #[cfg(target_endian = "little")]
-        fn decode_vec<B: Buf>(
-            buf: &mut B,
+        fn decode_vec(
+            buf: &mut crate::encoding::binary::DecodeBuf,
             len: usize,
             _ctx: &$crate::encoding::binary::DecodingCtx,
         ) -> Result<Vec<Self>, $crate::ua::StatusCode> {
@@ -197,7 +206,7 @@ mod tests {
         value.encode(&mut encoded);
         assert_eq!(encoded.len(), value.encoded_len() as usize);
 
-        let mut remaining = encoded.clone();
+        let mut remaining: &[u8] = &encoded;
         let decoded =
             T::decode(&mut remaining, &Default::default()).expect("encoded value should decode");
         assert!(remaining.is_empty());
@@ -217,7 +226,7 @@ mod tests {
         small.encode(&mut buf);
         assert_eq!(&buf[..], &[0xab]);
         assert!(matches!(
-            SmallCode::decode(&mut buf, &Default::default()),
+            SmallCode::decode(&mut &buf[..], &Default::default()),
             Ok(SmallCode::Value)
         ));
 
@@ -227,7 +236,7 @@ mod tests {
         medium.encode(&mut buf);
         assert_eq!(&buf[..], &[0xef, 0xcd]);
         assert!(matches!(
-            MediumCode::decode(&mut buf, &Default::default()),
+            MediumCode::decode(&mut &buf[..], &Default::default()),
             Ok(MediumCode::Value)
         ));
 
@@ -247,16 +256,16 @@ mod tests {
 
     #[test]
     fn repr_enum_decodes_through_try_from() {
-        let mut buf = BytesMut::from(&0x807d0000u32.to_le_bytes()[..]);
+        let buf = BytesMut::from(&0x807d0000u32.to_le_bytes()[..]);
 
         assert!(matches!(
-            ua::StatusCode::decode(&mut buf, &Default::default()),
+            ua::StatusCode::decode(&mut &buf[..], &Default::default()),
             Ok(ua::StatusCode::BadTcpServerTooBusy)
         ));
 
-        let mut buf = BytesMut::from(&0x12345678u32.to_le_bytes()[..]);
+        let buf = BytesMut::from(&0x12345678u32.to_le_bytes()[..]);
         assert!(matches!(
-            ua::StatusCode::decode(&mut buf, &Default::default()),
+            ua::StatusCode::decode(&mut &buf[..], &Default::default()),
             Err(ua::StatusCode::BadDecodingError)
         ));
     }

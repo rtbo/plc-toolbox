@@ -38,8 +38,8 @@ impl binary::Encode for Header {
 }
 
 impl binary::Decode for Header {
-    fn decode<B: binary::Buf>(
-        buf: &mut B,
+    fn decode(
+        buf: &mut crate::encoding::binary::DecodeBuf,
         ctx: &binary::DecodingCtx,
     ) -> Result<Self, ua::StatusCode> {
         let type_id = ua::NodeId::decode(buf, ctx)?;
@@ -137,7 +137,7 @@ where
 
 pub type BinaryDecodingFn =
     fn(
-        &mut dyn binary::Buf,
+        &mut binary::DecodeBuf,
         &Header,
         &binary::DecodingCtx,
     ) -> Result<Option<Box<dyn ua::extension_object::Body>>, ua::StatusCode>;
@@ -145,7 +145,7 @@ pub type BinaryDecodingFn =
 /// Generic decoding function for the body of an extension object of type `T`.
 /// Can be registered in the `DecodingCtx` type table.
 pub fn decode_body<T>(
-    mut buf: &mut dyn binary::Buf,
+    buf: &mut binary::DecodeBuf,
     header: &Header,
     ctx: &binary::DecodingCtx,
 ) -> Result<Option<Box<dyn ua::extension_object::Body>>, ua::StatusCode>
@@ -158,17 +158,17 @@ where
     let Some(length) = header.length.map(|l| l as usize) else {
         return Err(ua::StatusCode::BadDecodingError);
     };
-    let before = binary::Buf::remaining(&buf);
-    let value = T::decode(&mut buf, ctx)?;
-    if before - binary::Buf::remaining(&buf) != length {
+    let before = buf.len();
+    let value = T::decode(buf, ctx)?;
+    if before - buf.len() != length {
         return Err(ua::StatusCode::BadDecodingError);
     }
     Ok(Some(Box::new(value)))
 }
 
 impl binary::Decode for ExtensionObject<Box<dyn Body>> {
-    fn decode<B: binary::Buf>(
-        buf: &mut B,
+    fn decode(
+        buf: &mut crate::encoding::binary::DecodeBuf,
         ctx: &binary::DecodingCtx,
     ) -> Result<Self, ua::StatusCode> {
         let header = Header::decode(buf, ctx)?;

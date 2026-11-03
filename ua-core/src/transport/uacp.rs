@@ -1,6 +1,6 @@
 //! This module contains the implementation of UA Connection Protocol (UACP)
 use binary::{Decode, Encode};
-use bytes::BufMut;
+use bytes::{Buf, BufMut};
 use ua_macros::{DecodeBinary, EncodeBinary};
 
 use crate::encoding::binary;
@@ -27,8 +27,8 @@ pub trait Msg: binary::Encode + std::fmt::Debug {
         self.encode(buf);
     }
 
-    fn msg_decode<B: bytes::Buf>(
-        buf: &mut B,
+    fn msg_decode(
+        buf: &mut crate::encoding::binary::DecodeBuf,
         ctx: &binary::DecodingCtx,
     ) -> Result<Self, ua::StatusCode>
     where
@@ -44,8 +44,8 @@ impl<T: StaticMsg> Msg for T {
         Self::MSG_TYPE
     }
 
-    fn msg_decode<B: bytes::Buf>(
-        buf: &mut B,
+    fn msg_decode(
+        buf: &mut crate::encoding::binary::DecodeBuf,
         ctx: &binary::DecodingCtx,
     ) -> Result<Self, ua::StatusCode> {
         let header = Header::decode(buf, ctx)?;
@@ -79,8 +79,8 @@ impl binary::Encode for Header {
 }
 
 impl binary::Decode for Header {
-    fn decode<B: bytes::Buf>(
-        buf: &mut B,
+    fn decode(
+        buf: &mut crate::encoding::binary::DecodeBuf,
         _ctx: &binary::DecodingCtx,
     ) -> Result<Self, ua::StatusCode> {
         binary::check_remaining(buf, 8)?;
@@ -210,8 +210,8 @@ impl Msg for AnyMsg {
         }
     }
 
-    fn msg_decode<B: bytes::Buf>(
-        buf: &mut B,
+    fn msg_decode(
+        buf: &mut crate::encoding::binary::DecodeBuf,
         ctx: &binary::DecodingCtx,
     ) -> Result<Self, ua::StatusCode>
     where
@@ -299,7 +299,7 @@ impl Uacp {
         write: F,
     ) -> Result<(), ua::StatusCode>
     where
-        F: FnOnce(&mut super::tcp::SendBuffer<'_>),
+        F: FnOnce(&mut binary::EncodeBuf<'_>),
     {
         self.transport.send_msg_chunk(expected_size, write).await
     }
@@ -375,7 +375,7 @@ mod tests {
         value.encode(&mut encoded);
         assert_eq!(encoded.len(), value.encoded_len() as usize);
 
-        let mut remaining = encoded.clone();
+        let mut remaining: &[u8] = &encoded;
         let decoded =
             T::decode(&mut remaining, &Default::default()).expect("encoded value should decode");
         assert!(remaining.is_empty());
@@ -394,7 +394,7 @@ mod tests {
         value.msg_encode(&mut encoded);
         assert_eq!(encoded.len(), value.msg_encoded_len() as usize);
 
-        let mut remaining = encoded.clone();
+        let mut remaining: &[u8] = &encoded;
         let decoded = T::msg_decode(&mut remaining, &Default::default())
             .expect("encoded value should decode");
         assert!(remaining.is_empty());

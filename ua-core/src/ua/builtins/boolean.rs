@@ -18,7 +18,10 @@ impl binary::Encode for Boolean {
 }
 
 impl binary::Decode for Boolean {
-    fn decode<B: Buf>(buf: &mut B, _ctx: &binary::DecodingCtx) -> Result<Self, ua::StatusCode> {
+    fn decode(
+        buf: &mut crate::encoding::binary::DecodeBuf,
+        _ctx: &binary::DecodingCtx,
+    ) -> Result<Self, ua::StatusCode> {
         binary::check_remaining(buf, 1)?;
         let val = buf.get_u8();
         Ok(val != 0)

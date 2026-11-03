@@ -1,3 +1,5 @@
+use bytes::Buf;
+
 use crate::encoding::binary;
 use crate::ua;
 
@@ -88,8 +90,8 @@ impl binary::Encode for DiagnosticInfo {
 }
 
 impl binary::Decode for DiagnosticInfo {
-    fn decode<B: binary::Buf>(
-        buf: &mut B,
+    fn decode(
+        buf: &mut crate::encoding::binary::DecodeBuf,
         ctx: &binary::DecodingCtx,
     ) -> Result<Self, ua::StatusCode> {
         binary::check_remaining(buf, 1)?;

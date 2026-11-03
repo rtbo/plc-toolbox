@@ -172,8 +172,8 @@ impl binary::Encode for ExpandedNodeId {
 }
 
 impl binary::Decode for ExpandedNodeId {
-    fn decode<B: bytes::Buf>(
-        buf: &mut B,
+    fn decode(
+        buf: &mut crate::encoding::binary::DecodeBuf,
         ctx: &binary::DecodingCtx,
     ) -> Result<Self, ua::StatusCode> {
         let (nodeid, flags) = nodeid_decode(buf, ctx)?;

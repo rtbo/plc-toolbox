@@ -1,5 +1,7 @@
 use std::fmt;
 
+use bytes::Buf;
+
 use crate::encoding::binary;
 use crate::ua;
 
@@ -120,8 +122,8 @@ impl binary::Encode for Guid {
 }
 
 impl binary::Decode for Guid {
-    fn decode<B: bytes::Buf>(
-        buf: &mut B,
+    fn decode(
+        buf: &mut crate::encoding::binary::DecodeBuf,
         _ctx: &binary::DecodingCtx,
     ) -> Result<Self, ua::StatusCode> {
         binary::check_remaining(buf, 16)?;
