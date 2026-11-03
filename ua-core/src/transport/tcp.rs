@@ -1,6 +1,3 @@
-use std::mem::MaybeUninit;
-
-use bytes::{BufMut, BytesMut};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net;
 
@@ -9,17 +6,20 @@ use crate::ua;
 const HEADER_LEN: usize = 8;
 
 /// A bounded view into the unused capacity of a transport send buffer.
-pub type SendBuffer<'a> = &'a mut [MaybeUninit<u8>];
+pub type SendBuffer<'a> = &'a mut [u8];
+
+/// A bounded view into the initialized section of a transport receive buffer.
+pub type RecvBuffer<'a> = &'a [u8];
 
 /// A TCP transport for raw OPC UA message chunks (UACP or UACS).
 #[derive(Debug)]
 pub struct Transport {
     stream: net::TcpStream,
-    send_buf: BytesMut,
-    send_buf_size: usize,
-    recv_buf: BytesMut,
-    recv_buf_size: usize,
+    send_buf: Vec<u8>,
+    send_buf_start: usize,
+    recv_buf: Vec<u8>,
     recv_buf_start: usize,
+    recv_buf_end: usize,
     recv_cached_size: Option<usize>,
 }
 
@@ -36,36 +36,36 @@ impl Transport {
         let stream = net::TcpStream::connect(endpoint)
             .await
             .map_err(|_| ua::StatusCode::BadConnectionRejected)?;
-        let send_buf = BytesMut::with_capacity(send_buf_size);
-        let recv_buf = BytesMut::with_capacity(recv_buf_size);
+        let send_buf = vec![0u8; send_buf_size];
+        let recv_buf = vec![0u8; recv_buf_size];
         Ok(Transport {
             stream,
             send_buf,
-            send_buf_size,
+            send_buf_start: 0,
             recv_buf,
-            recv_buf_size,
             recv_buf_start: 0,
+            recv_buf_end: 0,
             recv_cached_size: None,
         })
     }
 
     pub fn max_send_size(&self) -> usize {
-        self.send_buf_size
+        self.send_buf.len()
     }
 
     pub fn max_recv_size(&self) -> usize {
-        self.recv_buf_size
+        self.recv_buf.len()
     }
 
     pub fn adjust_buffer_sizes(&mut self, send_size: usize, recv_size: usize) {
-        if send_size != self.send_buf.capacity() {
-            self.send_buf = BytesMut::with_capacity(send_size);
-            self.send_buf_size = send_size;
+        if send_size != self.send_buf.len() {
+            self.send_buf.resize(send_size, 0);
+            self.send_buf_start = 0;
         }
-        if recv_size != self.recv_buf.capacity() {
-            self.recv_buf = BytesMut::with_capacity(recv_size);
-            self.recv_buf_size = recv_size;
+        if recv_size != self.recv_buf.len() {
+            self.recv_buf.resize(recv_size, 0);
             self.recv_buf_start = 0;
+            self.recv_buf_end = 0;
             self.recv_cached_size = None;
         }
     }
@@ -92,51 +92,41 @@ impl Transport {
             return Err(ua::StatusCode::BadEncodingError);
         }
 
-        let mut start = self.send_buf.len();
-        if start > 0 && start + expected_size > max {
+        if self.send_buf_start > 0 && self.send_buf_start + expected_size > max {
             self.stream
-                .write_all(&self.send_buf)
+                .write_all(&self.send_buf[0..self.send_buf_start])
                 .await
                 .map_err(|_| ua::StatusCode::BadConnectionClosed)?;
-            self.send_buf.clear();
-            start = 0;
+            self.send_buf_start = 0;
         }
-        debug_assert!(expected_size <= self.send_buf.capacity());
 
+        let start = self.send_buf_start;
+        debug_assert!(expected_size <= self.send_buf.len() - start);
         let written = {
-            let spare = &mut self.send_buf.spare_capacity_mut()[..expected_size];
-            // Initialize the view so even a callback that shortens the slice directly
-            // cannot cause uninitialized bytes to be exposed when the buffer advances.
-            spare.fill(MaybeUninit::new(0));
-            let mut view: SendBuffer<'_> = spare;
+            let mut view = &mut self.send_buf[start..start + expected_size];
             write(&mut view);
             expected_size - view.len()
         };
-        // SAFETY: The entire exposed region was initialized above, and `written` is
-        // bounded by `expected_size`, which is within the send buffer's spare capacity.
-        unsafe {
-            self.send_buf.advance_mut(written);
-        }
-        let size = self.send_buf.len() - start;
-        let declared = match self.send_buf[start..].get(4..8) {
-            Some(b) => u32::from_le_bytes(b.try_into().unwrap()) as usize,
-            None => 0,
-        };
-        if size != expected_size || size != declared {
-            self.send_buf.truncate(start);
+        let declared = self.send_buf[start + 4..start + 8]
+            .try_into()
+            .map(u32::from_le_bytes)
+            .map(|n| n as usize)
+            .unwrap_or(0);
+        if written != expected_size || written != declared {
             return Err(ua::StatusCode::BadEncodingError);
         }
+        self.send_buf_start += written;
         Ok(())
     }
 
     /// Sends all buffered chunks.
     pub async fn flush(&mut self) -> Result<(), ua::StatusCode> {
-        if !self.send_buf.is_empty() {
+        if self.send_buf_start > 0 {
             self.stream
-                .write_all(&self.send_buf)
+                .write_all(&self.send_buf[0..self.send_buf_start])
                 .await
                 .map_err(|_| ua::StatusCode::BadConnectionClosed)?;
-            self.send_buf.clear();
+            self.send_buf_start = 0;
         }
         self.stream
             .flush()
@@ -151,10 +141,10 @@ impl Transport {
     /// Any bytes read beyond this chunk remain buffered for the next call.
     pub async fn recv_msg_chunk(&mut self) -> Result<&[u8], ua::StatusCode> {
         if self.recv_buf_start > 0 {
-            let remaining = self.recv_buf.len() - self.recv_buf_start;
-            self.recv_buf.copy_within(self.recv_buf_start.., 0);
-            self.recv_buf.truncate(remaining);
+            let (start, end) = (self.recv_buf_start, self.recv_buf_end);
+            self.recv_buf.copy_within(start..end, 0);
             self.recv_buf_start = 0;
+            self.recv_buf_end = end - start;
         }
 
         let max_recv_size = self.max_recv_size();
@@ -171,7 +161,7 @@ impl Transport {
         self.fill(size).await?;
 
         let next_start = size;
-        if self.recv_buf.len() - next_start >= HEADER_LEN {
+        if self.recv_buf_end - next_start >= HEADER_LEN {
             let next_size = u32::from_le_bytes(
                 self.recv_buf[next_start + 4..next_start + 8]
                     .try_into()
@@ -190,19 +180,18 @@ impl Transport {
 
     /// Reads from the socket until at least `n` bytes are available in `recv_buf`.
     async fn fill(&mut self, n: usize) -> Result<(), ua::StatusCode> {
-        // No allocation is done if n <= self.max_recv_size()
-        self.recv_buf
-            .reserve(self.max_recv_size().saturating_sub(self.recv_buf.len()));
-        while self.recv_buf.len() < n {
-            if self
+        assert!(n <= self.recv_buf.len() - self.recv_buf_start);
+        while (self.recv_buf_end - self.recv_buf_start) < n {
+            let mut view = &mut self.recv_buf[self.recv_buf_end..];
+            let written = self
                 .stream
-                .read_buf(&mut self.recv_buf)
+                .read_buf(&mut view)
                 .await
-                .map_err(|_| ua::StatusCode::BadCommunicationError)?
-                == 0
-            {
+                .map_err(|_| ua::StatusCode::BadCommunicationError)?;
+            if written == 0 {
                 return Err(ua::StatusCode::BadConnectionClosed);
             }
+            self.recv_buf_end += written;
         }
 
         Ok(())
@@ -211,30 +200,68 @@ impl Transport {
 
 #[cfg(test)]
 mod tests {
-    use bytes::{Buf, BufMut, BytesMut};
+    use bytes::Buf;
     use tokio::io::AsyncWriteExt;
     use tokio::net::{TcpListener, TcpStream};
 
-    use super::{SendBuffer, Transport};
+    use super::Transport;
     use crate::ua;
 
-    #[test]
-    fn send_buffer_view_is_bounded_without_growing_storage() {
-        let mut buffer = BytesMut::with_capacity(8);
-        let capacity = buffer.capacity();
-
-        let written = {
-            let spare = &mut buffer.spare_capacity_mut()[..8];
-            let mut view: SendBuffer<'_> = spare;
-            view.put_slice(b"12345678");
-            8 - view.len()
+    async fn pair(buf: usize) -> (Transport, TcpStream) {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let writer = TcpStream::connect(listener.local_addr().unwrap())
+            .await
+            .unwrap();
+        let (stream, _) = listener.accept().await.unwrap();
+        let transport = Transport {
+            stream,
+            send_buf: vec![0u8; buf],
+            send_buf_start: 0,
+            recv_buf: vec![0u8; buf],
+            recv_buf_start: 0,
+            recv_buf_end: 0,
+            recv_cached_size: None,
         };
-        unsafe {
-            buffer.advance_mut(written);
-        }
+        (transport, writer)
+    }
 
-        assert_eq!(&buffer[..], b"12345678");
-        assert_eq!(buffer.capacity(), capacity);
+    fn chunk(len: u8, fill: u8) -> Vec<u8> {
+        let mut v = vec![fill; len as usize];
+        v[4..8].copy_from_slice(&(len as u32).to_le_bytes());
+        v
+    }
+
+    #[tokio::test]
+    async fn keeps_partial_next_chunk_when_compacting() {
+        let (mut t, mut w) = pair(32).await;
+        let (a, b) = (chunk(10, 1), chunk(12, 2));
+        let mut data = a.clone();
+        data.extend_from_slice(&b[..5]); // partial header of next chunk
+        w.write_all(&data).await.unwrap();
+        assert_eq!(t.recv_msg_chunk().await.unwrap(), &a[..]);
+        w.write_all(&b[5..]).await.unwrap();
+        assert_eq!(t.recv_msg_chunk().await.unwrap(), &b[..]);
+    }
+
+    #[tokio::test]
+    async fn receives_chunk_after_buffer_fully_consumed() {
+        let (mut t, mut w) = pair(32).await;
+        for (len, fill) in [(10u8, 1u8), (12, 2), (9, 3)] {
+            let c = chunk(len, fill);
+            w.write_all(&c).await.unwrap();
+            assert_eq!(t.recv_msg_chunk().await.unwrap(), &c[..]);
+        }
+    }
+
+    #[tokio::test]
+    async fn receives_many_coalesced_chunks_in_order() {
+        let (mut t, mut w) = pair(32).await;
+        let chunks = [chunk(8, 1), chunk(11, 2), chunk(9, 3), chunk(8, 4)];
+        w.write_all(&chunks.concat()).await.unwrap();
+        for c in &chunks {
+            assert_eq!(t.recv_msg_chunk().await.unwrap(), &c[..]);
+        }
+        assert_eq!(t.max_recv_size(), 32);
     }
 
     #[tokio::test]
@@ -246,11 +273,11 @@ mod tests {
         let (stream, _) = listener.accept().await.unwrap();
         let mut transport = Transport {
             stream,
-            send_buf: BytesMut::with_capacity(16),
-            send_buf_size: 16,
-            recv_buf: BytesMut::with_capacity(16),
-            recv_buf_size: 16,
+            send_buf: vec![0u8; 16],
+            send_buf_start: 0,
+            recv_buf: vec![0u8; 16],
             recv_buf_start: 0,
+            recv_buf_end: 0,
             recv_cached_size: None,
         };
         writer
@@ -279,11 +306,11 @@ mod tests {
         let (stream, _) = listener.accept().await.unwrap();
         let mut transport = Transport {
             stream,
-            send_buf: BytesMut::with_capacity(16),
-            send_buf_size: 16,
-            recv_buf: BytesMut::with_capacity(16),
-            recv_buf_size: 16,
+            send_buf: vec![0u8; 16],
+            send_buf_start: 0,
+            recv_buf: vec![0u8; 16],
             recv_buf_start: 0,
+            recv_buf_end: 0,
             recv_cached_size: None,
         };
         writer.write_all(b"MSGF\x10\0\0\0").await.unwrap();
