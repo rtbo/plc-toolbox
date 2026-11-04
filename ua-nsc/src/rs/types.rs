@@ -50,7 +50,7 @@ where
         ctx.generate_type_def(type_def).await?;
     }
 
-    ctx.generate_decode_fn().await?;
+    ctx.generate_decode_fn(&excluded_types).await?;
 
     ctx.cg.flush().await
 }
@@ -245,15 +245,16 @@ where
                     .await?;
             }
         }
-        if let types::Type::Structured {
-            desc, base_type, ..
-        } = type_def
-        {
-            if self.derives_extension_object(base_type.as_ref()) {
-                self.generate_extension_object_impl(&desc.name).await?;
-            }
-        }
+        // if let types::Type::Structured {
+        //     desc, base_type, ..
+        // } = type_def
+        // {
+        //     if self.derives_extension_object(base_type.as_ref()) {
+        //         self.generate_extension_object_impl(&desc.name).await?;
+        //     }
+        // }
         self.write_data_type_id_impl(type_def).await?;
+        self.generate_encoding_impl(type_def).await?;
 
         self.cg.write_line("").await?;
 
@@ -338,6 +339,70 @@ where
         Ok(())
     }
 
+    async fn generate_encoding_impl(&mut self, type_def: &types::Type) -> io::Result<()> {
+        let Some(type_id) = self.ua_type_ids.get(type_def.name()) else {
+            return Ok(());
+        };
+        let Some(bin_type_id) = self
+            .ua_type_ids
+            .get(&format!("{}_Encoding_DefaultBinary", type_def.name()))
+        else {
+            return Ok(());
+        };
+        let core = self.options.ua_core_module.clone();
+        self.cg
+            .start_block(&format!(
+                "impl {}::encoding::Value for {} ",
+                core,
+                type_def.name()
+            ))
+            .await?;
+
+        self.cg
+            .start_block("fn datatype_uri(&self) -> &'static str ")
+            .await?;
+        self.cg.write_line("NS_URI").await?;
+        self.cg.end_block().await?; // fn datatype_uri
+
+        self.cg.start_block("fn datatype_id(&self) -> u32 ").await?;
+        self.cg
+            .write_line(&format!("{}", type_id.numeric_id))
+            .await?;
+        self.cg.end_block().await?; // fn datatype_id
+
+        self.cg
+            .start_block("fn binary_encoding_id(&self) -> u32 ")
+            .await?;
+        self.cg
+            .write_line(&format!("{}", bin_type_id.numeric_id))
+            .await?;
+        self.cg.end_block().await?; // fn binary_encoding_id
+
+        self.cg.start_block("fn binary_encoded_len(&self) -> u32 ").await?;
+        self.cg
+            .write_line(&format!(
+                "{}::encoding::binary::Encode::encoded_len(self)",
+                core
+            ))
+            .await?;
+        self.cg.end_block().await?; // fn binary_encoded_len
+
+        self.cg
+            .start_block(&format!(
+                "fn binary_encode(&self, mut buf: &mut dyn {}::encoding::binary::BufMut)", core
+            ))
+            .await?;
+        self.cg.write_line(&format!(
+            "{}::encoding::binary::Encode::encode(self, &mut buf)",
+            core
+        )).await?;
+        self.cg.end_block().await?; // fn binary_encode
+
+        self.cg.end_block().await?; // impl DataTypeId
+        self.cg.write_line("").await?;
+
+        Ok(())
+    }
     async fn write_data_type_id_impl(&mut self, type_def: &types::Type) -> io::Result<()> {
         let Some(type_id) = self.ua_type_ids.get(type_def.name()) else {
             return Ok(());
@@ -403,21 +468,47 @@ where
         Ok(())
     }
 
-    async fn generate_decode_fn(&mut self) -> io::Result<()> {
-        if self.extension_objects.is_empty() {
-            return Ok(());
-        }
+    async fn generate_decode_fn(
+        &mut self,
+        excluded_types: &HashSet<&'static str>,
+    ) -> io::Result<()> {
+        // if self.extension_objects.is_empty() {
+        //     return Ok(());
+        // }
         let core = self.options.ua_core_module.clone();
 
         let mut map = phf_codegen::Map::new();
-        for (name, id) in &self.extension_objects {
-            map.entry(
-                *id,
-                format!("{}::ua::extension_object::decode_body::<{}>", core, name),
-            );
+        for typ in self.types.types.iter() {
+            let name = typ.name();
+            if excluded_types.contains(name) {
+                continue;
+            }
+            if let Some(bin_type_id) = self
+                .ua_type_ids
+                .get(&format!("{}_Encoding_DefaultBinary", name))
+            {
+                map.entry(
+                    bin_type_id.numeric_id,
+                    format!("{}::encoding::binary::decode_value::<{}>", core, name),
+                );
+            }
         }
 
-        self.cg.write_line(&format!("static DECODING_FNS: phf::Map<u32, {}::ua::extension_object::BinaryDecodingFn> = {};", core, map.build())).await?;
+        //
+        // for (name, id) in &self.extension_objects {
+        //     map.entry(
+        //         *id,
+        //         format!("{}::encoding::binary::decode_value::<{}>", core, name),
+        //     );
+        // }
+
+        self.cg
+            .write_line(&format!(
+                "static BIN_DECODING_FNS: phf::Map<u32, {}::encoding::binary::DecodingFn> = {};",
+                core,
+                map.build()
+            ))
+            .await?;
 
         self.cg
             .write_doc_comment(
@@ -426,17 +517,15 @@ where
             .await?;
         self.cg
             .start_block(&format!(
-                "pub fn decode_extension_object(buf: &mut binary::DecodeBuf, header: &ua::extension_object::Header, ctx: &binary::DecodingCtx) -> Result<Option<Box<dyn ua::extension_object::Body>>, ua::StatusCode> ",
+                "pub fn decode_binary_value(buf: &mut binary::DecodeBuf, binary_type_id: u32, ctx: &binary::DecodingCtx) -> Result<Option<Box<dyn {}::encoding::Value>>, ua::StatusCode> ",
+                core
             ))
             .await?;
         self.cg
-            .write_line("header.type_id.numeric_identifier()")
+            .write_line("BIN_DECODING_FNS.get(&binary_type_id)")
             .await?;
         self.cg
-            .write_line("    .and_then(|id| DECODING_FNS.get(&id))")
-            .await?;
-        self.cg
-            .write_line("    .and_then(|dfn| dfn(buf, header, ctx).transpose())")
+            .write_line("    .and_then(|dfn| dfn(buf, binary_type_id, ctx).transpose())")
             .await?;
         self.cg.write_line("    .transpose()").await?;
 
@@ -565,33 +654,33 @@ where
         }
         self.cg.end_block().await?;
         self.cg.write_line("").await?;
-        if is_msg_struct(fields) {
-            self.cg
-                .start_block(&format!(
-                    "impl {}::msg::uasc::StaticMsg for {} ",
-                    self.options.ua_core_module, &desc.name
-                ))
-                .await?;
-            let msg_type = if self.types.target_namespace.as_str() == UA_NS
-                && desc.name == "OpenSecureChannelRequest"
-            {
-                "Open"
-            } else if self.types.target_namespace.as_str() == UA_NS
-                && desc.name == "CloseSecureChannelRequest"
-            {
-                "Close"
-            } else {
-                "Msg"
-            };
-            self.cg
-                .write_line(&format!(
-                    "const MSG_TYPE: {}::msg::uasc::MsgType = {}::msg::uasc::MsgType::{};",
-                    self.options.ua_core_module, self.options.ua_core_module, msg_type
-                ))
-                .await?;
-            self.cg.end_block().await?;
-            self.cg.write_line("").await?;
-        }
+        // if is_msg_struct(fields) {
+        //     self.cg
+        //         .start_block(&format!(
+        //             "impl {}::msg::uasc::StaticMsg for {} ",
+        //             self.options.ua_core_module, &desc.name
+        //         ))
+        //         .await?;
+        //     let msg_type = if self.types.target_namespace.as_str() == UA_NS
+        //         && desc.name == "OpenSecureChannelRequest"
+        //     {
+        //         "Open"
+        //     } else if self.types.target_namespace.as_str() == UA_NS
+        //         && desc.name == "CloseSecureChannelRequest"
+        //     {
+        //         "Close"
+        //     } else {
+        //         "Msg"
+        //     };
+        //     self.cg
+        //         .write_line(&format!(
+        //             "const MSG_TYPE: {}::msg::uasc::MsgType = {}::msg::uasc::MsgType::{};",
+        //             self.options.ua_core_module, self.options.ua_core_module, msg_type
+        //         ))
+        //         .await?;
+        //     self.cg.end_block().await?;
+        //     self.cg.write_line("").await?;
+        // }
         Ok(())
     }
 }

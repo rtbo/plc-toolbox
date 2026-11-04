@@ -1,7 +1,7 @@
 use std::any::Any;
 
 use crate::encoding::binary::{self, Encode};
-use crate::ua;
+use crate::{encoding, ua};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 #[repr(u8)]
@@ -64,7 +64,7 @@ impl binary::Decode for Header {
 }
 
 #[derive(Debug)]
-pub struct ExtensionObject<T = Box<dyn Body>> {
+pub struct ExtensionObject<T = Box<dyn encoding::Value>> {
     pub type_id: ua::NodeId,
     pub body: Option<T>,
 }
@@ -78,30 +78,15 @@ impl<T> Default for ExtensionObject<T> {
     }
 }
 
-pub trait Body: Any + std::fmt::Debug {
-    fn binary_body_encoded_len(&self) -> u32;
-    fn binary_body_encode(&self, buf: &mut dyn binary::BufMut);
-}
-
-impl Body for Box<dyn Body> {
-    fn binary_body_encoded_len(&self) -> u32 {
-        (**self).binary_body_encoded_len()
-    }
-
-    fn binary_body_encode(&self, buf: &mut dyn binary::BufMut) {
-        (**self).binary_body_encode(buf)
-    }
-}
-
 impl<T> binary::Encode for ExtensionObject<T>
 where
-    T: Body,
+    T: encoding::Value,
 {
     fn encoded_len(&self) -> u32 {
         let body_len = self
             .body
             .as_ref()
-            .map(|b| b.binary_body_encoded_len() as i32);
+            .map(|b| b.binary_encoded_len() as i32);
         let header = Header {
             type_id: self.type_id.clone(),
             encoding: if self.body.is_some() {
@@ -118,7 +103,7 @@ where
         let body_len = self
             .body
             .as_ref()
-            .map(|b| b.binary_body_encoded_len() as i32);
+            .map(|b| b.binary_encoded_len() as i32);
         let header = Header {
             type_id: self.type_id.clone(),
             encoding: if self.body.is_some() {
@@ -130,43 +115,12 @@ where
         };
         header.encode(buf);
         if let Some(body) = &self.body {
-            body.binary_body_encode(buf);
+            body.binary_encode(buf);
         }
     }
 }
 
-pub type BinaryDecodingFn =
-    fn(
-        &mut binary::DecodeBuf,
-        &Header,
-        &binary::DecodingCtx,
-    ) -> Result<Option<Box<dyn ua::extension_object::Body>>, ua::StatusCode>;
-
-/// Generic decoding function for the body of an extension object of type `T`.
-/// Can be registered in the `DecodingCtx` type table.
-pub fn decode_body<T>(
-    buf: &mut binary::DecodeBuf,
-    header: &Header,
-    ctx: &binary::DecodingCtx,
-) -> Result<Option<Box<dyn ua::extension_object::Body>>, ua::StatusCode>
-where
-    T: binary::Decode + Body,
-{
-    if header.encoding != Encoding::ByteString {
-        return Err(ua::StatusCode::BadDecodingError);
-    }
-    let Some(length) = header.length.map(|l| l as usize) else {
-        return Err(ua::StatusCode::BadDecodingError);
-    };
-    let before = buf.len();
-    let value = T::decode(buf, ctx)?;
-    if before - buf.len() != length {
-        return Err(ua::StatusCode::BadDecodingError);
-    }
-    Ok(Some(Box::new(value)))
-}
-
-impl binary::Decode for ExtensionObject<Box<dyn Body>> {
+impl binary::Decode for ExtensionObject<Box<dyn encoding::Value>> {
     fn decode(
         buf: &mut crate::encoding::binary::DecodeBuf,
         ctx: &binary::DecodingCtx,
@@ -181,7 +135,14 @@ impl binary::Decode for ExtensionObject<Box<dyn Body>> {
                 let decoding_fn = ctx
                     .get_decoding_fn(header.type_id.namespace_index())
                     .ok_or(ua::StatusCode::BadDataTypeIdUnknown)?;
-                let body = decoding_fn(buf, &header, ctx)?;
+                let body = decoding_fn(
+                    buf,
+                    header
+                        .type_id
+                        .numeric_identifier()
+                        .expect("expected a numeric identifier"),
+                    ctx,
+                )?;
                 Ok(ExtensionObject {
                     type_id: header.type_id,
                     body,
@@ -192,32 +153,32 @@ impl binary::Decode for ExtensionObject<Box<dyn Body>> {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
-pub enum UnknownBody {
-    #[default]
-    None,
-    ByteString(ua::ByteString),
-    XmlElement(ua::XmlElement),
-}
-
-impl Body for UnknownBody {
-    fn binary_body_encoded_len(&self) -> u32 {
-        match self {
-            UnknownBody::None => 0,
-            UnknownBody::ByteString(b) => b.encoded_len() - 4,
-            UnknownBody::XmlElement(x) => x.encoded_len() - 4,
-        }
-    }
-
-    fn binary_body_encode(&self, buf: &mut dyn binary::BufMut) {
-        match self {
-            UnknownBody::None => {}
-            UnknownBody::ByteString(b) => {
-                buf.put_slice(b.as_slice());
-            }
-            UnknownBody::XmlElement(x) => {
-                buf.put_slice(x.0.as_bytes());
-            }
-        }
-    }
-}
+// #[derive(Debug, Clone, PartialEq, Eq, Default)]
+// pub enum UnknownBody {
+//     #[default]
+//     None,
+//     ByteString(ua::ByteString),
+//     XmlElement(ua::XmlElement),
+// }
+//
+// impl Body for UnknownBody {
+//     fn binary_body_encoded_len(&self) -> u32 {
+//         match self {
+//             UnknownBody::None => 0,
+//             UnknownBody::ByteString(b) => b.encoded_len() - 4,
+//             UnknownBody::XmlElement(x) => x.encoded_len() - 4,
+//         }
+//     }
+//
+//     fn binary_body_encode(&self, buf: &mut dyn binary::BufMut) {
+//         match self {
+//             UnknownBody::None => {}
+//             UnknownBody::ByteString(b) => {
+//                 buf.put_slice(b.as_slice());
+//             }
+//             UnknownBody::XmlElement(x) => {
+//                 buf.put_slice(x.0.as_bytes());
+//             }
+//         }
+//     }
+// }

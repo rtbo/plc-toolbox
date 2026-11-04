@@ -1,8 +1,7 @@
 //! OPC/UA Secure Conversation (UASC) implementation
 
-use ua_macros::{DecodeBinary, EncodeBinary};
-
 use bytes::Buf;
+use ua_macros::{DecodeBinary, EncodeBinary};
 
 use crate::encoding::binary;
 use crate::ua;
@@ -12,20 +11,6 @@ pub enum MsgType {
     Open,
     Close,
     Msg,
-}
-
-pub trait Msg: std::fmt::Debug + binary::Encode {
-    fn msg_type(&self) -> MsgType;
-}
-
-pub trait StaticMsg: Msg + binary::Decode {
-    const MSG_TYPE: MsgType;
-}
-
-impl<T: StaticMsg> Msg for T {
-    fn msg_type(&self) -> MsgType {
-        T::MSG_TYPE
-    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

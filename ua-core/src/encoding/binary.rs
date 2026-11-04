@@ -30,13 +30,13 @@ pub trait Encode {
 
 #[derive(Debug)]
 pub struct DecodingCtx {
-    ns_type_lookups: Vec<Option<ua::extension_object::BinaryDecodingFn>>,
+    ns_type_lookups: Vec<Option<DecodingFn>>,
 }
 
 impl Default for DecodingCtx {
     fn default() -> Self {
         let mut ctx = Self::new();
-        ctx.register_ns(0, ua::decode_extension_object);
+        ctx.register_ns(0, ua::decode_binary_value);
         ctx
     }
 }
@@ -48,25 +48,38 @@ impl DecodingCtx {
         }
     }
 
-    pub fn register_ns(
-        &mut self,
-        ns_index: u16,
-        lookup_fn: ua::extension_object::BinaryDecodingFn,
-    ) {
+    pub fn register_ns(&mut self, ns_index: u16, lookup_fn: DecodingFn) {
         if ns_index as usize >= self.ns_type_lookups.len() {
             self.ns_type_lookups.resize(ns_index as usize + 1, None);
         }
         self.ns_type_lookups[ns_index as usize] = Some(lookup_fn);
     }
 
-    pub fn get_decoding_fn(
-        &self,
-        ns_index: u16,
-    ) -> Option<&ua::extension_object::BinaryDecodingFn> {
+    pub fn get_decoding_fn(&self, ns_index: u16) -> Option<&DecodingFn> {
         self.ns_type_lookups
             .get(ns_index as usize)
             .and_then(|opt| opt.as_ref())
     }
+}
+
+pub type DecodingFn = fn(
+    buf: &mut DecodeBuf,
+    type_numeric_id: u32,
+    ctx: &DecodingCtx,
+) -> Result<Option<Box<dyn super::Value>>, ua::StatusCode>;
+
+/// Generic decoding function for the body of an extension object of type `T`.
+/// Can be registered in the `DecodingCtx` type table.
+pub fn decode_value<T>(
+    buf: &mut DecodeBuf,
+    _type_numeric_id: u32,
+    ctx: &DecodingCtx,
+) -> Result<Option<Box<dyn super::Value>>, ua::StatusCode>
+where
+    T: Decode + super::Value,
+{
+    let value = T::decode(buf, ctx)?;
+    Ok(Some(Box::new(value)))
 }
 
 pub trait Decode: Sized {
