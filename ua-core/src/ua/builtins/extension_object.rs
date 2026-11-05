@@ -81,7 +81,7 @@ where
     T: encoding::Value,
 {
     fn encoded_len(&self) -> u32 {
-        let body_len = self.body.as_ref().map(|b| b.binary_encoded_len() as i32);
+        let body_len = self.body.as_ref().map(|b| b.encoded_len() as i32);
         let header = Header {
             type_id: self.type_id.clone(),
             encoding: if self.body.is_some() {
@@ -95,7 +95,7 @@ where
     }
 
     fn encode(&self, buf: &mut binary::EncodeBuf<'_>) {
-        let body_len = self.body.as_ref().map(|b| b.binary_encoded_len() as i32);
+        let body_len = self.body.as_ref().map(|b| b.encoded_len() as i32);
         let header = Header {
             type_id: self.type_id.clone(),
             encoding: if self.body.is_some() {
@@ -107,7 +107,7 @@ where
         };
         header.encode(buf);
         if let Some(body) = &self.body {
-            body.binary_encode(buf);
+            body.encode(buf);
         }
     }
 }

@@ -378,33 +378,42 @@ where
             .await?;
         self.cg.end_block().await?; // fn binary_encoding_id
 
-        self.cg
-            .start_block("fn binary_encoded_len(&self) -> u32 ")
-            .await?;
-        self.cg
-            .write_line(&format!(
-                "{}::encoding::binary::Encode::encoded_len(self)",
-                core
-            ))
-            .await?;
-        self.cg.end_block().await?; // fn binary_encoded_len
-
-        self.cg
-            .start_block(&format!(
-                "fn binary_encode(&self, buf: &mut {}::encoding::binary::EncodeBuf<'_>)",
-                core
-            ))
-            .await?;
-        self.cg
-            .write_line(&format!(
-                "{}::encoding::binary::Encode::encode(self, buf)",
-                core
-            ))
-            .await?;
-        self.cg.end_block().await?; // fn binary_encode
-
         self.cg.end_block().await?; // impl DataTypeId
         self.cg.write_line("").await?;
+
+//         self.cg.write_line(&format!(
+//             "impl {}::encoding::binary::Encode for {} ",
+//             core,
+//             type_def.name()
+//         ))
+// 
+//         self.cg
+//             .start_block("fn encoded_len(&self) -> u32 ")
+//             .await?;
+//         self.cg
+//             .write_line(&format!(
+//                 "{}::encoding::binary::Encode::encoded_len(self)",
+//                 core
+//             ))
+//             .await?;
+//         self.cg.end_block().await?; // fn binary_encoded_len
+// 
+//         self.cg
+//             .start_block(&format!(
+//                 "fn binary_encode(&self, buf: &mut {}::encoding::binary::EncodeBuf<'_>)",
+//                 core
+//             ))
+//             .await?;
+//         self.cg
+//             .write_line(&format!(
+//                 "{}::encoding::binary::Encode::encode(self, buf)",
+//                 core
+//             ))
+//             .await?;
+//         self.cg.end_block().await?; // fn binary_encode
+// 
+//         self.cg.end_block().await?; // impl DataTypeId
+//         self.cg.write_line("").await?;
 
         Ok(())
     }

@@ -1,10 +1,8 @@
 use std::any::Any;
 
-use crate::ua;
-
 pub mod binary;
 
-pub trait Value: Any + std::fmt::Debug {
+pub trait Value: Any + std::fmt::Debug + binary::Encode {
     /// The URI of the datatype of this value, e.g. "http://opcfoundation.org/UA/" for NS0.
     fn datatype_uri(&self) -> &'static str;
 
@@ -15,9 +13,6 @@ pub trait Value: Any + std::fmt::Debug {
     fn binary_encoding_id(&self) -> u32 {
         self.datatype_id()
     }
-
-    fn binary_encoded_len(&self) -> u32;
-    fn binary_encode(&self, buf: &mut binary::EncodeBuf<'_>);
 }
 
 impl Value for Box<dyn Value> {
@@ -32,12 +27,14 @@ impl Value for Box<dyn Value> {
     fn binary_encoding_id(&self) -> u32 {
         (**self).binary_encoding_id()
     }
+}
 
-    fn binary_encoded_len(&self) -> u32 {
-        (**self).binary_encoded_len()
+impl binary::Encode for Box<dyn Value> {
+    fn encoded_len(&self) -> u32 {
+        (**self).encoded_len()
     }
 
-    fn binary_encode(&self, buf: &mut binary::EncodeBuf<'_>) {
-        (**self).binary_encode(buf)
+    fn encode(&self, buf: &mut binary::EncodeBuf<'_>) {
+        (**self).encode(buf)
     }
 }
