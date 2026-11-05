@@ -1,5 +1,3 @@
-use bytes::BufMut;
-
 use crate::encoding::binary;
 use crate::ua;
 
@@ -11,7 +9,7 @@ impl binary::Encode for XmlElement {
         self.0.encoded_len()
     }
 
-    fn encode<B: BufMut>(&self, buf: &mut B) {
+    fn encode(&self, buf: &mut binary::EncodeBuf<'_>) {
         self.0.encode(buf)
     }
 }

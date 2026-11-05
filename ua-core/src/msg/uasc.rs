@@ -1,6 +1,6 @@
 //! OPC/UA Secure Conversation (UASC) implementation
 
-use bytes::Buf;
+use bytes::{Buf, BufMut};
 use ua_macros::{DecodeBinary, EncodeBinary};
 
 use crate::encoding::binary;
@@ -38,7 +38,7 @@ impl binary::Encode for Header {
         12
     }
 
-    fn encode<B: binary::BufMut>(&self, buf: &mut B) {
+    fn encode(&self, buf: &mut binary::EncodeBuf<'_>) {
         match self.msg_type {
             MsgType::Open => buf.put_slice(b"OPN"),
             MsgType::Close => buf.put_slice(b"CLO"),

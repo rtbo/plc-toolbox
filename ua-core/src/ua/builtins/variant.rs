@@ -1,4 +1,4 @@
-use bytes::Buf;
+use bytes::{Buf, BufMut};
 
 use crate::encoding::binary::{self, Encode};
 use crate::ua;
@@ -70,7 +70,7 @@ impl binary::Encode for Variant {
         }
     }
 
-    fn encode<B: bytes::BufMut>(&self, buf: &mut B) {
+    fn encode(&self, buf: &mut binary::EncodeBuf<'_>) {
         match self {
             Variant::Null => {
                 0u8.encode(buf);
@@ -293,10 +293,9 @@ where
     }
 }
 
-fn encode_value<T, B>(builtin_typeid: u8, value: &Value<T>, buf: &mut B)
+fn encode_value<T>(builtin_typeid: u8, value: &Value<T>, buf: &mut binary::EncodeBuf<'_>)
 where
     T: binary::Encode,
-    B: bytes::BufMut,
 {
     let encoding_mask = builtin_typeid
         | match value {

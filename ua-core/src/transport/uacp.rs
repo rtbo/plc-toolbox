@@ -18,7 +18,7 @@ pub trait Msg: binary::Encode + std::fmt::Debug {
     fn msg_encoded_len(&self) -> u32 {
         8 + self.encoded_len()
     }
-    fn msg_encode<B: BufMut>(&self, buf: &mut B) {
+    fn msg_encode(&self, buf: &mut binary::EncodeBuf<'_>) {
         let header = Header {
             msg_type: self.msg_type(),
             length: self.msg_encoded_len(),
@@ -68,7 +68,7 @@ impl binary::Encode for Header {
         8
     }
 
-    fn encode<B: BufMut>(&self, buf: &mut B) {
+    fn encode(&self, buf: &mut binary::EncodeBuf<'_>) {
         match self.msg_type {
             MsgType::Hello => buf.put_slice(b"HELF"),
             MsgType::Acknowledge => buf.put_slice(b"ACKF"),
@@ -192,7 +192,7 @@ impl binary::Encode for AnyMsg {
         }
     }
 
-    fn encode<B: BufMut>(&self, buf: &mut B) {
+    fn encode(&self, buf: &mut binary::EncodeBuf<'_>) {
         match self {
             AnyMsg::Hello(m) => m.encode(buf),
             AnyMsg::Acknowledge(m) => m.encode(buf),
@@ -361,8 +361,6 @@ impl Uacp {
 
 #[cfg(test)]
 mod tests {
-    use bytes::BytesMut;
-
     use super::{Acknowledge, Error, Hello, Msg};
     use crate::encoding::binary::{Decode, Encode};
     use crate::ua;
@@ -371,9 +369,10 @@ mod tests {
     where
         T: Encode + Decode + PartialEq + std::fmt::Debug,
     {
-        let mut encoded = BytesMut::new();
-        value.encode(&mut encoded);
-        assert_eq!(encoded.len(), value.encoded_len() as usize);
+        let mut encoded = vec![0; value.encoded_len() as usize];
+        let mut output = &mut encoded[..];
+        value.encode(&mut output);
+        assert!(output.is_empty());
 
         let mut remaining: &[u8] = &encoded;
         let decoded =
@@ -381,8 +380,10 @@ mod tests {
         assert!(remaining.is_empty());
         assert_eq!(&decoded, value);
 
-        let mut reencoded = BytesMut::new();
-        decoded.encode(&mut reencoded);
+        let mut reencoded = vec![0; decoded.encoded_len() as usize];
+        let mut output = &mut reencoded[..];
+        decoded.encode(&mut output);
+        assert!(output.is_empty());
         assert_eq!(reencoded, encoded);
     }
 
@@ -390,9 +391,10 @@ mod tests {
     where
         T: Msg + PartialEq + std::fmt::Debug,
     {
-        let mut encoded = BytesMut::new();
-        value.msg_encode(&mut encoded);
-        assert_eq!(encoded.len(), value.msg_encoded_len() as usize);
+        let mut encoded = vec![0; value.msg_encoded_len() as usize];
+        let mut output = &mut encoded[..];
+        value.msg_encode(&mut output);
+        assert!(output.is_empty());
 
         let mut remaining: &[u8] = &encoded;
         let decoded = T::msg_decode(&mut remaining, &Default::default())
@@ -400,8 +402,10 @@ mod tests {
         assert!(remaining.is_empty());
         assert_eq!(&decoded, value);
 
-        let mut reencoded = BytesMut::new();
-        decoded.msg_encode(&mut reencoded);
+        let mut reencoded = vec![0; decoded.msg_encoded_len() as usize];
+        let mut output = &mut reencoded[..];
+        decoded.msg_encode(&mut output);
+        assert!(output.is_empty());
         assert_eq!(reencoded, encoded);
     }
 
@@ -415,10 +419,12 @@ mod tests {
             max_chunk_count: 5,
             endpoint_url: "x".to_owned(),
         };
-        let mut buf = BytesMut::new();
+        let mut buf = vec![0; hello.encoded_len() as usize];
+        let mut output = &mut buf[..];
 
         assert_eq!(hello.encoded_len(), 25);
-        hello.encode(&mut buf);
+        hello.encode(&mut output);
+        assert!(output.is_empty());
         assert_eq!(
             &buf[..],
             &[
@@ -437,10 +443,12 @@ mod tests {
             max_chunk_count: 5,
             endpoint_url: "x".to_owned(),
         };
-        let mut buf = BytesMut::new();
+        let mut buf = vec![0; hello.msg_encoded_len() as usize];
+        let mut output = &mut buf[..];
 
         assert_eq!(hello.msg_encoded_len(), 33);
-        hello.msg_encode(&mut buf);
+        hello.msg_encode(&mut output);
+        assert!(output.is_empty());
         assert_eq!(
             &buf[..],
             &[

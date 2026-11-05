@@ -19,7 +19,7 @@ impl binary::Encode for DateTime {
         8
     }
 
-    fn encode<B: BufMut>(&self, buf: &mut B) {
+    fn encode(&self, buf: &mut binary::EncodeBuf<'_>) {
         buf.put_i64_le(self.0);
     }
 }

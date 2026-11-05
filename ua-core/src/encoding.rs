@@ -17,7 +17,7 @@ pub trait Value: Any + std::fmt::Debug {
     }
 
     fn binary_encoded_len(&self) -> u32;
-    fn binary_encode(&self, buf: &mut dyn binary::BufMut);
+    fn binary_encode(&self, buf: &mut binary::EncodeBuf<'_>);
 }
 
 impl Value for Box<dyn Value> {
@@ -37,7 +37,7 @@ impl Value for Box<dyn Value> {
         (**self).binary_encoded_len()
     }
 
-    fn binary_encode(&self, buf: &mut dyn binary::BufMut) {
+    fn binary_encode(&self, buf: &mut binary::EncodeBuf<'_>) {
         (**self).binary_encode(buf)
     }
 }

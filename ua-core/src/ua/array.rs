@@ -1,4 +1,4 @@
-use bytes::Buf;
+use bytes::{Buf, BufMut};
 
 use crate::encoding::binary;
 use crate::ua;
@@ -11,7 +11,7 @@ where
         4 + T::slice_encoded_len(self) // length prefix + body
     }
 
-    fn encode<B: bytes::BufMut>(&self, buf: &mut B) {
+    fn encode(&self, buf: &mut binary::EncodeBuf<'_>) {
         buf.put_i32_le(self.len() as i32);
         T::encode_slice(self, buf);
     }
@@ -28,7 +28,7 @@ where
         }
     }
 
-    fn encode<B: bytes::BufMut>(&self, buf: &mut B) {
+    fn encode(&self, buf: &mut binary::EncodeBuf<'_>) {
         match self {
             Some(s) => {
                 s.encode(buf);
@@ -48,7 +48,7 @@ where
         self.as_slice().encoded_len()
     }
 
-    fn encode<B: bytes::BufMut>(&self, buf: &mut B) {
+    fn encode(&self, buf: &mut binary::EncodeBuf<'_>) {
         self.as_slice().encode(buf);
     }
 }
@@ -64,7 +64,7 @@ where
         }
     }
 
-    fn encode<B: bytes::BufMut>(&self, buf: &mut B) {
+    fn encode(&self, buf: &mut binary::EncodeBuf<'_>) {
         match self {
             Some(s) => {
                 s.encode(buf);

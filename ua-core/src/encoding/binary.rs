@@ -5,7 +5,7 @@ pub type DecodeBuf<'a> = &'a [u8];
 
 pub trait Encode {
     fn encoded_len(&self) -> u32;
-    fn encode<B: BufMut>(&self, buf: &mut B);
+    fn encode(&self, buf: &mut EncodeBuf<'_>);
 
     /// Encoded length of a slice body (without the length prefix).
     /// Types implementing `ReprEncoded` override this with a constant-time computation.
@@ -18,7 +18,7 @@ pub trait Encode {
 
     /// Encodes a slice body (without the length prefix).
     /// Types implementing `ReprEncoded` override this with a raw byte copy.
-    fn encode_slice<B: BufMut>(items: &[Self], buf: &mut B)
+    fn encode_slice(items: &[Self], buf: &mut EncodeBuf<'_>)
     where
         Self: Sized,
     {
@@ -157,7 +157,7 @@ macro_rules! repr_slice_methods {
         }
 
         #[cfg(target_endian = "little")]
-        fn encode_slice<B: BufMut>(items: &[Self], buf: &mut B) {
+        fn encode_slice(items: &[Self], buf: &mut $crate::encoding::binary::EncodeBuf<'_>) {
             buf.put_slice($crate::encoding::binary::repr_slice_bytes(items));
         }
     };
@@ -215,9 +215,10 @@ mod tests {
     where
         T: Encode + Decode + PartialEq + std::fmt::Debug,
     {
-        let mut encoded = BytesMut::new();
-        value.encode(&mut encoded);
-        assert_eq!(encoded.len(), value.encoded_len() as usize);
+        let mut encoded = vec![0; value.encoded_len() as usize];
+        let mut output = &mut encoded[..];
+        value.encode(&mut output);
+        assert!(output.is_empty());
 
         let mut remaining: &[u8] = &encoded;
         let decoded =
@@ -225,38 +226,42 @@ mod tests {
         assert!(remaining.is_empty());
         assert_eq!(&decoded, value);
 
-        let mut reencoded = BytesMut::new();
-        decoded.encode(&mut reencoded);
+        let mut reencoded = vec![0; decoded.encoded_len() as usize];
+        let mut output = &mut reencoded[..];
+        decoded.encode(&mut output);
+        assert!(output.is_empty());
         assert_eq!(reencoded, encoded);
     }
 
     #[test]
     fn repr_enums_encode_their_discriminants() {
-        let mut buf = BytesMut::new();
-
         let small = SmallCode::Value;
         assert_eq!(small.encoded_len(), 1);
-        small.encode(&mut buf);
+        let mut buf = [0; 1];
+        let mut output = &mut buf[..];
+        small.encode(&mut output);
         assert_eq!(&buf[..], &[0xab]);
         assert!(matches!(
             SmallCode::decode(&mut &buf[..], &Default::default()),
             Ok(SmallCode::Value)
         ));
 
-        buf.clear();
         let medium = MediumCode::Value;
         assert_eq!(medium.encoded_len(), 2);
-        medium.encode(&mut buf);
+        let mut buf = [0; 2];
+        let mut output = &mut buf[..];
+        medium.encode(&mut output);
         assert_eq!(&buf[..], &[0xef, 0xcd]);
         assert!(matches!(
             MediumCode::decode(&mut &buf[..], &Default::default()),
             Ok(MediumCode::Value)
         ));
 
-        buf.clear();
         let large = ua::StatusCode::BadTcpServerTooBusy;
         assert_eq!(large.encoded_len(), 4);
-        large.encode(&mut buf);
+        let mut buf = [0; 4];
+        let mut output = &mut buf[..];
+        large.encode(&mut output);
         assert_eq!(&buf[..], &0x807d0000u32.to_le_bytes());
     }
 

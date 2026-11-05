@@ -2,6 +2,8 @@ use std::fmt;
 
 use bytes::Buf;
 
+use bytes::BufMut;
+
 use crate::encoding::binary;
 use crate::ua;
 
@@ -113,7 +115,7 @@ impl binary::Encode for Guid {
         16
     }
 
-    fn encode<B: bytes::BufMut>(&self, buf: &mut B) {
+    fn encode(&self, buf: &mut binary::EncodeBuf<'_>) {
         buf.put_u32_le(self.data1);
         buf.put_u16_le(self.data2);
         buf.put_u16_le(self.data3);

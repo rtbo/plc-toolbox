@@ -1,4 +1,4 @@
-use bytes::Buf;
+use bytes::{Buf, BufMut};
 
 use crate::encoding::binary;
 
@@ -40,7 +40,7 @@ impl binary::Encode for StatusCode {
         4
     }
 
-    fn encode<B: bytes::BufMut>(&self, buf: &mut B) {
+    fn encode(&self, buf: &mut binary::EncodeBuf<'_>) {
         buf.put_u32_le(*self as u32)
     }
 }

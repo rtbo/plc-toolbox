@@ -73,7 +73,7 @@ fn expand_struct(
                 0 #( + #encoded_len_fields )*
             }
 
-            fn encode<B: ::ua_core::encoding::binary::BufMut>(&self, buf: &mut B) {
+            fn encode(&self, buf: &mut ::ua_core::encoding::binary::EncodeBuf<'_>) {
                 #(#encode_fields)*
             }
         }
@@ -129,7 +129,7 @@ fn expand_enum(
                 ::ua_core::encoding::binary::Encode::encoded_len(&value)
             }
 
-            fn encode<B: ::ua_core::encoding::binary::BufMut>(&self, buf: &mut B) {
+            fn encode(&self, buf: &mut ::ua_core::encoding::binary::EncodeBuf<'_>) {
                 let value: #repr_type = *self as #repr_type;
                 ::ua_core::encoding::binary::Encode::encode(&value, buf);
             }

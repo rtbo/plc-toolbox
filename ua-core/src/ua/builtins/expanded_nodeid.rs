@@ -1,7 +1,5 @@
 use std::fmt::{self, Write as _};
 
-use bytes::BufMut;
-
 use crate::encoding::binary;
 use crate::ua::builtins::nodeid::{
     NodeIdRef, nodeid_decode, nodeidref_encode, nodeidref_encoded_len,
@@ -147,7 +145,7 @@ impl binary::Encode for ExpandedNodeId {
         len
     }
 
-    fn encode<B: BufMut>(&self, buf: &mut B) {
+    fn encode(&self, buf: &mut binary::EncodeBuf<'_>) {
         let nodeid_ref = encoded_nodeid(self);
         let ns_uri = self.namespace_uri();
         let srv_idx = self.server_index();

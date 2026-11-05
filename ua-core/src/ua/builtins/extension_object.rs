@@ -1,6 +1,4 @@
-use std::any::Any;
-
-use crate::encoding::binary::{self, Encode};
+use crate::encoding::binary;
 use crate::{encoding, ua};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -28,7 +26,7 @@ impl binary::Encode for Header {
         self.type_id.encoded_len() + 1 + lenlen
     }
 
-    fn encode<B: binary::BufMut>(&self, buf: &mut B) {
+    fn encode(&self, buf: &mut binary::EncodeBuf<'_>) {
         self.type_id.encode(buf);
         (self.encoding as u8).encode(buf);
         if let Some(length) = self.length {
@@ -83,10 +81,7 @@ where
     T: encoding::Value,
 {
     fn encoded_len(&self) -> u32 {
-        let body_len = self
-            .body
-            .as_ref()
-            .map(|b| b.binary_encoded_len() as i32);
+        let body_len = self.body.as_ref().map(|b| b.binary_encoded_len() as i32);
         let header = Header {
             type_id: self.type_id.clone(),
             encoding: if self.body.is_some() {
@@ -99,11 +94,8 @@ where
         header.encoded_len() + body_len.unwrap_or(0) as u32
     }
 
-    fn encode<B: binary::BufMut>(&self, buf: &mut B) {
-        let body_len = self
-            .body
-            .as_ref()
-            .map(|b| b.binary_encoded_len() as i32);
+    fn encode(&self, buf: &mut binary::EncodeBuf<'_>) {
+        let body_len = self.body.as_ref().map(|b| b.binary_encoded_len() as i32);
         let header = Header {
             type_id: self.type_id.clone(),
             encoding: if self.body.is_some() {

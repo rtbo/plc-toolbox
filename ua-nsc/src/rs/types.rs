@@ -378,7 +378,9 @@ where
             .await?;
         self.cg.end_block().await?; // fn binary_encoding_id
 
-        self.cg.start_block("fn binary_encoded_len(&self) -> u32 ").await?;
+        self.cg
+            .start_block("fn binary_encoded_len(&self) -> u32 ")
+            .await?;
         self.cg
             .write_line(&format!(
                 "{}::encoding::binary::Encode::encoded_len(self)",
@@ -389,13 +391,16 @@ where
 
         self.cg
             .start_block(&format!(
-                "fn binary_encode(&self, mut buf: &mut dyn {}::encoding::binary::BufMut)", core
+                "fn binary_encode(&self, buf: &mut {}::encoding::binary::EncodeBuf<'_>)",
+                core
             ))
             .await?;
-        self.cg.write_line(&format!(
-            "{}::encoding::binary::Encode::encode(self, &mut buf)",
-            core
-        )).await?;
+        self.cg
+            .write_line(&format!(
+                "{}::encoding::binary::Encode::encode(self, buf)",
+                core
+            ))
+            .await?;
         self.cg.end_block().await?; // fn binary_encode
 
         self.cg.end_block().await?; // impl DataTypeId

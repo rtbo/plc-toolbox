@@ -12,7 +12,7 @@ impl binary::Encode for Boolean {
         1
     }
 
-    fn encode<B: BufMut>(&self, buf: &mut B) {
+    fn encode(&self, buf: &mut binary::EncodeBuf<'_>) {
         buf.put_u8(if *self { 1 } else { 0 })
     }
 }

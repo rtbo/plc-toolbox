@@ -1,5 +1,7 @@
 use bytes::Buf;
 
+use bytes::BufMut;
+
 use crate::encoding::binary;
 use crate::ua;
 
@@ -22,7 +24,7 @@ impl binary::Encode for LocalizedText {
         len
     }
 
-    fn encode<B: binary::BufMut>(&self, buf: &mut B) {
+    fn encode(&self, buf: &mut binary::EncodeBuf<'_>) {
         let mut flags = 0x02;
         if self.locale.is_some() {
             flags |= 0x01;

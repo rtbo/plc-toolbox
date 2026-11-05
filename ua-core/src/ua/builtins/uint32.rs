@@ -12,7 +12,7 @@ impl binary::Encode for UInt32 {
         4
     }
 
-    fn encode<B: BufMut>(&self, buf: &mut B) {
+    fn encode(&self, buf: &mut binary::EncodeBuf<'_>) {
         buf.put_u32_le(*self)
     }
 }

@@ -183,7 +183,7 @@ impl binary::Encode for NodeId {
         nodeid_encoded_len(self)
     }
 
-    fn encode<B: BufMut>(&self, buf: &mut B) {
+    fn encode(&self, buf: &mut binary::EncodeBuf<'_>) {
         nodeid_encode(self, buf, 0);
     }
 }
@@ -193,7 +193,7 @@ impl binary::Encode for NodeIdRef<'_> {
         nodeidref_encoded_len(self)
     }
 
-    fn encode<B: BufMut>(&self, buf: &mut B) {
+    fn encode(&self, buf: &mut binary::EncodeBuf<'_>) {
         nodeidref_encode(self, buf, 0);
     }
 }
@@ -219,7 +219,7 @@ pub(super) fn nodeid_encoded_len(node_id: &NodeId) -> u32 {
     }
 }
 
-pub(super) fn nodeid_encode<B: BufMut>(node_id: &NodeId, buf: &mut B, flags: u8) {
+pub(super) fn nodeid_encode(node_id: &NodeId, buf: &mut binary::EncodeBuf<'_>, flags: u8) {
     match node_id {
         NodeId::Numeric(ns, i) if *ns == 0 && *i <= u8::MAX as u32 => {
             buf.put_u8(0x00 | flags);
@@ -306,7 +306,7 @@ pub(super) fn nodeidref_encoded_len(node_id: &NodeIdRef) -> u32 {
     }
 }
 
-pub(super) fn nodeidref_encode<B: BufMut>(node_id: &NodeIdRef, buf: &mut B, flags: u8) {
+pub(super) fn nodeidref_encode(node_id: &NodeIdRef, buf: &mut binary::EncodeBuf<'_>, flags: u8) {
     match node_id {
         NodeIdRef::Numeric(ns, i) if *ns == 0 && *i <= u8::MAX as u32 => {
             buf.put_u8(0x00 | flags);

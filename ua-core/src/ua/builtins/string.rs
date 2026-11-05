@@ -1,5 +1,3 @@
-use bytes::BufMut;
-
 use crate::encoding::binary;
 use crate::ua;
 
@@ -10,7 +8,7 @@ impl binary::Encode for &str {
         self.as_bytes().encoded_len()
     }
 
-    fn encode<B: BufMut>(&self, buf: &mut B) {
+    fn encode(&self, buf: &mut binary::EncodeBuf<'_>) {
         self.as_bytes().encode(buf)
     }
 }
@@ -20,7 +18,7 @@ impl binary::Encode for String {
         self.as_bytes().encoded_len()
     }
 
-    fn encode<B: BufMut>(&self, buf: &mut B) {
+    fn encode(&self, buf: &mut binary::EncodeBuf<'_>) {
         self.as_bytes().encode(buf)
     }
 }
@@ -29,7 +27,7 @@ impl binary::Encode for Option<&str> {
     fn encoded_len(&self) -> u32 {
         self.map(|s| s.as_bytes()).encoded_len()
     }
-    fn encode<B: BufMut>(&self, buf: &mut B) {
+    fn encode(&self, buf: &mut binary::EncodeBuf<'_>) {
         self.map(|s| s.as_bytes()).encode(buf)
     }
 }
@@ -38,7 +36,7 @@ impl binary::Encode for Option<String> {
     fn encoded_len(&self) -> u32 {
         self.as_deref().encoded_len()
     }
-    fn encode<B: BufMut>(&self, buf: &mut B) {
+    fn encode(&self, buf: &mut binary::EncodeBuf<'_>) {
         self.as_deref().encode(buf)
     }
 }

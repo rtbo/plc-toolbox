@@ -12,7 +12,7 @@ impl binary::Encode for SByte {
         1
     }
 
-    fn encode<B: BufMut>(&self, buf: &mut B) {
+    fn encode(&self, buf: &mut binary::EncodeBuf<'_>) {
         buf.put_i8(*self)
     }
 }
