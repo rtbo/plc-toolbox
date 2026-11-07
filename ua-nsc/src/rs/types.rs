@@ -49,6 +49,7 @@ where
         ctx.generate_type_def(type_def)?;
     }
 
+    ctx.generate_request_impls(&excluded_types)?;
     ctx.generate_decode_fn(&excluded_types)?;
 
     ctx.cg.flush()
@@ -112,6 +113,35 @@ impl<'a, W> Ctx<'a, W>
 where
     W: io::Write + Unpin,
 {
+    fn generate_request_impls(&mut self, excluded_types: &HashSet<&str>) -> io::Result<()> {
+        let names: HashSet<_> = self
+            .types
+            .types
+            .iter()
+            .filter(|t| !excluded_types.contains(t.name()))
+            .filter(|t| !matches!(t, types::Type::Enumerated { values, .. } if values.is_empty()))
+            .map(|t| t.name())
+            .collect();
+        for name in &self.types.types {
+            let name = name.name();
+            let Some(prefix) = name.strip_suffix("Request") else {
+                continue;
+            };
+            let response = format!("{prefix}Response");
+            if names.contains(name) && names.contains(response.as_str()) {
+                self.cg.start_block(&format!(
+                    "impl {}::msg::Request for {} ",
+                    self.options.ua_core_module, name
+                ))?;
+                self.cg
+                    .write_line(&format!("type Response = {response};"))?;
+                self.cg.end_block()?;
+                self.cg.write_line("")?;
+            }
+        }
+        Ok(())
+    }
+
     fn translate_namespace(&self, ns: &str) -> Option<&str> {
         // TODO: handle user supplied NS
 
@@ -233,7 +263,7 @@ where
                 self.generate_structured_type(desc, fields, base_type.as_ref())?;
             }
         }
-        
+
         self.write_data_type_id_impl(type_def)?;
         self.generate_encoding_impl(type_def)?;
 
@@ -497,4 +527,63 @@ fn is_length_field(fields: &[types::Field], idx: usize) -> bool {
         }
     }
     false
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn structured(name: &str) -> types::Type {
+        types::Type::Structured {
+            desc: types::TypeDescription {
+                name: name.into(),
+                ..Default::default()
+            },
+            fields: vec![],
+            base_type: None,
+        }
+    }
+
+    #[test]
+    fn generates_request_impls_only_for_existing_pairs() {
+        let dictionary = types::TypeDictionary {
+            target_namespace: "urn:test".into(),
+            ns_table: vec![],
+            default_byte_order: None,
+            doc: None,
+            imports: vec![],
+            types: vec![
+                structured("ReadRequest"),
+                structured("ReadResponse"),
+                structured("MissingRequest"),
+                structured("OtherResponse"),
+                structured("EmptyRequest"),
+                types::Type::Enumerated {
+                    desc: types::TypeDescription {
+                        name: "EmptyResponse".into(),
+                        ..Default::default()
+                    },
+                    length_in_bits: None,
+                    byte_order_significant: false,
+                    is_option_set: false,
+                    values: vec![],
+                },
+            ],
+        };
+        let mut output = Vec::new();
+        generate(
+            &dictionary,
+            &HashMap::new(),
+            &Options {
+                ua_core_module: "my_core".into(),
+            },
+            &mut output,
+        )
+        .unwrap();
+        let output = String::from_utf8(output).unwrap();
+        assert!(output.contains("impl my_core::msg::Request for ReadRequest {"));
+        assert!(output.contains("type Response = ReadResponse;"));
+        assert!(!output.contains("impl my_core::msg::Request for MissingRequest"));
+        assert!(!output.contains("impl my_core::msg::Request for EmptyRequest"));
+    }
 }

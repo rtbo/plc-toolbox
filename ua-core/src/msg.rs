@@ -2,6 +2,11 @@ use crate::ua;
 
 pub mod uasc;
 
+/// An OPC UA request and the response type associated with it.
+pub trait Request {
+    type Response;
+}
+
 /// A trait that provides the namespace and ID for a DataType.
 /// The namespace index is not always stable across different servers and is therefore not included in this trait.,
 /// It must be retrieved from the server's NamespaceArray at runtime.
