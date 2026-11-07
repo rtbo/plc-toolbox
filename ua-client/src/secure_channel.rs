@@ -145,13 +145,14 @@ impl<P: SecurityPolicy> SecureChannel<P> {
         Ok(())
     }
 
-    /// Receives and decodes a message using the namespace table in `decoding_ctx`.
+    /// Receives and decodes a message using the namespace table in `decoding_ctx`,
+    /// returning the request ID and decoded value.
     /// Returns `BadDataTypeIdUnknown` when the encoding ID is not a registered numeric ID.
     pub async fn recv_msg(
         &mut self,
         decoding_ctx: &binary::DecodingCtx,
-    ) -> Result<Box<dyn encoding::Value>, ua::StatusCode> {
-        let (encoding_node_id, mut recv_buf) = self.recv_msg_body(decoding_ctx).await?;
+    ) -> Result<(u32, Box<dyn encoding::Value>), ua::StatusCode> {
+        let (request_id, encoding_node_id, mut recv_buf) = self.recv_msg_body(decoding_ctx).await?;
         let encoding_id = encoding_node_id
             .numeric_identifier()
             .ok_or(ua::StatusCode::BadDataTypeIdUnknown)?;
@@ -159,32 +160,34 @@ impl<P: SecurityPolicy> SecureChannel<P> {
             .get_decoding_fn(encoding_node_id.namespace_index())
             .ok_or(ua::StatusCode::BadDataTypeIdUnknown)?;
 
-        decode(&mut recv_buf, encoding_id, decoding_ctx)?
-            .ok_or(ua::StatusCode::BadDataTypeIdUnknown)
+        let value = decode(&mut recv_buf, encoding_id, decoding_ctx)?
+            .ok_or(ua::StatusCode::BadDataTypeIdUnknown)?;
+        Ok((request_id, value))
     }
 
-    /// Receives a message of the requested type without dynamically dispatching its decoder.
+    /// Receives a message of the requested type without dynamically dispatching its decoder,
+    /// returning the request ID and decoded value.
     /// `ns_index` is the namespace index of `T` on the server.
     /// Returns `BadTypeMismatch` when the encoding ID does not match `T`.
     pub async fn recv_msg_typed<T>(
         &mut self,
         ns_index: u16,
         decoding_ctx: &binary::DecodingCtx,
-    ) -> Result<T, ua::StatusCode>
+    ) -> Result<(u32, T), ua::StatusCode>
     where
         T: encoding::Value + binary::Decode + msg::BinaryEncodingId,
     {
-        let (encoding_node_id, mut recv_buf) = self.recv_msg_body(decoding_ctx).await?;
+        let (request_id, encoding_node_id, mut recv_buf) = self.recv_msg_body(decoding_ctx).await?;
         if encoding_node_id != T::binary_encoding_node_id(ns_index) {
             return Err(ua::StatusCode::BadTypeMismatch);
         }
-        T::decode(&mut recv_buf, decoding_ctx)
+        Ok((request_id, T::decode(&mut recv_buf, decoding_ctx)?))
     }
 
     async fn recv_msg_body(
         &mut self,
         decoding_ctx: &binary::DecodingCtx,
-    ) -> Result<(ua::NodeId, &[u8]), ua::StatusCode> {
+    ) -> Result<(u32, ua::NodeId, &[u8]), ua::StatusCode> {
         let mut recv_buf = self.security_policy.recv_msg_chunk(&mut self.uacp).await?;
 
         let header = uasc::Header::decode(&mut recv_buf, decoding_ctx)?;
@@ -203,7 +206,7 @@ impl<P: SecurityPolicy> SecureChannel<P> {
         self.srv_sequence_number = seq_header.sequence_number;
 
         let encoding_node_id = ua::NodeId::decode(&mut recv_buf, decoding_ctx)?;
-        Ok((encoding_node_id, recv_buf))
+        Ok((seq_header.request_id, encoding_node_id, recv_buf))
     }
 }
 
@@ -245,6 +248,27 @@ mod tests {
         type_id: ua::NodeId,
         body: &[u8],
     ) {
+        send_with_request_id(
+            writer,
+            msg_type,
+            token_id,
+            sequence_number,
+            1,
+            type_id,
+            body,
+        )
+        .await;
+    }
+
+    async fn send_with_request_id(
+        writer: &mut TcpStream,
+        msg_type: uasc::MsgType,
+        token_id: u32,
+        sequence_number: u32,
+        request_id: u32,
+        type_id: ua::NodeId,
+        body: &[u8],
+    ) {
         let size = uasc::Header::LEN
             + uasc::SymmetricSecurityHeader::LEN
             + uasc::SequenceHeader::LEN
@@ -262,7 +286,7 @@ mod tests {
         uasc::SymmetricSecurityHeader { token_id }.encode(&mut buf);
         uasc::SequenceHeader {
             sequence_number,
-            request_id: 1,
+            request_id,
         }
         .encode(&mut buf);
         type_id.encode(&mut buf);
@@ -286,23 +310,22 @@ mod tests {
         };
         let body = encoded(&request);
         let id = ua::ReadRequest::binary_encoding_node_id(0);
-        send(&mut writer, uasc::MsgType::Msg, 2, 1, id.clone(), &body).await;
-        send(&mut writer, uasc::MsgType::Msg, 2, 2, id, &body).await;
+        send_with_request_id(&mut writer, uasc::MsgType::Msg, 2, 1, 42, id.clone(), &body).await;
+        send_with_request_id(&mut writer, uasc::MsgType::Msg, 2, 2, 7, id, &body).await;
 
-        let value: Box<dyn Any> = channel.recv_msg(&ctx).await.unwrap();
+        let (request_id, value) = channel.recv_msg(&ctx).await.unwrap();
+        assert_eq!(request_id, 42);
+        let value: Box<dyn Any> = value;
         assert_eq!(
             encoded(&*value.downcast::<ua::ReadRequest>().unwrap()),
             body
         );
-        assert_eq!(
-            encoded(
-                &channel
-                    .recv_msg_typed::<ua::ReadRequest>(0, &ctx)
-                    .await
-                    .unwrap()
-            ),
-            body
-        );
+        let (request_id, value) = channel
+            .recv_msg_typed::<ua::ReadRequest>(0, &ctx)
+            .await
+            .unwrap();
+        assert_eq!(request_id, 7);
+        assert_eq!(encoded(&value), body);
     }
 
     #[tokio::test]
@@ -319,15 +342,12 @@ mod tests {
             channel.recv_msg_typed::<ua::WriteRequest>(0, &ctx).await,
             Err(ua::StatusCode::BadTypeMismatch)
         ));
-        assert_eq!(
-            encoded(
-                &channel
-                    .recv_msg_typed::<ua::ReadRequest>(0, &ctx)
-                    .await
-                    .unwrap()
-            ),
-            body
-        );
+        let (request_id, value) = channel
+            .recv_msg_typed::<ua::ReadRequest>(0, &ctx)
+            .await
+            .unwrap();
+        assert_eq!(request_id, 1);
+        assert_eq!(encoded(&value), body);
     }
 
     #[tokio::test]
@@ -346,7 +366,9 @@ mod tests {
         )
         .await;
 
-        let value: Box<dyn Any> = channel.recv_msg(&ctx).await.unwrap();
+        let (request_id, value) = channel.recv_msg(&ctx).await.unwrap();
+        assert_eq!(request_id, 1);
+        let value: Box<dyn Any> = value;
         assert_eq!(
             encoded(&*value.downcast::<ua::ReadRequest>().unwrap()),
             encoded(&request)
@@ -389,19 +411,21 @@ mod tests {
             channel.recv_msg_typed::<ua::ReadRequest>(0, &ctx).await,
             Err(ua::StatusCode::BadTypeMismatch)
         ));
-        let decoded = channel
+        let (request_id, decoded) = channel
             .recv_msg_typed::<ua::ReadRequest>(3, &ctx)
             .await
             .unwrap();
+        assert_eq!(request_id, 1);
         assert_eq!(encoded(&decoded), body);
         assert!(matches!(
             channel.recv_msg_typed::<ua::ReadRequest>(3, &ctx).await,
             Err(ua::StatusCode::BadDecodingError)
         ));
-        let decoded = channel
+        let (request_id, decoded) = channel
             .recv_msg_typed::<ua::ReadRequest>(4, &ctx)
             .await
             .unwrap();
+        assert_eq!(request_id, 1);
         assert_eq!(encoded(&decoded), body);
     }
 
