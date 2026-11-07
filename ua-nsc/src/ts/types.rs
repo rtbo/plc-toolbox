@@ -1,19 +1,19 @@
 //! Typescript Types code generation for OPC/UA.
 use std::collections::HashMap;
 
-use tokio::io::{self, AsyncWriteExt};
+use std::io;
 
 use crate::codegen::CodeGen;
 use crate::parse::NodeId;
 use crate::parse::types::{EnumValue, Field, QualName, Type, TypeDescription, TypeDictionary};
 
-pub async fn generate<W>(
+pub fn generate<W>(
     types: &TypeDictionary,
     ua_type_ids: &HashMap<String, NodeId>,
     out: &mut W,
 ) -> io::Result<()>
 where
-    W: io::AsyncWrite + Unpin,
+    W: io::Write + Unpin,
 {
     let mut ctx = Ctx {
         ua_type_ids,
@@ -21,23 +21,23 @@ where
     };
 
     if let Some(doc) = &types.doc {
-        ctx.write_module_doc_comment(doc).await?;
+        ctx.write_module_doc_comment(doc)?;
     }
 
     // Include built-in TypeScript types.
-    ctx.write_builtin_types().await?;
+    ctx.write_builtin_types()?;
 
     for type_def in &types.types {
         // Generate TypeScript definitions for each type here.
-        ctx.generate_type_def(type_def).await?;
+        ctx.generate_type_def(type_def)?;
     }
 
-    ctx.cg.flush().await
+    ctx.cg.flush()
 }
 
 struct Ctx<'a, W>
 where
-    W: io::AsyncWrite + Unpin,
+    W: io::Write + Unpin,
 {
     ua_type_ids: &'a HashMap<String, NodeId>,
     cg: super::TsCodeGen<W>,
@@ -45,46 +45,42 @@ where
 
 impl<'a, W> Ctx<'a, W>
 where
-    W: io::AsyncWrite + Unpin,
+    W: io::Write + Unpin,
 {
-    async fn write_line(&mut self, txt: &str) -> io::Result<()> {
-        self.cg.write_line(txt).await
+    fn write_line(&mut self, txt: &str) -> io::Result<()> {
+        self.cg.write_line(txt)
     }
 
-    async fn start_block(&mut self, prefix: &str) -> io::Result<()> {
-        self.cg.start_block(prefix).await
+    fn start_block(&mut self, prefix: &str) -> io::Result<()> {
+        self.cg.start_block(prefix)
     }
 
-    async fn end_block(&mut self) -> io::Result<()> {
-        self.cg.end_block().await
+    fn end_block(&mut self) -> io::Result<()> {
+        self.cg.end_block()
     }
 
-    async fn write_doc_comment(&mut self, doc: &str) -> io::Result<()> {
+    fn write_doc_comment(&mut self, doc: &str) -> io::Result<()> {
         let doc = doc.trim_end(); // remove possible trailing '\n'
 
-        self.write_line("/**").await?;
+        self.write_line("/**")?;
         for line in doc.lines() {
-            self.write_line(&format!(" * {}", line)).await?;
+            self.write_line(&format!(" * {}", line))?;
         }
-        self.write_line(" */").await?;
+        self.write_line(" */")?;
         Ok(())
     }
 
-    async fn write_module_doc_comment(&mut self, doc: &str) -> io::Result<()> {
-        self.write_line("/**").await?;
+    fn write_module_doc_comment(&mut self, doc: &str) -> io::Result<()> {
+        self.write_line("/**")?;
         for line in doc.lines() {
-            self.write_line(&format!(" * {}", line)).await?;
+            self.write_line(&format!(" * {}", line))?;
         }
-        self.write_line(" * @module").await?;
-        self.write_line(" */").await?;
+        self.write_line(" * @module")?;
+        self.write_line(" */")?;
         Ok(())
     }
 
-    async fn write_type_doc_comment(
-        &mut self,
-        desc: &TypeDescription,
-        class: &str,
-    ) -> io::Result<()> {
+    fn write_type_doc_comment(&mut self, desc: &TypeDescription, class: &str) -> io::Result<()> {
         let mut doc_comment = String::new();
         if let Some(doc) = &desc.doc {
             doc_comment.push_str(doc);
@@ -95,17 +91,17 @@ where
             doc_comment.push_str(format!("    node id: \"{}\"\n", type_id.node_id_str()).as_str());
             doc_comment.push_str(format!("    node class: {}\n", type_id.class).as_str());
         }
-        self.write_doc_comment(&doc_comment).await?;
+        self.write_doc_comment(&doc_comment)?;
         Ok(())
     }
 
-    async fn write_builtin_types(&mut self) -> io::Result<()> {
+    fn write_builtin_types(&mut self) -> io::Result<()> {
         let builtins_code = include_str!("builtins.ts");
-        self.cg.output_mut().write(builtins_code.as_bytes()).await?;
+        self.cg.output_mut().write_all(builtins_code.as_bytes())?;
         Ok(())
     }
 
-    async fn generate_type_def(&mut self, type_def: &Type) -> io::Result<()> {
+    fn generate_type_def(&mut self, type_def: &Type) -> io::Result<()> {
         let name = type_def.name();
         if excluded_type(name) {
             return Ok(());
@@ -113,7 +109,7 @@ where
 
         match type_def {
             Type::Opaque { desc, .. } => {
-                self.generate_opaque(desc).await?;
+                self.generate_opaque(desc)?;
             }
             Type::Enumerated {
                 desc,
@@ -121,39 +117,37 @@ where
                 is_option_set,
                 ..
             } => {
-                self.generate_enumeration(desc, values, *is_option_set)
-                    .await?;
+                self.generate_enumeration(desc, values, *is_option_set)?;
             }
             Type::Structured {
                 desc,
                 base_type,
                 fields,
             } => {
-                self.generate_structured(desc, base_type, fields).await?;
+                self.generate_structured(desc, base_type, fields)?;
             }
         }
 
         Ok(())
     }
 
-    async fn generate_opaque(&mut self, desc: &TypeDescription) -> io::Result<()>
+    fn generate_opaque(&mut self, desc: &TypeDescription) -> io::Result<()>
     where
-        W: io::AsyncWrite + Unpin,
+        W: io::Write + Unpin,
     {
-        self.write_line("").await?;
-        self.write_type_doc_comment(desc, "opaque type").await?;
-        self.write_line(&format!("export type {} = ByteString;", desc.name))
-            .await?;
+        self.write_line("")?;
+        self.write_type_doc_comment(desc, "opaque type")?;
+        self.write_line(&format!("export type {} = ByteString;", desc.name))?;
         Ok(())
     }
 
-    async fn generate_enumeration(
+    fn generate_enumeration(
         &mut self,
         desc: &TypeDescription,
         values: &[EnumValue],
         is_option_set: bool,
     ) -> io::Result<()> {
-        self.write_line("").await?;
+        self.write_line("")?;
 
         let type_name = remove_namespace(&desc.name);
         let class = if is_option_set {
@@ -161,42 +155,39 @@ where
         } else {
             "enumeration"
         };
-        self.write_type_doc_comment(desc, class).await?;
+        self.write_type_doc_comment(desc, class)?;
 
-        self.start_block(&format!("export const enum {} ", type_name))
-            .await?;
+        self.start_block(&format!("export const enum {} ", type_name))?;
 
         for value in values {
             if let (Some(name), Some(value)) = (&value.name, &value.value) {
                 if is_option_set {
-                    self.write_line(&format!("{} = 0x{:x},", name, value))
-                        .await?;
+                    self.write_line(&format!("{} = 0x{:x},", name, value))?;
                 } else {
-                    self.write_line(&format!("{} = {},", name, value)).await?;
+                    self.write_line(&format!("{} = {},", name, value))?;
                 }
             }
         }
-        self.end_block().await?;
+        self.end_block()?;
         Ok(())
     }
 
-    async fn generate_structured(
+    fn generate_structured(
         &mut self,
         desc: &TypeDescription,
         base_type: &Option<QualName>,
         fields: &[Field],
     ) -> io::Result<()> {
-        self.write_line("").await?;
+        self.write_line("")?;
 
-        self.write_type_doc_comment(desc, "structure").await?;
+        self.write_type_doc_comment(desc, "structure")?;
 
         let extends = if let Some(base_type) = base_type {
             format!(" extends {}", base_type.name)
         } else {
             String::new()
         };
-        self.start_block(&format!("export interface {}{} ", desc.name, extends))
-            .await?;
+        self.start_block(&format!("export interface {}{} ", desc.name, extends))?;
 
         if base_type
             .as_ref()
@@ -205,8 +196,7 @@ where
         {
             let node_id_str = self.ua_type_ids.get(&desc.name).map(|id| id.node_id_str());
             if let Some(node_id_str) = node_id_str {
-                self.write_line(&format!("UaTypeId?: \"{}\",", node_id_str))
-                    .await?;
+                self.write_line(&format!("UaTypeId?: \"{}\",", node_id_str))?;
             }
         }
 
@@ -235,11 +225,10 @@ where
 
             let is_array = field.length_field.is_some();
             let array_suffix = if is_array { "[]" } else { "" };
-            self.write_line(&format!("{}?: {}{};", name, type_name.name, array_suffix))
-                .await?;
+            self.write_line(&format!("{}?: {}{};", name, type_name.name, array_suffix))?;
         }
 
-        self.end_block().await?;
+        self.end_block()?;
         Ok(())
     }
 }

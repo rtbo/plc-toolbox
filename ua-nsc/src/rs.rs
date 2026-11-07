@@ -1,4 +1,4 @@
-use tokio::io;
+use std::io;
 
 use crate::codegen::CodeGen;
 
@@ -8,7 +8,7 @@ pub mod types;
 
 struct RsCodeGen<W>
 where
-    W: io::AsyncWrite + Unpin,
+    W: io::Write + Unpin,
 {
     output: W,
     indent: u32,
@@ -16,7 +16,7 @@ where
 
 impl<W> CodeGen<W> for RsCodeGen<W>
 where
-    W: io::AsyncWrite + Unpin,
+    W: io::Write + Unpin,
 {
     fn output_mut(&mut self) -> &mut W {
         &mut self.output
@@ -25,51 +25,47 @@ where
 
 impl<W> RsCodeGen<W>
 where
-    W: io::AsyncWrite + Unpin,
+    W: io::Write + Unpin,
 {
     fn new(output: W) -> Self {
         RsCodeGen { output, indent: 0 }
     }
 
-    async fn write_line(&mut self, txt: &str) -> io::Result<()> {
-        self.write_indentedline(self.indent, txt).await
+    fn write_line(&mut self, txt: &str) -> io::Result<()> {
+        self.write_indentedline(self.indent, txt)
     }
 
-    async fn start_block(&mut self, prefix: &str) -> io::Result<()> {
-        self.write_indentedline(self.indent, &format!("{}{{", prefix))
-            .await?;
+    fn start_block(&mut self, prefix: &str) -> io::Result<()> {
+        self.write_indentedline(self.indent, &format!("{}{{", prefix))?;
         self.indent += 1;
         Ok(())
     }
 
-    async fn end_block(&mut self) -> io::Result<()> {
+    fn end_block(&mut self) -> io::Result<()> {
         if self.indent > 0 {
             self.indent -= 1;
         }
-        self.write_indentedline(self.indent, "}").await?;
+        self.write_indentedline(self.indent, "}")?;
         Ok(())
     }
 
-    async fn _write_comment(&mut self, doc: &str) -> io::Result<()> {
+    fn _write_comment(&mut self, doc: &str) -> io::Result<()> {
         for line in doc.lines() {
-            self.write_indentedline(self.indent, &format!("// {}", line))
-                .await?;
+            self.write_indentedline(self.indent, &format!("// {}", line))?;
         }
         Ok(())
     }
 
-    async fn write_doc_comment(&mut self, doc: &str) -> io::Result<()> {
+    fn write_doc_comment(&mut self, doc: &str) -> io::Result<()> {
         for line in doc.lines() {
-            self.write_indentedline(self.indent, &format!("/// {}", line))
-                .await?;
+            self.write_indentedline(self.indent, &format!("/// {}", line))?;
         }
         Ok(())
     }
 
-    async fn write_module_doc_comment(&mut self, doc: &str) -> io::Result<()> {
+    fn write_module_doc_comment(&mut self, doc: &str) -> io::Result<()> {
         for line in doc.lines() {
-            self.write_indentedline(self.indent, &format!("//! {}", line))
-                .await?;
+            self.write_indentedline(self.indent, &format!("//! {}", line))?;
         }
         Ok(())
     }

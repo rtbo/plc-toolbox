@@ -1,22 +1,22 @@
-use tokio::io::{self, AsyncWriteExt};
+use std::io::{self, Write};
 
 pub trait CodeGen<W>
 where
-    W: AsyncWriteExt + Unpin,
+    W: Write + Unpin,
 {
     fn output_mut(&mut self) -> &mut W;
 
-    async fn write_indentedline(&mut self, indent: u32, txt: &str) -> io::Result<()> {
+    fn write_indentedline(&mut self, indent: u32, txt: &str) -> io::Result<()> {
         let out = self.output_mut();
         for _ in 0..indent {
-            out.write_all(b"    ").await?;
+            out.write_all(b"    ")?;
         }
-        out.write_all(txt.as_bytes()).await?;
-        out.write_all(b"\n").await?;
+        out.write_all(txt.as_bytes())?;
+        out.write_all(b"\n")?;
         Ok(())
     }
 
-    async fn flush(&mut self) -> io::Result<()> {
-        self.output_mut().flush().await
+    fn flush(&mut self) -> io::Result<()> {
+        self.output_mut().flush()
     }
 }

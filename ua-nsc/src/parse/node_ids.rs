@@ -1,7 +1,7 @@
 use std::{fmt, path};
 
-use tokio::fs;
-use tokio::io::{self, AsyncBufReadExt};
+use std::fs;
+use std::io::{self, BufRead};
 
 use super::Error;
 
@@ -66,12 +66,12 @@ impl NodeId {
     }
 }
 
-pub async fn parse_csv(csv_path: &path::Path) -> Result<Vec<NodeId>, Error> {
+pub fn parse_csv(csv_path: &path::Path) -> Result<Vec<NodeId>, Error> {
     let mut status_code = Vec::new();
 
-    let reader = io::BufReader::new(fs::File::open(&csv_path).await?);
-    let mut lines = reader.lines();
-    while let Some(line) = lines.next_line().await? {
+    let reader = io::BufReader::new(fs::File::open(csv_path)?);
+    for line in reader.lines() {
+        let line = line?;
         let sep1 = line
             .find(',')
             .ok_or_else(|| Error::Parse(format!("Missing first comma in line: {}", line)))?;

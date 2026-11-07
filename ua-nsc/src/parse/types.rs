@@ -5,7 +5,7 @@ use std::{fmt, path};
 
 use quick_xml::Reader;
 use quick_xml::events::{BytesStart, Event};
-use tokio::{fs, io};
+use std::{fs, io};
 
 #[derive(Clone, Debug)]
 pub enum Error {
@@ -353,8 +353,8 @@ fn parse_ns_table(e: &BytesStart) -> Result<Vec<(String, String)>> {
 
 /// Parses a BSD file. `ns_overrides` maps namespace URIs to short names and
 /// are stored as-is in the dictionary and do not alter `ns_table`.
-pub async fn parse_types_bsd(bsd_path: &path::Path) -> Result<TypeDictionary> {
-    let file = fs::File::open(bsd_path).await?;
+pub fn parse_types_bsd(bsd_path: &path::Path) -> Result<TypeDictionary> {
+    let file = fs::File::open(bsd_path)?;
     let file = io::BufReader::new(file);
     let mut reader = Reader::from_reader(file);
     reader.config_mut().trim_text(true);
@@ -362,7 +362,7 @@ pub async fn parse_types_bsd(bsd_path: &path::Path) -> Result<TypeDictionary> {
     let mut buf = Vec::new();
 
     loop {
-        match reader.read_event_into_async(&mut buf).await? {
+        match reader.read_event_into(&mut buf)? {
             Event::Eof => return Err(Error::UnexpectedEof("opc:TypeDictionary".to_string())),
             Event::Start(e) if e.name().as_ref() == "opc:TypeDictionary" => {
                 let target_namespace = get_attr_required(&e, "TargetNamespace")?;
@@ -376,8 +376,7 @@ pub async fn parse_types_bsd(bsd_path: &path::Path) -> Result<TypeDictionary> {
                     target_namespace,
                     ns_table,
                     default_byte_order,
-                )
-                .await;
+                );
             }
             _ => (),
         }
@@ -391,7 +390,7 @@ fn parse_import_directive(e: &BytesStart) -> ImportDirective {
     }
 }
 
-async fn parse_type_dictionary<R>(
+fn parse_type_dictionary<R>(
     reader: &mut Reader<R>,
     buf: &mut Vec<u8>,
     prefixes: &Prefixes,
@@ -400,7 +399,7 @@ async fn parse_type_dictionary<R>(
     default_byte_order: Option<ByteOrder>,
 ) -> Result<TypeDictionary>
 where
-    R: io::AsyncBufRead + Unpin,
+    R: io::BufRead + Unpin,
 {
     let mut doc = None;
     let mut in_doc = false;
@@ -409,7 +408,7 @@ where
     let mut buf2 = Vec::new();
 
     loop {
-        match reader.read_event_into_async(buf).await? {
+        match reader.read_event_into(buf)? {
             Event::End(e) if e.name().as_ref() == "opc:TypeDictionary" => break,
             Event::Start(e) if e.name().as_ref() == "opc:Documentation" => {
                 in_doc = true;
@@ -421,13 +420,13 @@ where
                 imports.push(parse_import_directive(&e));
             }
             Event::Start(e) if e.name().as_ref() == "opc:StructuredType" => {
-                types.push(parse_structured_type(reader, &mut buf2, &e, prefixes).await?);
+                types.push(parse_structured_type(reader, &mut buf2, &e, prefixes)?);
             }
             Event::Start(e) if e.name().as_ref() == "opc:EnumeratedType" => {
-                types.push(parse_enumerated_type(reader, &mut buf2, &e).await?);
+                types.push(parse_enumerated_type(reader, &mut buf2, &e)?);
             }
             Event::Start(e) if e.name().as_ref() == "opc:OpaqueType" => {
-                types.push(parse_opaque_type(reader, &mut buf2, &e).await?);
+                types.push(parse_opaque_type(reader, &mut buf2, &e)?);
             }
             Event::Text(e) if in_doc => {
                 doc = Some(e.into_inner().into_owned());
@@ -448,19 +447,19 @@ where
 }
 
 /// Reads the optional `Documentation` element's text content, returning when `end_tag` closes.
-async fn read_doc_and_skip_to_end<R>(
+fn read_doc_and_skip_to_end<R>(
     reader: &mut Reader<R>,
     buf: &mut Vec<u8>,
     end_tag: &str,
 ) -> Result<Option<String>>
 where
-    R: io::AsyncBufRead + Unpin,
+    R: io::BufRead + Unpin,
 {
     let mut doc = None;
     let mut in_doc = false;
 
     loop {
-        match reader.read_event_into_async(buf).await? {
+        match reader.read_event_into(buf)? {
             Event::Start(e) if e.name().as_ref() == "opc:Documentation" => {
                 in_doc = true;
             }
@@ -496,14 +495,14 @@ fn parse_field(e: &BytesStart, prefixes: &Prefixes) -> Result<Field> {
     })
 }
 
-async fn parse_structured_type<R>(
+fn parse_structured_type<R>(
     reader: &mut Reader<R>,
     buf: &mut Vec<u8>,
     start: &BytesStart<'_>,
     prefixes: &Prefixes,
 ) -> Result<Type>
 where
-    R: io::AsyncBufRead + Unpin,
+    R: io::BufRead + Unpin,
 {
     let desc = parse_type_description(start)?;
     let base_type = get_attr(start, "BaseType")
@@ -515,7 +514,7 @@ where
     let mut fields = Vec::new();
 
     loop {
-        match reader.read_event_into_async(buf).await {
+        match reader.read_event_into(buf) {
             Ok(Event::End(e)) if e.name().as_ref() == "opc:StructuredType" => break,
             Ok(Event::Start(e)) if e.name().as_ref() == "opc:Documentation" => {
                 in_doc = true;
@@ -525,7 +524,7 @@ where
             }
             Ok(Event::Start(e)) if e.name().as_ref() == "opc:Field" => {
                 let mut field = parse_field(&e, prefixes)?;
-                field.doc = read_doc_and_skip_to_end(reader, buf, "opc:Field").await?;
+                field.doc = read_doc_and_skip_to_end(reader, buf, "opc:Field")?;
                 fields.push(field);
             }
             Ok(Event::Empty(e)) if e.name().as_ref() == "opc:Field" => {
@@ -547,23 +546,23 @@ where
     })
 }
 
-async fn parse_enumerated_value<R>(
+fn parse_enumerated_value<R>(
     reader: &mut Reader<R>,
     buf: &mut Vec<u8>,
     name: Option<String>,
     value: Option<u64>,
 ) -> Result<EnumValue>
 where
-    R: io::AsyncBufRead + Unpin,
+    R: io::BufRead + Unpin,
 {
     Ok(EnumValue {
         name,
         value,
-        doc: read_doc_and_skip_to_end(reader, buf, "opc:EnumeratedValue").await?,
+        doc: read_doc_and_skip_to_end(reader, buf, "opc:EnumeratedValue")?,
     })
 }
 
-async fn parse_enumerated_type<R: io::AsyncBufRead + Unpin>(
+fn parse_enumerated_type<R: io::BufRead + Unpin>(
     reader: &mut Reader<R>,
     buf: &mut Vec<u8>,
     start: &BytesStart<'_>,
@@ -577,7 +576,7 @@ async fn parse_enumerated_type<R: io::AsyncBufRead + Unpin>(
     let mut doc = None;
     let mut in_doc = false;
     loop {
-        match reader.read_event_into_async(buf).await? {
+        match reader.read_event_into(buf)? {
             Event::Start(e) if e.name().as_ref() == "opc:Documentation" => {
                 in_doc = true;
             }
@@ -594,7 +593,7 @@ async fn parse_enumerated_type<R: io::AsyncBufRead + Unpin>(
             Event::Start(e) if e.name().as_ref() == "opc:EnumeratedValue" => {
                 let name = get_attr(&e, "Name");
                 let value_attr = get_attr_u64(&e, "Value")?;
-                let value = parse_enumerated_value(reader, buf, name, value_attr).await?;
+                let value = parse_enumerated_value(reader, buf, name, value_attr)?;
                 values.push(value);
             }
             Event::Text(e) if in_doc => {
@@ -615,7 +614,7 @@ async fn parse_enumerated_type<R: io::AsyncBufRead + Unpin>(
     })
 }
 
-async fn parse_opaque_type<R: io::AsyncBufRead + Unpin>(
+fn parse_opaque_type<R: io::BufRead + Unpin>(
     reader: &mut Reader<R>,
     buf: &mut Vec<u8>,
     start: &BytesStart<'_>,
@@ -628,7 +627,7 @@ async fn parse_opaque_type<R: io::AsyncBufRead + Unpin>(
     let mut in_doc = false;
 
     loop {
-        match reader.read_event_into_async(buf).await? {
+        match reader.read_event_into(buf)? {
             Event::End(e) if e.name().as_ref() == "opc:OpaqueType" => break,
             Event::Start(e) if e.name().as_ref() == "opc:Documentation" => {
                 in_doc = true;

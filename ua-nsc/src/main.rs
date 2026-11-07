@@ -59,9 +59,8 @@ struct Cli {
     command: Command,
 }
 
-#[tokio::main]
-async fn main() -> std::process::ExitCode {
-    match run().await {
+fn main() -> std::process::ExitCode {
+    match run() {
         Ok(()) => std::process::ExitCode::SUCCESS,
         Err(err) => {
             eprintln!("Error: {:?}", err);
@@ -70,19 +69,16 @@ async fn main() -> std::process::ExitCode {
     }
 }
 
-async fn create_new_file(
-    path: &path::Path,
-) -> anyhow::Result<tokio::io::BufWriter<tokio::fs::File>> {
-    let file = tokio::fs::OpenOptions::new()
+fn create_new_file(path: &path::Path) -> anyhow::Result<std::io::BufWriter<std::fs::File>> {
+    let file = std::fs::OpenOptions::new()
         .write(true)
         .truncate(true)
         .create(true)
-        .open(path)
-        .await?;
-    Ok(tokio::io::BufWriter::new(file))
+        .open(path)?;
+    Ok(std::io::BufWriter::new(file))
 }
 
-async fn run() -> anyhow::Result<()> {
+fn run() -> anyhow::Result<()> {
     let cli = Cli::try_parse()?;
     match cli.command {
         Command::TsTypes {
@@ -90,9 +86,9 @@ async fn run() -> anyhow::Result<()> {
             node_ids_csv,
             output,
         } => {
-            let types = ua_nsc::parse::types::parse_types_bsd(&types_bsd).await?;
+            let types = ua_nsc::parse::types::parse_types_bsd(&types_bsd)?;
             let ua_type_ids = if let Some(csv_path) = node_ids_csv {
-                let node_ids = ua_nsc::parse::node_ids::parse_csv(&csv_path).await?;
+                let node_ids = ua_nsc::parse::node_ids::parse_csv(&csv_path)?;
                 node_ids
                     .into_iter()
                     .map(|node_id| (node_id.name.clone(), node_id))
@@ -100,22 +96,22 @@ async fn run() -> anyhow::Result<()> {
             } else {
                 HashMap::new()
             };
-            let mut output: Box<dyn tokio::io::AsyncWrite + Unpin> = match output {
-                Some(path) => Box::new(create_new_file(&path).await?),
-                None => Box::new(tokio::io::stdout()),
+            let mut output: Box<dyn std::io::Write + Unpin> = match output {
+                Some(path) => Box::new(create_new_file(&path)?),
+                None => Box::new(std::io::stdout()),
             };
-            ua_nsc::ts::types::generate(&types, &ua_type_ids, &mut output).await?;
+            ua_nsc::ts::types::generate(&types, &ua_type_ids, &mut output)?;
         }
         Command::TsNs {
             node_ids_csv,
             output,
         } => {
-            let node_ids = ua_nsc::parse::node_ids::parse_csv(&node_ids_csv).await?;
-            let mut output: Box<dyn tokio::io::AsyncWrite + Unpin> = match output {
-                Some(path) => Box::new(create_new_file(&path).await?),
-                None => Box::new(tokio::io::stdout()),
+            let node_ids = ua_nsc::parse::node_ids::parse_csv(&node_ids_csv)?;
+            let mut output: Box<dyn std::io::Write + Unpin> = match output {
+                Some(path) => Box::new(create_new_file(&path)?),
+                None => Box::new(std::io::stdout()),
             };
-            ua_nsc::ts::node_ids::generate(&node_ids, &mut output).await?;
+            ua_nsc::ts::node_ids::generate(&node_ids, &mut output)?;
         }
         Command::TsNs0 {
             types_bsd,
@@ -163,44 +159,44 @@ async fn run() -> anyhow::Result<()> {
             };
 
             println!("Reading {}", types_bsd_path.display());
-            let types = ua_nsc::parse::types::parse_types_bsd(&types_bsd_path).await?;
+            let types = ua_nsc::parse::types::parse_types_bsd(&types_bsd_path)?;
             println!("Reading {}", node_ids_path.display());
-            let node_ids = ua_nsc::parse::node_ids::parse_csv(&node_ids_path).await?;
+            let node_ids = ua_nsc::parse::node_ids::parse_csv(&node_ids_path)?;
             println!("Reading {}", attr_ids_path.display());
-            let attr_ids = ua_nsc::parse::attribute_ids::parse_csv(&attr_ids_path).await?;
+            let attr_ids = ua_nsc::parse::attribute_ids::parse_csv(&attr_ids_path)?;
             println!("Reading {}", status_code_path.display());
-            let status_code = ua_nsc::parse::status_code::parse_csv(&status_code_path).await?;
+            let status_code = ua_nsc::parse::status_code::parse_csv(&status_code_path)?;
 
             println!("Creating {}", output_dir.display());
-            tokio::fs::create_dir_all(&output_dir).await?;
+            std::fs::create_dir_all(&output_dir)?;
 
             // Generate ns0.ts
             let ns0_path = output_dir.join("ns0.ts");
             println!("Writing {}", ns0_path.display());
-            let mut ns0_file = create_new_file(&ns0_path).await?;
-            ua_nsc::ts::node_ids::generate(&node_ids, &mut ns0_file).await?;
+            let mut ns0_file = create_new_file(&ns0_path)?;
+            ua_nsc::ts::node_ids::generate(&node_ids, &mut ns0_file)?;
 
             // Generate attribute_ids.ts
             let attr_ids_path = output_dir.join("attribute_ids.ts");
             println!("Writing {}", attr_ids_path.display());
-            let mut attr_ids_file = create_new_file(&attr_ids_path).await?;
-            ua_nsc::ts::attribute_ids::generate(&attr_ids, &mut attr_ids_file).await?;
+            let mut attr_ids_file = create_new_file(&attr_ids_path)?;
+            ua_nsc::ts::attribute_ids::generate(&attr_ids, &mut attr_ids_file)?;
 
             // Generate status_code.ts
             let status_code_path = output_dir.join("status_code.ts");
             println!("Writing {}", status_code_path.display());
-            let mut status_code_file = create_new_file(&status_code_path).await?;
-            ua_nsc::ts::status_code::generate(&status_code, &mut status_code_file).await?;
+            let mut status_code_file = create_new_file(&status_code_path)?;
+            ua_nsc::ts::status_code::generate(&status_code, &mut status_code_file)?;
 
             // Generate types.ts
             let types_path = output_dir.join("types.ts");
             println!("Writing {}", types_path.display());
-            let mut types_file = create_new_file(&types_path).await?;
+            let mut types_file = create_new_file(&types_path)?;
             let ua_type_ids = node_ids
                 .into_iter()
                 .map(|node_id| (node_id.name.clone(), node_id))
                 .collect::<HashMap<_, _>>();
-            ua_nsc::ts::types::generate(&types, &ua_type_ids, &mut types_file).await?;
+            ua_nsc::ts::types::generate(&types, &ua_type_ids, &mut types_file)?;
         }
     }
     Ok(())

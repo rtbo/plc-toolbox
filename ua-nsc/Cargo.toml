@@ -17,5 +17,4 @@ path = "src/main.rs"
 anyhow.workspace = true
 clap.workspace = true
 quick-xml.workspace = true
-tokio.workspace = true
 phf_codegen = "0.14.0"

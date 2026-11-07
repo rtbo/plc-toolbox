@@ -1,6 +1,6 @@
 use std::fmt;
 
-use tokio::io;
+use std::io;
 
 pub mod attribute_ids;
 pub mod node_ids;

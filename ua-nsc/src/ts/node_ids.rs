@@ -1,5 +1,5 @@
 //! Typescript Namespace nodes code generation for OPC/UA.
-use tokio::io::{self, AsyncWriteExt};
+use std::io;
 
 use crate::parse::{NodeClass, NodeId};
 
@@ -29,9 +29,9 @@ fn enum_name(node_class: &NodeClass) -> &'static str {
     }
 }
 
-pub async fn generate<W>(node_ids: &[NodeId], out: &mut W) -> tokio::io::Result<()>
+pub fn generate<W>(node_ids: &[NodeId], out: &mut W) -> std::io::Result<()>
 where
-    W: io::AsyncWrite + Unpin,
+    W: io::Write + Unpin,
 {
     let mut first = true;
     for node_class in ALL_NODE_CLASSES.iter() {
@@ -46,19 +46,19 @@ where
         if first {
             first = false;
         } else {
-            out.write(b"\n").await?;
+            out.write_all(b"\n")?;
         }
 
-        out.write(format!("export const enum {} {{\n", enum_name(node_class)).as_bytes())
-            .await?;
+        out.write_all(format!("export const enum {} {{\n", enum_name(node_class)).as_bytes())?;
 
         for node_id in cls_node_ids {
-            out.write(format!("    {} = \"i={}\",\n", node_id.name, node_id.numeric_id).as_bytes())
-                .await?;
+            out.write_all(
+                format!("    {} = \"i={}\",\n", node_id.name, node_id.numeric_id).as_bytes(),
+            )?;
         }
 
-        out.write(b"}\n").await?;
+        out.write_all(b"}\n")?;
     }
 
-    out.flush().await
+    out.flush()
 }
