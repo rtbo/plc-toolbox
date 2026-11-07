@@ -55,7 +55,7 @@ impl binary::Decode for Header {
         buf: &mut crate::encoding::binary::DecodeBuf,
         _ctx: &binary::DecodingCtx,
     ) -> Result<Self, ua::StatusCode> {
-        binary::check_remaining(buf, 8)?;
+        binary::check_remaining(buf, Self::LEN as usize)?;
         let mut typ: [u8; 3] = [0u8; 3];
         buf.copy_to_slice(&mut typ);
         let is_final = buf.get_u8();

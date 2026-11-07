@@ -257,36 +257,43 @@ pub(super) fn nodeid_decode(
     buf: &mut crate::encoding::binary::DecodeBuf,
     ctx: &binary::DecodingCtx,
 ) -> Result<(NodeId, u8), ua::StatusCode> {
+    binary::check_remaining(buf, 1)?;
     let type_byte = buf.get_u8();
     let flags = type_byte & 0xF0;
     let node_id_type = type_byte & 0x0F;
 
     match node_id_type {
         0x00 => {
+            binary::check_remaining(buf, 1)?;
             let identifier = buf.get_u8() as u32;
             Ok((NodeId::Numeric(0, identifier), flags))
         }
         0x01 => {
+            binary::check_remaining(buf, 3)?;
             let namespace_index = buf.get_u8() as u16;
             let identifier = buf.get_u16_le() as u32;
             Ok((NodeId::Numeric(namespace_index, identifier), flags))
         }
         0x02 => {
+            binary::check_remaining(buf, 6)?;
             let namespace_index = buf.get_u16_le();
             let identifier = buf.get_u32_le();
             Ok((NodeId::Numeric(namespace_index, identifier), flags))
         }
         0x03 => {
+            binary::check_remaining(buf, 2)?;
             let namespace_index = buf.get_u16_le();
             let identifier = String::decode(buf, ctx)?;
             Ok((NodeId::String(namespace_index, identifier), flags))
         }
         0x04 => {
+            binary::check_remaining(buf, 2)?;
             let namespace_index = buf.get_u16_le();
             let identifier = ua::Guid::decode(buf, ctx)?;
             Ok((NodeId::Guid(namespace_index, identifier), flags))
         }
         0x05 => {
+            binary::check_remaining(buf, 2)?;
             let namespace_index = buf.get_u16_le();
             let identifier = Vec::<u8>::decode(buf, ctx)?;
             Ok((NodeId::Opaque(namespace_index, identifier), flags))
@@ -343,6 +350,34 @@ pub(super) fn nodeidref_encode(node_id: &NodeIdRef, buf: &mut binary::EncodeBuf<
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn rejects_truncated_nodeids() {
+        let ids = [
+            NodeId::Numeric(0, 42),
+            NodeId::Numeric(1, 42),
+            NodeId::Numeric(256, 42),
+            NodeId::String(1, "hello".into()),
+            NodeId::Guid(1, ua::Guid::default()),
+            NodeId::Opaque(1, vec![1, 2, 3]),
+        ];
+        let ctx = binary::DecodingCtx::default();
+        for id in ids {
+            let mut bytes = vec![0; id.encoded_len() as usize];
+            id.encode(&mut &mut bytes[..]);
+            for len in 0..bytes.len() {
+                assert!(
+                    matches!(
+                        NodeId::decode(&mut &bytes[..len], &ctx),
+                        Err(ua::StatusCode::BadDecodingError)
+                    ),
+                    "truncated {id:?} at {len}"
+                );
+            }
+            assert_eq!(NodeId::decode(&mut &bytes[..], &ctx).unwrap(), id);
+        }
+    }
+
     #[test]
     fn test_nodeid_display() {
         let node_id_numeric = NodeId::Numeric(0, 42);
