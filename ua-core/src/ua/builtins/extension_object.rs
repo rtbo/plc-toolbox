@@ -61,7 +61,7 @@ impl binary::Decode for Header {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub struct ExtensionObject<T = Box<dyn encoding::Value>> {
     pub type_id: ua::NodeId,
     pub body: Option<T>,

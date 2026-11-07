@@ -1,7 +1,7 @@
 use bytes::{Buf, BufMut};
 
 use crate::encoding::binary::{self, Encode};
-use crate::ua;
+use crate::{encoding, ua};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Value<T> {
@@ -10,7 +10,7 @@ pub enum Value<T> {
     MultiDimArray(Vec<T>, Vec<i32>),
 }
 
-#[derive(Debug, Clone, PartialEq, Default)]
+#[derive(Debug, Default)]
 pub enum Variant {
     #[default]
     Null,
@@ -35,7 +35,7 @@ pub enum Variant {
     StatusCode(Value<ua::StatusCode>),
     QualifiedName(Value<ua::QualifiedName>),
     LocalizedText(Value<ua::LocalizedText>),
-    //ExtensionObject(VariantVal<ua::ExtensionObject>),
+    ExtensionObject(Value<ua::ExtensionObject<Box<dyn encoding::Value>>>),
     DataValue(Box<Value<ua::DataValue>>),
     Variant(Box<Value<Variant>>), // Nested variant
 }
@@ -65,6 +65,7 @@ impl binary::Encode for Variant {
             Variant::StatusCode(val) => value_encoded_len(val),
             Variant::QualifiedName(val) => value_encoded_len(val),
             Variant::LocalizedText(val) => value_encoded_len(val),
+            Variant::ExtensionObject(val) => value_encoded_len(val),
             Variant::DataValue(val) => value_encoded_len(val),
             Variant::Variant(val) => value_encoded_len(val),
         }
@@ -122,6 +123,7 @@ impl binary::Encode for Variant {
             Variant::StatusCode(val) => encode_value(19, val, buf),
             Variant::QualifiedName(val) => encode_value(20, val, buf),
             Variant::LocalizedText(val) => encode_value(21, val, buf),
+            Variant::ExtensionObject(val) => encode_value(22, val, buf),
             Variant::DataValue(val) => encode_value(23, val, buf),
             Variant::Variant(val) => encode_value(24, val, buf),
         }
@@ -260,6 +262,12 @@ impl binary::Decode for Variant {
                 ctx,
             )?)),
             21 => Ok(Variant::LocalizedText(decode_value(
+                is_array,
+                has_multidim,
+                buf,
+                ctx,
+            )?)),
+            22 => Ok(Variant::ExtensionObject(decode_value(
                 is_array,
                 has_multidim,
                 buf,

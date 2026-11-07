@@ -5,7 +5,7 @@ use bytes::BufMut;
 use crate::encoding::binary;
 use crate::ua;
 
-#[derive(Debug, Clone, PartialEq, Default)]
+#[derive(Debug, Default)]
 pub struct DataValue {
     pub value: Option<ua::Variant>,
     pub status_code: Option<ua::StatusCode>,
