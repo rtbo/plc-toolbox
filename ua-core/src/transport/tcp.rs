@@ -134,6 +134,7 @@ impl Transport {
     ///
     /// The returned slice borrows the receive buffer and implements `bytes::Buf`.
     /// Any bytes read beyond this chunk remain buffered for the next call.
+    /// Cancelling a pending receive preserves partially read bytes for the next call.
     pub async fn recv_msg_chunk(&mut self) -> Result<&[u8], ua::StatusCode> {
         if self.recv_buf_start > 0 {
             let (start, end) = (self.recv_buf_start, self.recv_buf_end);
@@ -236,6 +237,35 @@ mod tests {
         assert_eq!(t.recv_msg_chunk().await.unwrap(), &a[..]);
         w.write_all(&b[5..]).await.unwrap();
         assert_eq!(t.recv_msg_chunk().await.unwrap(), &b[..]);
+    }
+
+    #[tokio::test]
+    async fn cancelled_receive_preserves_partial_and_cached_chunks() {
+        let (mut t, mut w) = pair(64).await;
+        let a = chunk(10, 1);
+        let b = chunk(15, 2);
+        w.write_all(&a).await.unwrap();
+        w.write_all(&b[..8]).await.unwrap();
+        t.fill(a.len() + 8).await.unwrap();
+        assert_eq!(t.recv_msg_chunk().await.unwrap(), &a[..]);
+        assert_eq!(t.recv_cached_size, Some(b.len()));
+        assert!(
+            tokio::time::timeout(std::time::Duration::from_millis(10), t.recv_msg_chunk())
+                .await
+                .is_err()
+        );
+        w.write_all(&b[8..]).await.unwrap();
+        assert_eq!(t.recv_msg_chunk().await.unwrap(), &b[..]);
+
+        let c = chunk(12, 3);
+        w.write_all(&c[..4]).await.unwrap();
+        assert!(
+            tokio::time::timeout(std::time::Duration::from_millis(10), t.recv_msg_chunk())
+                .await
+                .is_err()
+        );
+        w.write_all(&c[4..]).await.unwrap();
+        assert_eq!(t.recv_msg_chunk().await.unwrap(), &c[..]);
     }
 
     #[tokio::test]
