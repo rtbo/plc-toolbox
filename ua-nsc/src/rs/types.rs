@@ -233,14 +233,7 @@ where
                 self.generate_structured_type(desc, fields, base_type.as_ref())?;
             }
         }
-        // if let types::Type::Structured {
-        //     desc, base_type, ..
-        // } = type_def
-        // {
-        //     if self.derives_extension_object(base_type.as_ref()) {
-        //         self.generate_extension_object_impl(&desc.name)?;
-        //     }
-        // }
+        
         self.write_data_type_id_impl(type_def)?;
         self.generate_encoding_impl(type_def)?;
 
@@ -282,40 +275,6 @@ where
 
         self.cg.end_block()?; // impl DataTypeId
         self.cg.write_line("")?;
-
-        //         self.cg.write_line(&format!(
-        //             "impl {}::encoding::binary::Encode for {} ",
-        //             core,
-        //             type_def.name()
-        //         ))
-        //
-        //         self.cg
-        //             .start_block("fn encoded_len(&self) -> u32 ")
-        //             ?;
-        //         self.cg
-        //             .write_line(&format!(
-        //                 "{}::encoding::binary::Encode::encoded_len(self)",
-        //                 core
-        //             ))
-        //             ?;
-        //         self.cg.end_block()?; // fn binary_encoded_len
-        //
-        //         self.cg
-        //             .start_block(&format!(
-        //                 "fn binary_encode(&self, buf: &mut {}::encoding::binary::EncodeBuf<'_>)",
-        //                 core
-        //             ))
-        //             ?;
-        //         self.cg
-        //             .write_line(&format!(
-        //                 "{}::encoding::binary::Encode::encode(self, buf)",
-        //                 core
-        //             ))
-        //             ?;
-        //         self.cg.end_block()?; // fn binary_encode
-        //
-        //         self.cg.end_block()?; // impl DataTypeId
-        //         self.cg.write_line("")?;
 
         Ok(())
     }
@@ -372,9 +331,6 @@ where
     }
 
     fn generate_decode_fn(&mut self, excluded_types: &HashSet<&'static str>) -> io::Result<()> {
-        // if self.extension_objects.is_empty() {
-        //     return Ok(());
-        // }
         let core = self.options.ua_core_module.clone();
 
         let mut map = phf_codegen::Map::new();
@@ -393,14 +349,6 @@ where
                 );
             }
         }
-
-        //
-        // for (name, id) in &self.extension_objects {
-        //     map.entry(
-        //         *id,
-        //         format!("{}::encoding::binary::decode_value::<{}>", core, name),
-        //     );
-        // }
 
         self.cg.write_line(&format!(
             "static BIN_DECODING_FNS: phf::Map<u32, {}::encoding::binary::DecodingFn> = {};",
@@ -536,33 +484,6 @@ where
         }
         self.cg.end_block()?;
         self.cg.write_line("")?;
-        // if is_msg_struct(fields) {
-        //     self.cg
-        //         .start_block(&format!(
-        //             "impl {}::msg::uasc::StaticMsg for {} ",
-        //             self.options.ua_core_module, &desc.name
-        //         ))
-        //         ?;
-        //     let msg_type = if self.types.target_namespace.as_str() == UA_NS
-        //         && desc.name == "OpenSecureChannelRequest"
-        //     {
-        //         "Open"
-        //     } else if self.types.target_namespace.as_str() == UA_NS
-        //         && desc.name == "CloseSecureChannelRequest"
-        //     {
-        //         "Close"
-        //     } else {
-        //         "Msg"
-        //     };
-        //     self.cg
-        //         .write_line(&format!(
-        //             "const MSG_TYPE: {}::msg::uasc::MsgType = {}::msg::uasc::MsgType::{};",
-        //             self.options.ua_core_module, self.options.ua_core_module, msg_type
-        //         ))
-        //         ?;
-        //     self.cg.end_block()?;
-        //     self.cg.write_line("")?;
-        // }
         Ok(())
     }
 }
