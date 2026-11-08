@@ -1,4 +1,5 @@
 use ua_core::encoding::binary;
+use ua_core::msg;
 use ua_core::transport::tcp;
 use ua_core::transport::uacp::{self, Uacp};
 use ua_core::{AnySecurityPolicy, SecurityPolicyNone, ua};
@@ -62,6 +63,7 @@ pub struct Config {
 pub struct TcpClient {
     sc: SecureChannel<AnySecurityPolicy>,
     decoding_ctx: binary::DecodingCtx,
+    req_id: u32,
 }
 
 impl TcpClient {
@@ -81,7 +83,6 @@ impl TcpClient {
         let _config = Config {
             buffer: buffer_config,
         };
-        println!("completed hello/ack: {:?}", _config);
 
         uacp.transport_mut()
             .adjust_buffer_sizes(config.buffer.send_size, config.buffer.recv_size);
@@ -106,8 +107,20 @@ impl TcpClient {
         )
         .await?;
 
-        println!("Secure channel established");
+        Ok(Self { sc, decoding_ctx, req_id: 2 })
+    }
 
-        Ok(Self { sc, decoding_ctx })
+    pub async fn send_request<R>(&mut self, request: R) -> Result<R::Response, ua::StatusCode> 
+    where
+        R: msg::Request + binary::Encode + msg::BinaryEncodingId,
+        R::Response: binary::Decode + msg::BinaryEncodingId,
+    {
+        self.sc.send_msg(0, request, self.req_id).await?;
+        let (req_id, res) = self.sc.recv_msg_typed(0, &self.decoding_ctx).await?;
+        if req_id != self.req_id {
+            return Err(ua::StatusCode::BadNoMatch);
+        }
+        self.req_id += 1;
+        Ok(res)
     }
 }

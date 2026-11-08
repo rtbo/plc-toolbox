@@ -175,7 +175,7 @@ impl<P: SecurityPolicy> SecureChannel<P> {
         decoding_ctx: &binary::DecodingCtx,
     ) -> Result<(u32, T), ua::StatusCode>
     where
-        T: encoding::Value + binary::Decode + msg::BinaryEncodingId,
+        T: binary::Decode + msg::BinaryEncodingId,
     {
         let (request_id, encoding_node_id, mut recv_buf) = self.recv_msg_body(decoding_ctx).await?;
         if encoding_node_id != T::binary_encoding_node_id(ns_index) {
