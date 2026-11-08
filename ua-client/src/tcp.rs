@@ -9,15 +9,15 @@ use crate::SecureChannel;
 pub struct BufferConfig {
     pub send_size: usize,
     pub recv_size: usize,
-    pub max_msg_size: usize,
+    pub max_msg_chunks: Option<usize>,
 }
 
 impl Default for BufferConfig {
     fn default() -> Self {
         Self {
-            send_size: 8192,
-            recv_size: 8192,
-            max_msg_size: 8192 * 16,
+            send_size: 65536,
+            recv_size: 65536,
+            max_msg_chunks: None,
         }
     }
 }
@@ -33,8 +33,8 @@ impl BufferConfig {
             protocol_version: 0,
             receive_buffer_size: self.recv_size as u32,
             send_buffer_size: self.send_size as u32,
-            max_message_size: self.max_msg_size as u32,
-            max_chunk_count: 16,
+            max_message_size: (self.recv_size * self.max_msg_chunks.unwrap_or(0)) as u32,
+            max_chunk_count: self.max_msg_chunks.unwrap_or(0) as u32,
             endpoint_url: endpoint.to_string(),
         };
         uacp.send(hello_msg).await?;
@@ -45,7 +45,11 @@ impl BufferConfig {
         Ok(Self {
             send_size: ack_msg.send_buffer_size as usize,
             recv_size: ack_msg.receive_buffer_size as usize,
-            max_msg_size: ack_msg.max_message_size as usize,
+            max_msg_chunks: if ack_msg.max_chunk_count > 0 {
+                Some(ack_msg.max_chunk_count as usize)
+            } else {
+                None
+            },
         })
     }
 }
