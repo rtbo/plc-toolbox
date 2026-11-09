@@ -303,7 +303,7 @@ where
         self.cg.write_line(&format!("{}", bin_type_id.numeric_id))?;
         self.cg.end_block()?; // fn binary_encoding_id
 
-        self.cg.end_block()?; // impl DataTypeId
+        self.cg.end_block()?; // impl encoding::Value
         self.cg.write_line("")?;
 
         Ok(())
@@ -321,6 +321,9 @@ where
         self.cg.write_line("const NS_URI: &'static str = NS_URI;")?;
         self.cg
             .write_line(&format!("const DATATYPE_ID: u32 = {};", type_id.numeric_id))?;
+        if self.types.target_namespace == UA_NS {
+            self.cg.write_line("const NS_INDEX: Option<u16> = Some(0);")?;
+        }
         self.cg.end_block()?; // impl DataTypeId
         self.cg.write_line("")?;
 
