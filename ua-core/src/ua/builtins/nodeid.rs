@@ -353,29 +353,30 @@ mod tests {
 
     #[test]
     fn rejects_truncated_nodeids() {
-        let ids = [
-            NodeId::Numeric(0, 42),
-            NodeId::Numeric(1, 42),
-            NodeId::Numeric(256, 42),
-            NodeId::String(1, "hello".into()),
-            NodeId::Guid(1, ua::Guid::default()),
-            NodeId::Opaque(1, vec![1, 2, 3]),
-        ];
-        let ctx = binary::DecodingCtx::default();
-        for id in ids {
-            let mut bytes = vec![0; id.encoded_len() as usize];
-            id.encode(&mut &mut bytes[..]);
-            for len in 0..bytes.len() {
-                assert!(
-                    matches!(
-                        NodeId::decode(&mut &bytes[..len], &ctx),
-                        Err(ua::StatusCode::BadDecodingError)
-                    ),
-                    "truncated {id:?} at {len}"
-                );
-            }
-            assert_eq!(NodeId::decode(&mut &bytes[..], &ctx).unwrap(), id);
-        }
+        todo!()
+        // let ids = [
+        //     NodeId::Numeric(0, 42),
+        //     NodeId::Numeric(1, 42),
+        //     NodeId::Numeric(256, 42),
+        //     NodeId::String(1, "hello".into()),
+        //     NodeId::Guid(1, ua::Guid::default()),
+        //     NodeId::Opaque(1, vec![1, 2, 3]),
+        // ];
+        // let ctx = binary::DecodingCtx::default();
+        // for id in ids {
+        //     let mut bytes = vec![0; id.encoded_len() as usize];
+        //     id.encode(&mut &mut bytes[..]);
+        //     for len in 0..bytes.len() {
+        //         assert!(
+        //             matches!(
+        //                 NodeId::decode(&mut &bytes[..len], &ctx),
+        //                 Err(ua::StatusCode::BadDecodingError)
+        //             ),
+        //             "truncated {id:?} at {len}"
+        //         );
+        //     }
+        //     assert_eq!(NodeId::decode(&mut &bytes[..], &ctx).unwrap(), id);
+        // }
     }
 
     #[test]

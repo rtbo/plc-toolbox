@@ -1,6 +1,5 @@
-use crate::encoding::binary;
 use crate::msg::uasc::{self, AsymmetricSecurityHeader, SymmetricSecurityHeader};
-use crate::transport::Uacp;
+use crate::transport::tcp;
 use crate::ua;
 
 #[allow(async_fn_in_trait)]
@@ -11,22 +10,20 @@ pub trait SecurityPolicy: Sized {
 
     fn asymmetric_security_header(&self) -> AsymmetricSecurityHeader;
 
-    async fn send_msg_chunk<F>(
+    async fn send_msg_chunk(
         &mut self,
-        uacp: &mut Uacp,
-        msg_size: u32,
-        encode_fn: F,
-    ) -> Result<(), ua::StatusCode>
-    where
-        F: FnOnce(&mut binary::EncodeBuf<'_>);
+        stream: &mut tcp::SendHalf,
+        buf: &bytes::BytesMut,
+    ) -> Result<(), ua::StatusCode>;
 
-    async fn recv_msg_chunk<'a>(
-        &'a mut self,
-        uacp: &'a mut Uacp,
-    ) -> Result<&'a [u8], ua::StatusCode>;
+    async fn recv_msg_chunk(
+        &mut self,
+        stream: &mut tcp::RecvHalf,
+        buf: &mut bytes::BytesMut,
+    ) -> Result<(), ua::StatusCode>;
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct SecurityPolicyNone;
 
 impl SecurityPolicy for SecurityPolicyNone {
@@ -46,29 +43,26 @@ impl SecurityPolicy for SecurityPolicyNone {
         }
     }
 
-    async fn send_msg_chunk<F>(
+    async fn send_msg_chunk(
         &mut self,
-        uacp: &mut Uacp,
-        chunk_size: u32,
-        encode_fn: F,
+        stream: &mut tcp::SendHalf,
+        buf: &bytes::BytesMut,
     ) -> Result<(), ua::StatusCode>
-    where
-        F: FnOnce(&mut binary::EncodeBuf<'_>),
     {
-        uacp.send_chunk(chunk_size as usize, encode_fn).await?;
+        stream.send_chunk(buf).await.map_err(|_| ua::StatusCode::BadCommunicationError)?;
         Ok(())
     }
 
-    async fn recv_msg_chunk<'a>(
-        &'a mut self,
-        uacp: &'a mut Uacp,
-    ) -> Result<&'a [u8], ua::StatusCode> {
-        let buf = uacp.recv_chunk().await?;
-        Ok(buf)
+    async fn recv_msg_chunk(
+        &mut self,
+        stream: &mut tcp::RecvHalf,
+        buf: &mut bytes::BytesMut,
+    ) -> Result<(), ua::StatusCode> {
+        stream.recv_chunk(buf).await
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum AnySecurityPolicy {
     None(SecurityPolicyNone),
 }
@@ -89,28 +83,26 @@ impl SecurityPolicy for AnySecurityPolicy {
             AnySecurityPolicy::None(policy) => policy.asymmetric_security_header(),
         }
     }
-    async fn send_msg_chunk<F>(
+    async fn send_msg_chunk(
         &mut self,
-        uacp: &mut Uacp,
-        msg_size: u32,
-        encode_fn: F,
+        stream: &mut tcp::SendHalf,
+        buf: &bytes::BytesMut,
     ) -> Result<(), ua::StatusCode>
-    where
-        F: FnOnce(&mut binary::EncodeBuf<'_>),
     {
         match self {
             AnySecurityPolicy::None(policy) => {
-                policy.send_msg_chunk(uacp, msg_size, encode_fn).await
+                policy.send_msg_chunk(stream, buf).await
             }
         }
     }
 
-    async fn recv_msg_chunk<'a>(
-        &'a mut self,
-        uacp: &'a mut Uacp,
-    ) -> Result<&'a [u8], ua::StatusCode> {
+    async fn recv_msg_chunk(
+        &mut self,
+        stream: &mut tcp::RecvHalf,
+        buf: &mut bytes::BytesMut,
+    ) -> Result<(), ua::StatusCode> {
         match self {
-            AnySecurityPolicy::None(policy) => policy.recv_msg_chunk(uacp).await,
+            AnySecurityPolicy::None(policy) => policy.recv_msg_chunk(stream, buf).await,
         }
     }
 }

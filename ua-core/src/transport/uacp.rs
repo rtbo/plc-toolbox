@@ -254,110 +254,6 @@ pub fn msg_type(chunk: &[u8]) -> Option<MsgType> {
     }
 }
 
-/// UACP layer: encodes/decodes UACP messages on top of the raw chunk transport.
-#[derive(Debug)]
-pub struct Uacp {
-    transport: super::tcp::Transport,
-}
-
-impl Uacp {
-    pub fn new(transport: super::tcp::Transport) -> Self {
-        Self { transport }
-    }
-
-    pub fn max_send_size(&self) -> u32 {
-        self.transport.max_send_size() as _
-    }
-
-    pub fn max_recv_size(&self) -> u32 {
-        self.transport.max_recv_size() as _
-    }
-
-    pub fn transport_mut(&mut self) -> &mut super::tcp::Transport {
-        &mut self.transport
-    }
-
-    pub fn into_transport(self) -> super::tcp::Transport {
-        self.transport
-    }
-
-    /// Encodes a UACP message directly into the send buffer (not flushed).
-    pub async fn send<M>(&mut self, msg: M) -> Result<(), ua::StatusCode>
-    where
-        M: Msg,
-    {
-        let expected_size = msg.msg_encoded_len() as usize;
-        self.transport
-            .send_msg_chunk(expected_size, |buf| msg.msg_encode(buf))
-            .await
-    }
-
-    /// Buffers a chunk from an upper layer (e.g. secure channel) as-is (not flushed).
-    pub async fn send_chunk<F>(
-        &mut self,
-        expected_size: usize,
-        write: F,
-    ) -> Result<(), ua::StatusCode>
-    where
-        F: FnOnce(&mut binary::EncodeBuf<'_>),
-    {
-        self.transport.send_msg_chunk(expected_size, write).await
-    }
-
-    pub async fn flush(&mut self) -> Result<(), ua::StatusCode> {
-        self.transport.flush().await
-    }
-
-    pub async fn recv_chunk(&mut self) -> Result<&[u8], ua::StatusCode> {
-        self.transport.recv_msg_chunk().await
-    }
-
-    /// Receives the next chunk: UACP messages are decoded, others are passed through.
-    pub async fn recv(
-        &mut self,
-        ctx: &binary::DecodingCtx,
-    ) -> Result<Incoming<'_>, ua::StatusCode> {
-        let mut chunk = self.transport.recv_msg_chunk().await?;
-        let header = {
-            let ck = chunk;
-            match Header::decode(&mut chunk, ctx) {
-                Ok(header) => header,
-                Err(ua::StatusCode::BadTcpMessageTypeInvalid) => {
-                    // Not a UACP chunk, pass through
-                    return Ok(Incoming::Chunk(ck));
-                }
-                Err(err) => {
-                    return Err(err);
-                }
-            }
-        };
-        let msg = match header.msg_type {
-            MsgType::Hello => {
-                let m = Hello::decode(&mut chunk, ctx)?;
-                AnyMsg::Hello(m)
-            }
-            MsgType::Acknowledge => {
-                let m = Acknowledge::decode(&mut chunk, ctx)?;
-                AnyMsg::Acknowledge(m)
-            }
-            MsgType::Error => {
-                let m = Error::decode(&mut chunk, ctx)?;
-                AnyMsg::Error(m)
-            }
-        };
-        Ok(Incoming::Uacp(msg))
-    }
-
-    /// Receives a UACP message of a specific type (e.g. during the handshake).
-    /// Any other chunk is a `BadMessageType`
-    pub async fn recv_typed<M>(&mut self, ctx: &binary::DecodingCtx) -> Result<M, ua::StatusCode>
-    where
-        M: Msg,
-    {
-        let mut chunk = self.transport.recv_msg_chunk().await?;
-        Ok(M::msg_decode(&mut chunk, ctx)?)
-    }
-}
 
 #[cfg(test)]
 mod tests {
@@ -369,93 +265,97 @@ mod tests {
     where
         T: Encode + Decode + PartialEq + std::fmt::Debug,
     {
-        let mut encoded = vec![0; value.encoded_len() as usize];
-        let mut output = &mut encoded[..];
-        value.encode(&mut output);
-        assert!(output.is_empty());
+        todo!("{:?}", value)
+        // let mut encoded = vec![0; value.encoded_len() as usize];
+        // let mut output = &mut encoded[..];
+        // value.encode(&mut output);
+        // assert!(output.is_empty());
 
-        let mut remaining: &[u8] = &encoded;
-        let decoded =
-            T::decode(&mut remaining, &Default::default()).expect("encoded value should decode");
-        assert!(remaining.is_empty());
-        assert_eq!(&decoded, value);
+        // let mut remaining: &[u8] = &encoded;
+        // let decoded =
+        //     T::decode(&mut remaining, &Default::default()).expect("encoded value should decode");
+        // assert!(remaining.is_empty());
+        // assert_eq!(&decoded, value);
 
-        let mut reencoded = vec![0; decoded.encoded_len() as usize];
-        let mut output = &mut reencoded[..];
-        decoded.encode(&mut output);
-        assert!(output.is_empty());
-        assert_eq!(reencoded, encoded);
+        // let mut reencoded = vec![0; decoded.encoded_len() as usize];
+        // let mut output = &mut reencoded[..];
+        // decoded.encode(&mut output);
+        // assert!(output.is_empty());
+        // assert_eq!(reencoded, encoded);
     }
 
     fn assert_roundtrip_msg<T>(value: &T)
     where
         T: Msg + PartialEq + std::fmt::Debug,
     {
-        let mut encoded = vec![0; value.msg_encoded_len() as usize];
-        let mut output = &mut encoded[..];
-        value.msg_encode(&mut output);
-        assert!(output.is_empty());
+        todo!("assert_roundtrip_msg for {:?}", value)
+        // let mut encoded = vec![0; value.msg_encoded_len() as usize];
+        // let mut output = &mut encoded[..];
+        // value.msg_encode(&mut output);
+        // assert!(output.is_empty());
 
-        let mut remaining: &[u8] = &encoded;
-        let decoded = T::msg_decode(&mut remaining, &Default::default())
-            .expect("encoded value should decode");
-        assert!(remaining.is_empty());
-        assert_eq!(&decoded, value);
+        // let mut remaining: &[u8] = &encoded;
+        // let decoded = T::msg_decode(&mut remaining, &Default::default())
+        //     .expect("encoded value should decode");
+        // assert!(remaining.is_empty());
+        // assert_eq!(&decoded, value);
 
-        let mut reencoded = vec![0; decoded.msg_encoded_len() as usize];
-        let mut output = &mut reencoded[..];
-        decoded.msg_encode(&mut output);
-        assert!(output.is_empty());
-        assert_eq!(reencoded, encoded);
+        // let mut reencoded = vec![0; decoded.msg_encoded_len() as usize];
+        // let mut output = &mut reencoded[..];
+        // decoded.msg_encode(&mut output);
+        // assert!(output.is_empty());
+        // assert_eq!(reencoded, encoded);
     }
 
     #[test]
     fn hello_encodes_fields_in_declaration_order() {
-        let hello = Hello {
-            protocol_version: 1,
-            receive_buffer_size: 2,
-            send_buffer_size: 3,
-            max_message_size: 4,
-            max_chunk_count: 5,
-            endpoint_url: "x".to_owned(),
-        };
-        let mut buf = vec![0; hello.encoded_len() as usize];
-        let mut output = &mut buf[..];
+        todo!()
+        // let hello = Hello {
+        //     protocol_version: 1,
+        //     receive_buffer_size: 2,
+        //     send_buffer_size: 3,
+        //     max_message_size: 4,
+        //     max_chunk_count: 5,
+        //     endpoint_url: "x".to_owned(),
+        // };
+        // let mut buf = vec![0; hello.encoded_len() as usize];
+        // let mut output = &mut buf[..];
 
-        assert_eq!(hello.encoded_len(), 25);
-        hello.encode(&mut output);
-        assert!(output.is_empty());
-        assert_eq!(
-            &buf[..],
-            &[
-                1, 0, 0, 0, 2, 0, 0, 0, 3, 0, 0, 0, 4, 0, 0, 0, 5, 0, 0, 0, 1, 0, 0, 0, b'x',
-            ]
-        );
+        // assert_eq!(hello.encoded_len(), 25);
+        // hello.encode(&mut output);
+        // assert!(output.is_empty());
+        // assert_eq!(
+        //     &buf[..],
+        //     &[
+        //         1, 0, 0, 0, 2, 0, 0, 0, 3, 0, 0, 0, 4, 0, 0, 0, 5, 0, 0, 0, 1, 0, 0, 0, b'x',
+        //     ]
+        // );
     }
 
     #[test]
     fn hello_msg_encodes_fields_in_declaration_order() {
-        let hello = Hello {
-            protocol_version: 1,
-            receive_buffer_size: 2,
-            send_buffer_size: 3,
-            max_message_size: 4,
-            max_chunk_count: 5,
-            endpoint_url: "x".to_owned(),
-        };
-        let mut buf = vec![0; hello.msg_encoded_len() as usize];
-        let mut output = &mut buf[..];
+        todo!()
+        // let hello = Hello {
+        //     protocol_version: 1,
+        //     receive_buffer_size: 2,
+        //     send_buffer_size: 3,
+        //     max_message_size: 4,
+        //     max_chunk_count: 5,
+        //     endpoint_url: "x".to_owned(),
+        // };
+        // let mut buf = vec![0; hello.msg_encoded_len() as usize];
+        // let mut output = &mut buf[..];
 
-        assert_eq!(hello.msg_encoded_len(), 33);
-        hello.msg_encode(&mut output);
-        assert!(output.is_empty());
-        assert_eq!(
-            &buf[..],
-            &[
-                b'H', b'E', b'L', b'F', 33, 0, 0, 0, 1, 0, 0, 0, 2, 0, 0, 0, 3, 0, 0, 0, 4, 0, 0,
-                0, 5, 0, 0, 0, 1, 0, 0, 0, b'x',
-            ]
-        );
+        // assert_eq!(hello.msg_encoded_len(), 33);
+        // hello.msg_encode(&mut output);
+        // assert!(output.is_empty());
+        // assert_eq!(
+        //     &buf[..],
+        //     &[
+        //         b'H', b'E', b'L', b'F', 33, 0, 0, 0, 1, 0, 0, 0, 2, 0, 0, 0, 3, 0, 0, 0, 4, 0, 0,
+        //         0, 5, 0, 0, 0, 1, 0, 0, 0, b'x',
+        //     ]
+        // );
     }
 
     #[test]

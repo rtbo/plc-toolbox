@@ -1,10 +1,17 @@
-use ua_core::encoding::binary;
-use ua_core::msg;
-use ua_core::transport::tcp;
-use ua_core::transport::uacp::{self, Uacp};
-use ua_core::{AnySecurityPolicy, SecurityPolicyNone, ua};
+use std::sync::Arc;
 
-use crate::SecureChannel;
+use ua_core::encoding::binary;
+use ua_core::encoding::binary::Decode;
+use ua_core::encoding::binary::Encode;
+use ua_core::msg;
+use ua_core::msg::BinaryEncodingId;
+use ua_core::transport::tcp;
+use ua_core::transport::uacp;
+use ua_core::transport::uacp::Msg;
+use ua_core::ua;
+use ua_core::{AnySecurityPolicy, BufferPool, SecurityPolicyNone};
+
+use crate::secure_channel;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct BufferConfig {
@@ -26,28 +33,35 @@ impl Default for BufferConfig {
 impl BufferConfig {
     async fn hello_ack(
         self,
-        endpoint: &str,
-        uacp: &mut Uacp,
+        endpoint_url: String,
+        send: &mut tcp::SendHalf,
+        recv: &mut tcp::RecvHalf,
         decoding_ctx: &binary::DecodingCtx,
     ) -> Result<Self, ua::StatusCode> {
-        let hello_msg = uacp::Hello {
+        let mut buf = bytes::BytesMut::with_capacity(8192);
+
+        let hello = uacp::Hello {
             protocol_version: 0,
             receive_buffer_size: self.recv_size as u32,
             send_buffer_size: self.send_size as u32,
             max_message_size: (self.recv_size * self.max_msg_chunks.unwrap_or(0)) as u32,
             max_chunk_count: self.max_msg_chunks.unwrap_or(0) as u32,
-            endpoint_url: endpoint.to_string(),
+            endpoint_url,
         };
-        uacp.send(hello_msg).await?;
-        uacp.flush().await?;
+        hello.msg_encode(&mut buf);
 
-        let ack_msg: uacp::Acknowledge = uacp.recv_typed(decoding_ctx).await?;
+        send.send_chunk(&mut buf).await?;
+
+        buf.clear();
+        recv.recv_chunk(&mut buf).await?;
+
+        let srv_ack = uacp::Acknowledge::msg_decode(&mut buf, decoding_ctx)?;
 
         Ok(Self {
-            send_size: ack_msg.send_buffer_size as usize,
-            recv_size: ack_msg.receive_buffer_size as usize,
-            max_msg_chunks: if ack_msg.max_chunk_count > 0 {
-                Some(ack_msg.max_chunk_count as usize)
+            send_size: srv_ack.receive_buffer_size as usize,
+            recv_size: srv_ack.send_buffer_size as usize,
+            max_msg_chunks: if srv_ack.max_chunk_count > 0 {
+                Some(srv_ack.max_chunk_count as usize)
             } else {
                 None
             },
@@ -61,35 +75,41 @@ pub struct Config {
 }
 
 pub struct TcpClient {
-    sc: SecureChannel<AnySecurityPolicy>,
-    decoding_ctx: binary::DecodingCtx,
+    sc_send: secure_channel::SendHalf<AnySecurityPolicy>,
+    sc_recv: secure_channel::RecvHalf<AnySecurityPolicy>,
+    _send_pool: Arc<BufferPool>,
+    recv_pool: Arc<BufferPool>,
+    decoding_ctx: Arc<binary::DecodingCtx>,
     req_id: u32,
 }
 
 impl TcpClient {
     pub async fn connect(endpoint: &str, config: Config) -> Result<Self, ua::StatusCode> {
-        let transport =
-            tcp::Transport::connect(endpoint, config.buffer.send_size, config.buffer.recv_size)
-                .await?;
+        let (mut send, mut recv) = tcp::connect(endpoint, 8192, 8192).await?;
 
-        let decoding_ctx = binary::DecodingCtx::default();
-
-        let mut uacp = Uacp::new(transport);
+        let decoding_ctx = Arc::new(binary::DecodingCtx::default());
 
         let buffer_config = config
             .buffer
-            .hello_ack(endpoint, &mut uacp, &decoding_ctx)
+            .hello_ack(endpoint.to_string(), &mut send, &mut recv, &decoding_ctx)
             .await?;
+
+        send.adjust_max_chunk_size(buffer_config.send_size);
+        recv.adjust_max_chunk_size(buffer_config.recv_size);
+
         let _config = Config {
             buffer: buffer_config,
         };
 
-        uacp.transport_mut()
-            .adjust_buffer_sizes(config.buffer.send_size, config.buffer.recv_size);
+        let send_pool = Arc::new(BufferPool::new(2, buffer_config.send_size));
+        let recv_pool = Arc::new(BufferPool::new(8, buffer_config.recv_size));
 
         let sp = AnySecurityPolicy::None(SecurityPolicyNone);
-        let sc = SecureChannel::open(
-            uacp,
+        let (sc_send, sc_recv) = secure_channel::open(
+            send,
+            recv,
+            send_pool.clone(),
+            recv_pool.clone(),
             sp,
             1,
             ua::OpenSecureChannelRequest {
@@ -103,24 +123,50 @@ impl TcpClient {
                 client_nonce: vec![],
                 requested_lifetime: 60000,
             },
-            &decoding_ctx,
+            decoding_ctx.clone(),
         )
         .await?;
 
-        Ok(Self { sc, decoding_ctx, req_id: 2 })
+        Ok(Self {
+            sc_send,
+            sc_recv,
+            decoding_ctx,
+            req_id: 2,
+            _send_pool: send_pool,
+            recv_pool,
+        })
     }
 
-    pub async fn send_request<R>(&mut self, request: R) -> Result<R::Response, ua::StatusCode> 
+    pub async fn send_request<R>(&mut self, request: R) -> Result<R::Response, ua::StatusCode>
     where
         R: msg::Request + binary::Encode + msg::BinaryEncodingId,
         R::Response: binary::Decode + msg::BinaryEncodingId,
     {
-        self.sc.send_msg(0, request, self.req_id).await?;
-        let (req_id, res) = self.sc.recv_msg_typed(0, &self.decoding_ctx).await?;
+        let encoding = R::binary_encoding_node_id(0);
+        let body_len = encoding.encoded_len() + request.encoded_len();
+
+        self.sc_send
+            .send_msg(self.req_id, body_len, |buf| {
+                encoding.encode(buf);
+                request.encode(buf);
+            })
+            .await?;
+
+        let mut buf = self.recv_pool.acquire().await;
+        let req_id = self.sc_recv.recv_msg(&mut buf).await?;
+
         if req_id != self.req_id {
             return Err(ua::StatusCode::BadNoMatch);
         }
+
+        let encoding = ua::NodeId::decode(&mut buf, &self.decoding_ctx)?;
+        if encoding != R::Response::binary_encoding_node_id(0) {
+            return Err(ua::StatusCode::BadNodeIdInvalid);
+        }
+        let res = R::Response::decode(&mut buf, &self.decoding_ctx)?;
+
         self.req_id += 1;
+        self.recv_pool.release(buf).await;
         Ok(res)
     }
 }
