@@ -129,13 +129,13 @@ where
             };
             let response = format!("{prefix}Response");
             if names.contains(name) && names.contains(response.as_str()) {
-                self.cg.start_block(&format!(
-                    "impl {}::msg::Request for {} ",
-                    self.options.ua_core_module, name
-                ))?;
-                self.cg
-                    .write_line(&format!("type Response = {response};"))?;
-                self.cg.end_block()?;
+                self.cg.define_block(
+                    &format!(
+                        "impl {}::msg::Request for {} ",
+                        self.options.ua_core_module, name
+                    ),
+                    |cg| cg.write_line(&format!("type Response = {response};")),
+                )?;
                 self.cg.write_line("")?;
             }
         }
@@ -283,27 +283,20 @@ where
             return Ok(());
         };
         let core = self.options.ua_core_module.clone();
-        self.cg.start_block(&format!(
-            "impl {}::encoding::Value for {} ",
-            core,
-            type_def.name()
-        ))?;
-
-        self.cg
-            .start_block("fn datatype_uri(&self) -> &'static str ")?;
-        self.cg.write_line("NS_URI")?;
-        self.cg.end_block()?; // fn datatype_uri
-
-        self.cg.start_block("fn datatype_id(&self) -> u32 ")?;
-        self.cg.write_line(&format!("{}", type_id.numeric_id))?;
-        self.cg.end_block()?; // fn datatype_id
-
-        self.cg
-            .start_block("fn binary_encoding_id(&self) -> u32 ")?;
-        self.cg.write_line(&format!("{}", bin_type_id.numeric_id))?;
-        self.cg.end_block()?; // fn binary_encoding_id
-
-        self.cg.end_block()?; // impl encoding::Value
+        self.cg.define_block(
+            &format!("impl {}::encoding::Value for {} ", core, type_def.name()),
+            |cg| {
+                cg.define_block("fn datatype_uri(&self) -> &'static str ", |cg| {
+                    cg.write_line("NS_URI")
+                })?;
+                cg.define_block("fn datatype_id(&self) -> u32 ", |cg| {
+                    cg.write_line(&format!("{}", type_id.numeric_id))
+                })?;
+                cg.define_block("fn binary_encoding_id(&self) -> u32 ", |cg| {
+                    cg.write_line(&format!("{}", bin_type_id.numeric_id))
+                })
+            },
+        )?;
         self.cg.write_line("")?;
 
         Ok(())
@@ -313,34 +306,33 @@ where
             return Ok(());
         };
         let core = self.options.ua_core_module.clone();
-        self.cg.start_block(&format!(
-            "impl {}::msg::DataTypeId for {} ",
-            core,
-            type_def.name()
-        ))?;
-        self.cg.write_line("const NS_URI: &'static str = NS_URI;")?;
-        self.cg
-            .write_line(&format!("const DATATYPE_ID: u32 = {};", type_id.numeric_id))?;
-        if self.types.target_namespace == UA_NS {
-            self.cg.write_line("const NS_INDEX: Option<u16> = Some(0);")?;
-        }
-        self.cg.end_block()?; // impl DataTypeId
+        let is_ua_namespace = self.types.target_namespace == UA_NS;
+        self.cg.define_block(
+            &format!("impl {}::msg::DataTypeId for {} ", core, type_def.name()),
+            |cg| {
+                cg.write_line("const NS_URI: &'static str = NS_URI;")?;
+                cg.write_line(&format!("const DATATYPE_ID: u32 = {};", type_id.numeric_id))?;
+                if is_ua_namespace {
+                    cg.write_line("const NS_INDEX: Option<u16> = Some(0);")?;
+                }
+                Ok(())
+            },
+        )?;
         self.cg.write_line("")?;
 
         if let Some(xml_type_id) = self
             .ua_type_ids
             .get(&format!("{}_Encoding_DefaultXml", type_def.name()))
         {
-            self.cg.start_block(&format!(
-                "impl {}::msg::XmlEncodingId for {} ",
-                core,
-                type_def.name()
-            ))?;
-            self.cg.write_line(&format!(
-                "const XML_ENCODING_ID: u32 = {};",
-                xml_type_id.numeric_id
-            ))?;
-            self.cg.end_block()?; // impl XmlEncodingId
+            self.cg.define_block(
+                &format!("impl {}::msg::XmlEncodingId for {} ", core, type_def.name()),
+                |cg| {
+                    cg.write_line(&format!(
+                        "const XML_ENCODING_ID: u32 = {};",
+                        xml_type_id.numeric_id
+                    ))
+                },
+            )?;
             self.cg.write_line("")?;
         }
 
@@ -348,16 +340,19 @@ where
             .ua_type_ids
             .get(&format!("{}_Encoding_DefaultBinary", type_def.name()))
         {
-            self.cg.start_block(&format!(
-                "impl {}::msg::BinaryEncodingId for {} ",
-                core,
-                type_def.name()
-            ))?;
-            self.cg.write_line(&format!(
-                "const BINARY_ENCODING_ID: u32 = {};",
-                bin_type_id.numeric_id
-            ))?;
-            self.cg.end_block()?; // impl BinaryEncodingId
+            self.cg.define_block(
+                &format!(
+                    "impl {}::msg::BinaryEncodingId for {} ",
+                    core,
+                    type_def.name()
+                ),
+                |cg| {
+                    cg.write_line(&format!(
+                        "const BINARY_ENCODING_ID: u32 = {};",
+                        bin_type_id.numeric_id
+                    ))
+                },
+            )?;
             self.cg.write_line("")?;
         }
         Ok(())
@@ -394,19 +389,17 @@ where
                 "Decode an extension object from the byte stream, using the provided header to identify the type to decode."
             )
             ?;
-        self.cg
-            .start_block(&format!(
+        self.cg.define_block(
+            &format!(
                 "pub fn decode_binary_value(buf: &mut binary::DecodeBuf, binary_type_id: u32, ctx: &binary::DecodingCtx) -> Result<Option<Box<dyn {}::encoding::Value>>, ua::StatusCode> ",
                 core
-            ))
-            ?;
-        self.cg
-            .write_line("BIN_DECODING_FNS.get(&binary_type_id)")?;
-        self.cg
-            .write_line("    .and_then(|dfn| dfn(buf, binary_type_id, ctx).transpose())")?;
-        self.cg.write_line("    .transpose()")?;
-
-        self.cg.end_block()?; // fn decode_extension_object
+            ),
+            |cg| {
+                cg.write_line("BIN_DECODING_FNS.get(&binary_type_id)")?;
+                cg.write_line("    .and_then(|dfn| dfn(buf, binary_type_id, ctx).transpose())")?;
+                cg.write_line("    .transpose()")
+            },
+        )?;
         Ok(())
     }
 
@@ -453,25 +446,27 @@ where
                 self.cg.write_line(&format!("#[repr(u{})]", len))?;
             }
         }
-        self.cg.start_block(&format!("pub enum {} ", &desc.name))?;
         let mut default_issued = false;
-        for val in values {
-            if let (Some(name), Some(value)) = (&val.name, val.value) {
-                if let Some(doc) = val.doc.as_deref() {
-                    self.cg.write_doc_comment(doc)?;
+        self.cg
+            .define_block(&format!("pub enum {} ", &desc.name), |cg| {
+                for val in values {
+                    if let (Some(name), Some(value)) = (&val.name, val.value) {
+                        if let Some(doc) = val.doc.as_deref() {
+                            cg.write_doc_comment(doc)?;
+                        }
+                        if !default_issued {
+                            cg.write_line("#[default]")?;
+                            default_issued = true;
+                        }
+                        if is_option_set {
+                            cg.write_line(&format!("{} = 0x{:x},", name, value))?;
+                        } else {
+                            cg.write_line(&format!("{} = {},", name, value))?;
+                        }
+                    }
                 }
-                if !default_issued {
-                    self.cg.write_line("#[default]")?;
-                    default_issued = true;
-                }
-                if is_option_set {
-                    self.cg.write_line(&format!("{} = 0x{:x},", name, value))?;
-                } else {
-                    self.cg.write_line(&format!("{} = {},", name, value))?;
-                }
-            }
-        }
-        self.cg.end_block()?;
+                Ok(())
+            })?;
         self.cg.write_line("")?;
         Ok(())
     }
@@ -488,9 +483,7 @@ where
         self.cg.write_line("#[derive(Debug, Default)]")?;
         self.cg
             .write_line("#[derive(DecodeBinary, EncodeBinary)]")?;
-        self.cg
-            .start_block(&format!("pub struct {} ", &desc.name))?;
-
+        let mut members = Vec::new();
         for i in 0..fields.len() {
             let field = &fields[i];
             let Some(type_name) = &field.type_name else {
@@ -509,13 +502,22 @@ where
                 type_name = format!("Vec<{}>", type_name);
             }
 
-            if let Some(doc) = field.doc.as_deref() {
-                self.cg.write_doc_comment(doc)?;
-            }
-            self.cg
-                .write_line(&format!("pub {}: {},", field_name, type_name))?;
+            members.push((
+                field.doc.as_deref().map(str::to_owned),
+                field_name,
+                type_name,
+            ));
         }
-        self.cg.end_block()?;
+        self.cg
+            .define_block(&format!("pub struct {} ", &desc.name), |cg| {
+                for (doc, field_name, type_name) in &members {
+                    if let Some(doc) = doc {
+                        cg.write_doc_comment(doc)?;
+                    }
+                    cg.write_line(&format!("pub {}: {},", field_name, type_name))?;
+                }
+                Ok(())
+            })?;
         self.cg.write_line("")?;
         Ok(())
     }

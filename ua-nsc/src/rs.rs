@@ -35,18 +35,17 @@ where
         self.write_indentedline(self.indent, txt)
     }
 
-    fn start_block(&mut self, prefix: &str) -> io::Result<()> {
+    fn define_block<F>(&mut self, prefix: &str, content: F) -> io::Result<()>
+    where
+        F: FnOnce(&mut Self) -> io::Result<()>,
+    {
         self.write_indentedline(self.indent, &format!("{}{{", prefix))?;
         self.indent += 1;
-        Ok(())
-    }
-
-    fn end_block(&mut self) -> io::Result<()> {
-        if self.indent > 0 {
-            self.indent -= 1;
-        }
-        self.write_indentedline(self.indent, "}")?;
-        Ok(())
+        let content_result = content(self);
+        self.indent -= 1;
+        let close_result = self.write_indentedline(self.indent, "}");
+        content_result?;
+        close_result
     }
 
     fn _write_comment(&mut self, doc: &str) -> io::Result<()> {

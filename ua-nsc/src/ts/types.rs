@@ -51,14 +51,6 @@ where
         self.cg.write_line(txt)
     }
 
-    fn start_block(&mut self, prefix: &str) -> io::Result<()> {
-        self.cg.start_block(prefix)
-    }
-
-    fn end_block(&mut self) -> io::Result<()> {
-        self.cg.end_block()
-    }
-
     fn write_doc_comment(&mut self, doc: &str) -> io::Result<()> {
         let doc = doc.trim_end(); // remove possible trailing '\n'
 
@@ -157,18 +149,19 @@ where
         };
         self.write_type_doc_comment(desc, class)?;
 
-        self.start_block(&format!("export const enum {} ", type_name))?;
-
-        for value in values {
-            if let (Some(name), Some(value)) = (&value.name, &value.value) {
-                if is_option_set {
-                    self.write_line(&format!("{} = 0x{:x},", name, value))?;
-                } else {
-                    self.write_line(&format!("{} = {},", name, value))?;
+        self.cg
+            .define_block(&format!("export const enum {} ", type_name), |cg| {
+                for value in values {
+                    if let (Some(name), Some(value)) = (&value.name, &value.value) {
+                        if is_option_set {
+                            cg.write_line(&format!("{} = 0x{:x},", name, value))?;
+                        } else {
+                            cg.write_line(&format!("{} = {},", name, value))?;
+                        }
+                    }
                 }
-            }
-        }
-        self.end_block()?;
+                Ok(())
+            })?;
         Ok(())
     }
 
@@ -187,8 +180,7 @@ where
         } else {
             String::new()
         };
-        self.start_block(&format!("export interface {}{} ", desc.name, extends))?;
-
+        let mut lines = Vec::new();
         if base_type
             .as_ref()
             .map(|b| (b.ns_shorthand.as_deref(), b.name.as_str()))
@@ -196,7 +188,7 @@ where
         {
             let node_id_str = self.ua_type_ids.get(&desc.name).map(|id| id.node_id_str());
             if let Some(node_id_str) = node_id_str {
-                self.write_line(&format!("UaTypeId?: \"{}\",", node_id_str))?;
+                lines.push(format!("UaTypeId?: \"{}\",", node_id_str));
             }
         }
 
@@ -225,10 +217,18 @@ where
 
             let is_array = field.length_field.is_some();
             let array_suffix = if is_array { "[]" } else { "" };
-            self.write_line(&format!("{}?: {}{};", name, type_name.name, array_suffix))?;
+            lines.push(format!("{}?: {}{};", name, type_name.name, array_suffix));
         }
 
-        self.end_block()?;
+        self.cg.define_block(
+            &format!("export interface {}{} ", desc.name, extends),
+            |cg| {
+                for line in &lines {
+                    cg.write_line(line)?;
+                }
+                Ok(())
+            },
+        )?;
         Ok(())
     }
 }
