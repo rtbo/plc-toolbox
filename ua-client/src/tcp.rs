@@ -1,19 +1,13 @@
 use std::sync::Arc;
 
 use smallvec::SmallVec;
-use tokio::sync::mpsc;
-use tokio::sync::oneshot;
-use ua_core::SecurityPolicy;
+use tokio::sync::{mpsc, oneshot};
 use ua_core::encoding::binary;
-use ua_core::encoding::binary::Decode;
-use ua_core::encoding::binary::Encode;
-use ua_core::msg;
+use ua_core::encoding::binary::{Decode, Encode};
 use ua_core::msg::BinaryEncodingId;
-use ua_core::transport::tcp;
-use ua_core::transport::uacp;
 use ua_core::transport::uacp::Msg;
-use ua_core::ua;
-use ua_core::{AnySecurityPolicy, BufferPool, SecurityPolicyNone};
+use ua_core::transport::{tcp, uacp};
+use ua_core::{AnySecurityPolicy, BufferPool, SecurityPolicy, SecurityPolicyNone, msg, ua};
 
 use crate::secure_channel;
 use crate::smallmap::SmallMap;

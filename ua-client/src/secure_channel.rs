@@ -5,7 +5,6 @@ use ua_core::msg::{BinaryEncodingId, uasc};
 use ua_core::transport::tcp;
 use ua_core::{BufferPool, SecurityPolicy, ua};
 
-
 pub async fn open<P: SecurityPolicy + Clone>(
     send: tcp::SendHalf,
     recv: tcp::RecvHalf,
@@ -15,7 +14,6 @@ pub async fn open<P: SecurityPolicy + Clone>(
     request_id: u32,
     msg: ua::OpenSecureChannelRequest,
 ) -> Result<(SendHalf<P>, RecvHalf<P>), ua::StatusCode> {
-
     let mut send_half = SendHalf::new(send, send_pool, security_policy.clone());
 
     let mut recv_half = RecvHalf::new(recv, recv_pool.clone(), security_policy);
@@ -84,7 +82,9 @@ impl<P: SecurityPolicy> SendHalf<P> {
         seq_header.encode(&mut buf);
         encoding_node_id.encode(&mut buf);
         msg.encode(&mut buf);
-        self.security_policy.send_msg_chunk(&mut self.send, &mut buf).await?;
+        self.security_policy
+            .send_msg_chunk(&mut self.send, &mut buf)
+            .await?;
 
         self.pool.release(buf).await;
 
@@ -128,7 +128,9 @@ impl<P: SecurityPolicy> SendHalf<P> {
         security_header.encode(&mut buf);
         seq_header.encode(&mut buf);
         encode_fn(&mut buf);
-        self.security_policy.send_msg_chunk(&mut self.send, &mut buf).await?;
+        self.security_policy
+            .send_msg_chunk(&mut self.send, &mut buf)
+            .await?;
 
         self.pool.release(buf).await;
 
@@ -162,8 +164,14 @@ impl<P: SecurityPolicy> RecvHalf<P> {
         }
     }
 
-    pub async fn recv_open(&mut self, buf: &mut bytes::BytesMut, request_id: u32) -> Result<ua::OpenSecureChannelResponse, ua::StatusCode> {
-        self.security_policy.recv_msg_chunk(&mut self.recv, buf).await?;
+    pub async fn recv_open(
+        &mut self,
+        buf: &mut bytes::BytesMut,
+        request_id: u32,
+    ) -> Result<ua::OpenSecureChannelResponse, ua::StatusCode> {
+        self.security_policy
+            .recv_msg_chunk(&mut self.recv, buf)
+            .await?;
 
         let header = uasc::Header::decode(buf, &self.decoding_ctx)?;
         if header.msg_type != uasc::MsgType::Open || header.is_final != uasc::IsFinal::Final {
@@ -192,8 +200,9 @@ impl<P: SecurityPolicy> RecvHalf<P> {
     }
 
     pub async fn recv_msg(&mut self, buf: &mut bytes::BytesMut) -> Result<u32, ua::StatusCode> {
-        
-        self.security_policy.recv_msg_chunk(&mut self.recv, buf).await?;
+        self.security_policy
+            .recv_msg_chunk(&mut self.recv, buf)
+            .await?;
 
         let header = uasc::Header::decode(buf, &self.decoding_ctx)?;
 

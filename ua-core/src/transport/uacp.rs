@@ -254,7 +254,6 @@ pub fn msg_type(chunk: &[u8]) -> Option<MsgType> {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::{Acknowledge, Error, Hello, Msg};
@@ -266,7 +265,7 @@ mod tests {
         T: Encode + Decode + PartialEq + std::fmt::Debug,
     {
         use crate::encoding::binary::BytesMut;
-        
+
         let mut encoded = BytesMut::with_capacity(value.encoded_len() as usize);
         value.encode(&mut encoded);
 
@@ -286,13 +285,13 @@ mod tests {
         T: Msg + PartialEq + std::fmt::Debug,
     {
         use crate::encoding::binary::BytesMut;
-        
+
         let mut encoded = BytesMut::with_capacity(value.msg_encoded_len() as usize);
         value.msg_encode(&mut encoded);
 
         let mut buf = encoded.clone();
-        let decoded = T::msg_decode(&mut buf, &Default::default())
-            .expect("encoded value should decode");
+        let decoded =
+            T::msg_decode(&mut buf, &Default::default()).expect("encoded value should decode");
         assert!(buf.is_empty());
         assert_eq!(&decoded, value);
 
@@ -304,7 +303,7 @@ mod tests {
     #[test]
     fn hello_encodes_fields_in_declaration_order() {
         use crate::encoding::binary::BytesMut;
-        
+
         let hello = Hello {
             protocol_version: 1,
             receive_buffer_size: 2,
@@ -328,7 +327,7 @@ mod tests {
     #[test]
     fn hello_msg_encodes_fields_in_declaration_order() {
         use crate::encoding::binary::BytesMut;
-        
+
         let hello = Hello {
             protocol_version: 1,
             receive_buffer_size: 2,

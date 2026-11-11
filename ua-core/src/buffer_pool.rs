@@ -4,7 +4,7 @@ use tokio::sync::Mutex;
 pub struct BufferPool {
     pool: Mutex<Vec<bytes::BytesMut>>,
     max_pool_size: usize,
-    buf_capacity: usize
+    buf_capacity: usize,
 }
 
 impl BufferPool {
@@ -28,7 +28,7 @@ impl BufferPool {
             bytes::BytesMut::with_capacity(self.buf_capacity)
         }
     }
-    
+
     /// Releases a buffer back to the pool. If the pool has reached its maximum size, the buffer is dropped.
     pub async fn release(&self, mut buffer: bytes::BytesMut) {
         let mut pool = self.pool.lock().await;

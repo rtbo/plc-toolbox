@@ -1,7 +1,8 @@
-use crate::ua;
 use bytes::Buf;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net;
+
+use crate::ua;
 
 pub async fn connect(
     endpoint: &str,

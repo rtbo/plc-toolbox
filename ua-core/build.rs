@@ -1,9 +1,6 @@
 use std::collections::HashMap;
-use std::env;
 use std::path::{Path, PathBuf};
-
-use std::fs;
-use std::io;
+use std::{env, fs, io};
 
 fn create_new_file(path: &Path) -> io::Result<io::BufWriter<fs::File>> {
     let file = fs::OpenOptions::new()

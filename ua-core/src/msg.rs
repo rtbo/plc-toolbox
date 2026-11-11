@@ -24,7 +24,9 @@ pub trait DataTypeId {
     /// Construct the NodeID of the DataType for this type, provided the namespace index.
     /// The index must be retrieved from the server's NamespaceArray at runtime and must correspond to the namespace URI of this type.
     fn datatype_node_id(ns_index: u16) -> ua::NodeId {
-        debug_assert!(Self::NS_INDEX.map_or_else(|| ns_index != 0, |idx| idx == ns_index && ns_index == 0));
+        debug_assert!(
+            Self::NS_INDEX.map_or_else(|| ns_index != 0, |idx| idx == ns_index && ns_index == 0)
+        );
         ua::NodeId::Numeric(ns_index, Self::DATATYPE_ID)
     }
 }

@@ -2,10 +2,10 @@ use std::collections::HashMap;
 use std::sync::Arc;
 /// OPC Binary Schema definition (BSD) types and parsing utilities.
 use std::{fmt, path};
+use std::{fs, io};
 
 use quick_xml::Reader;
 use quick_xml::events::{BytesStart, Event};
-use std::{fs, io};
 
 #[derive(Clone, Debug)]
 pub enum Error {

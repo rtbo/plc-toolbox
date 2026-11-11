@@ -47,9 +47,11 @@ impl SecurityPolicy for SecurityPolicyNone {
         &mut self,
         stream: &mut tcp::SendHalf,
         buf: &bytes::BytesMut,
-    ) -> Result<(), ua::StatusCode>
-    {
-        stream.send_chunk(buf).await.map_err(|_| ua::StatusCode::BadCommunicationError)?;
+    ) -> Result<(), ua::StatusCode> {
+        stream
+            .send_chunk(buf)
+            .await
+            .map_err(|_| ua::StatusCode::BadCommunicationError)?;
         Ok(())
     }
 
@@ -87,12 +89,9 @@ impl SecurityPolicy for AnySecurityPolicy {
         &mut self,
         stream: &mut tcp::SendHalf,
         buf: &bytes::BytesMut,
-    ) -> Result<(), ua::StatusCode>
-    {
+    ) -> Result<(), ua::StatusCode> {
         match self {
-            AnySecurityPolicy::None(policy) => {
-                policy.send_msg_chunk(stream, buf).await
-            }
+            AnySecurityPolicy::None(policy) => policy.send_msg_chunk(stream, buf).await,
         }
     }
 

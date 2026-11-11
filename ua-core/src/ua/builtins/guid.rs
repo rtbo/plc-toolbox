@@ -1,8 +1,6 @@
 use std::fmt;
 
-use bytes::Buf;
-
-use bytes::BufMut;
+use bytes::{Buf, BufMut};
 
 use crate::encoding::binary;
 use crate::ua;

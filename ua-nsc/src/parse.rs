@@ -1,6 +1,4 @@
-use std::fmt;
-
-use std::io;
+use std::{fmt, io};
 
 pub mod attribute_ids;
 pub mod node_ids;

@@ -1,7 +1,5 @@
-use std::{fmt, path};
-
-use std::fs;
 use std::io::{self, BufRead};
+use std::{fmt, fs, path};
 
 use super::Error;
 

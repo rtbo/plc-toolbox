@@ -1,7 +1,5 @@
-use std::path;
-
-use std::fs;
 use std::io::{self, BufRead};
+use std::{fs, path};
 
 use super::Error;
 

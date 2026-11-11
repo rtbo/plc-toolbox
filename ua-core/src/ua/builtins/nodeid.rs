@@ -353,8 +353,8 @@ mod tests {
 
     #[test]
     fn rejects_truncated_nodeids() {
-        use crate::encoding::binary::{BytesMut, Encode, Decode};
-        
+        use crate::encoding::binary::{BytesMut, Decode, Encode};
+
         let ids = [
             NodeId::Numeric(0, 42),
             NodeId::Numeric(1, 42),

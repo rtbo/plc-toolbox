@@ -1,6 +1,5 @@
 //! Typescript Types code generation for OPC/UA.
 use std::collections::HashMap;
-
 use std::io;
 
 use crate::codegen::CodeGen;

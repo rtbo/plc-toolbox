@@ -1,4 +1,3 @@
-
 /// A Map optimized for a small number of entries
 #[derive(Debug, Clone)]
 pub struct SmallMap<K, V> {
@@ -8,7 +7,9 @@ pub struct SmallMap<K, V> {
 impl<K: PartialEq, V> SmallMap<K, V> {
     /// Creates a new `SmallMap` with initial capacity
     pub fn with_capacity(cap: usize) -> Self {
-        Self { entries: Vec::with_capacity(cap) }
+        Self {
+            entries: Vec::with_capacity(cap),
+        }
     }
 
     /// Inserts a key-value pair into the map. If the key already exists, its value is updated.

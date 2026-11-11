@@ -15,15 +15,15 @@ async fn run() -> Result<(), ua::StatusCode> {
     let mut client =
         ua_client::tcp::TcpClient::connect("opc.tcp://localhost:4840", Default::default()).await?;
 
-    let srvs = client.send_request(
-        ua::FindServersRequest {
+    let srvs = client
+        .send_request(ua::FindServersRequest {
             request_header: ua::RequestHeader {
                 timestamp: ua::DateTime::now(),
                 ..Default::default()
             },
             ..Default::default()
-        }
-    ).await?;
+        })
+        .await?;
     println!("Found servers: {:?}", srvs);
     // let root = "i=84";
     // client.browse(root.to_string()).await?;

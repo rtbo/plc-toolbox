@@ -1,4 +1,4 @@
-pub use bytes::{BytesMut, Buf, BufMut};
+pub use bytes::{Buf, BufMut, BytesMut};
 
 pub type EncodeBuf<'a> = BytesMut;
 pub type DecodeBuf<'a> = BytesMut;
@@ -83,10 +83,7 @@ where
 }
 
 pub trait Decode: Sized {
-    fn decode(
-        buf: &mut DecodeBuf,
-        ctx: &DecodingCtx,
-    ) -> Result<Self, ua::StatusCode>;
+    fn decode(buf: &mut DecodeBuf, ctx: &DecodingCtx) -> Result<Self, ua::StatusCode>;
 
     /// Decodes `len` consecutive items (without the length prefix).
     /// Types implementing `ReprEncoded` override this with a raw byte copy.
