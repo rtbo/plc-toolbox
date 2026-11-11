@@ -3985,6 +3985,7 @@ name = "ua-client"
 version = "0.1.0"
 dependencies = [
  "bytes",
+ "smallvec",
  "thiserror 2.0.21",
  "tokio",
  "ua-core",

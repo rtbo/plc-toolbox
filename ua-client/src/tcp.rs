@@ -1,5 +1,9 @@
 use std::sync::Arc;
 
+use smallvec::SmallVec;
+use tokio::sync::mpsc;
+use tokio::sync::oneshot;
+use ua_core::SecurityPolicy;
 use ua_core::encoding::binary;
 use ua_core::encoding::binary::Decode;
 use ua_core::encoding::binary::Encode;
@@ -12,6 +16,7 @@ use ua_core::ua;
 use ua_core::{AnySecurityPolicy, BufferPool, SecurityPolicyNone};
 
 use crate::secure_channel;
+use crate::small_map::SmallMap;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct BufferConfig {
@@ -76,11 +81,17 @@ pub struct Config {
 
 pub struct TcpClient {
     sc_send: secure_channel::SendHalf<AnySecurityPolicy>,
-    sc_recv: secure_channel::RecvHalf<AnySecurityPolicy>,
-    _send_pool: Arc<BufferPool>,
-    recv_pool: Arc<BufferPool>,
     decoding_ctx: binary::DecodingCtx,
     req_id: u32,
+    tx: mpsc::UnboundedSender<RecvCommand>,
+    recv_pool: Arc<BufferPool>,
+}
+
+enum RecvCommand {
+    GetResponse(
+        u32,
+        oneshot::Sender<Result<bytes::BytesMut, ua::StatusCode>>,
+    ),
 }
 
 impl TcpClient {
@@ -126,12 +137,15 @@ impl TcpClient {
         )
         .await?;
 
+        let (tx, rx) = mpsc::unbounded_channel();
+
+        tokio::spawn(run_secure_channel_recv(sc_recv, recv_pool.clone(), rx));
+
         Ok(Self {
             sc_send,
-            sc_recv,
             decoding_ctx,
             req_id: 2,
-            _send_pool: send_pool,
+            tx,
             recv_pool,
         })
     }
@@ -151,21 +165,82 @@ impl TcpClient {
             })
             .await?;
 
-        let mut buf = self.recv_pool.acquire().await;
-        let req_id = self.sc_recv.recv_msg(&mut buf).await?;
+        let (resp_tx, resp_rx) = oneshot::channel();
+        self.tx
+            .send(RecvCommand::GetResponse(self.req_id, resp_tx))
+            .map_err(|_| ua::StatusCode::BadInternalError)?;
 
-        if req_id != self.req_id {
-            return Err(ua::StatusCode::BadNoMatch);
-        }
+        let mut buf = resp_rx
+            .await
+            .map_err(|_| ua::StatusCode::BadInternalError)??;
 
         let encoding = ua::NodeId::decode(&mut buf, &self.decoding_ctx)?;
-        if encoding != R::Response::binary_encoding_node_id(0) {
-            return Err(ua::StatusCode::BadNodeIdInvalid);
-        }
-        let res = R::Response::decode(&mut buf, &self.decoding_ctx)?;
+
+        let result = if encoding == R::Response::binary_encoding_node_id(0) {
+            Ok(R::Response::decode(&mut buf, &self.decoding_ctx)?)
+        } else {
+            Err(ua::StatusCode::BadNodeIdInvalid)
+        };
 
         self.req_id += 1;
         self.recv_pool.release(buf).await;
-        Ok(res)
+
+        result
     }
+}
+
+type ResponseCache = SmallVec<[Option<(u32, Result<bytes::BytesMut, ua::StatusCode>)>; 8]>;
+
+async fn run_secure_channel_recv<P: SecurityPolicy>(
+    mut recv_half: secure_channel::RecvHalf<P>,
+    recv_pool: Arc<BufferPool>,
+    mut rx: mpsc::UnboundedReceiver<RecvCommand>,
+) -> Result<(), ua::StatusCode> {
+    let mut cache: ResponseCache = SmallVec::new();
+    let mut pending_requests: SmallMap<
+        u32,
+        oneshot::Sender<Result<bytes::BytesMut, ua::StatusCode>>,
+    > = SmallMap::with_capacity(8);
+
+    loop {
+        tokio::select! {
+            cmd = rx.recv() => {
+                match cmd {
+                    Some(RecvCommand::GetResponse(req_id, tx)) => {
+                        if let Some(idx) = cache.iter().position(|entry| {
+                            entry.as_ref().map_or(false, |(id, _)| *id == req_id)
+                        }) {
+                            if let Some((_, result)) = cache.swap_remove(idx) {
+                                let _ = tx.send(result);
+                            }
+                        } else {
+                            pending_requests.insert(req_id, tx);
+                        }
+                    }
+                    None => break,
+                }
+            }
+            result = async {
+                let mut buf = recv_pool.acquire().await;
+                (recv_half.recv_msg(&mut buf).await, buf)
+            } => {
+                let (msg_result, buf) = result;
+                match msg_result {
+                    Ok(req_id) => {
+                        if let Some(tx) = pending_requests.remove(&req_id) {
+                            let _ = tx.send(Ok(buf));
+                        } else {
+                            cache.push(Some((req_id, Ok(buf))));
+                        }
+                    }
+                    Err(err) => {
+                        recv_pool.release(buf).await;
+                        return Err(err);
+                    }
+                }
+            }
+        }
+    }
+
+    Ok(())
 }

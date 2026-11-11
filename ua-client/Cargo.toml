@@ -9,5 +9,6 @@ repository.workspace = true
 ua-core.workspace = true
 
 bytes.workspace = true
+smallvec.workspace = true
 thiserror.workspace = true
 tokio.workspace = true
