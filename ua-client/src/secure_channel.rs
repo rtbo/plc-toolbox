@@ -14,12 +14,11 @@ pub async fn open<P: SecurityPolicy + Clone>(
     security_policy: P,
     request_id: u32,
     msg: ua::OpenSecureChannelRequest,
-    decoding_ctx: Arc<binary::DecodingCtx>,
 ) -> Result<(SendHalf<P>, RecvHalf<P>), ua::StatusCode> {
 
     let mut send_half = SendHalf::new(send, send_pool, security_policy.clone());
 
-    let mut recv_half = RecvHalf::new(recv, recv_pool.clone(), security_policy, decoding_ctx);
+    let mut recv_half = RecvHalf::new(recv, recv_pool.clone(), security_policy);
 
     send_half.send_open(msg, request_id).await?;
 
@@ -143,19 +142,20 @@ pub struct RecvHalf<P> {
     recv: tcp::RecvHalf,
     security_policy: P,
     _pool: Arc<BufferPool>,
-    decoding_ctx: Arc<binary::DecodingCtx>,
+    decoding_ctx: binary::DecodingCtx,
     channel_id: u32,
     token_id: u32,
     srv_seq_number: u32,
 }
 
 impl<P: SecurityPolicy> RecvHalf<P> {
-    fn new(recv: tcp::RecvHalf, pool: Arc<BufferPool>, security_policy: P, decoding_ctx: Arc<binary::DecodingCtx>) -> Self {
+    fn new(recv: tcp::RecvHalf, pool: Arc<BufferPool>, security_policy: P) -> Self {
         Self {
             recv,
             _pool: pool,
             security_policy,
-            decoding_ctx,
+            // This structs only decodes headers and can live with an empty decoding context.
+            decoding_ctx: binary::DecodingCtx::new(),
             channel_id: 0,
             token_id: 0,
             srv_seq_number: 0,

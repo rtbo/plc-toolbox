@@ -79,7 +79,7 @@ pub struct TcpClient {
     sc_recv: secure_channel::RecvHalf<AnySecurityPolicy>,
     _send_pool: Arc<BufferPool>,
     recv_pool: Arc<BufferPool>,
-    decoding_ctx: Arc<binary::DecodingCtx>,
+    decoding_ctx: binary::DecodingCtx,
     req_id: u32,
 }
 
@@ -87,7 +87,7 @@ impl TcpClient {
     pub async fn connect(endpoint: &str, config: Config) -> Result<Self, ua::StatusCode> {
         let (mut send, mut recv) = tcp::connect(endpoint, 8192, 8192).await?;
 
-        let decoding_ctx = Arc::new(binary::DecodingCtx::default());
+        let decoding_ctx = binary::DecodingCtx::default();
 
         let buffer_config = config
             .buffer
@@ -123,7 +123,6 @@ impl TcpClient {
                 client_nonce: vec![],
                 requested_lifetime: 60000,
             },
-            decoding_ctx.clone(),
         )
         .await?;
 
