@@ -194,8 +194,6 @@ use crate::ua;
 
 #[cfg(test)]
 mod tests {
-    // use bytes::BytesMut;
-
     use super::*;
     use crate::ua;
 
@@ -215,56 +213,50 @@ mod tests {
     where
         T: Encode + Decode + PartialEq + std::fmt::Debug,
     {
-        todo!("{:?}", value);
-        // let mut encoded = vec![0; value.encoded_len() as usize];
-        // let mut output = &mut encoded[..];
-        // value.encode(&mut output);
-        // assert!(output.is_empty());
+        let mut encoded = BytesMut::with_capacity(value.encoded_len() as usize);
+        value.encode(&mut encoded);
+        assert!(encoded.is_empty() == false);
 
-        // let mut remaining: &[u8] = &encoded;
-        // let decoded =
-        //     T::decode(&mut remaining, &Default::default()).expect("encoded value should decode");
-        // assert!(remaining.is_empty());
-        // assert_eq!(&decoded, value);
+        let mut buf = encoded.clone();
+        let decoded =
+            T::decode(&mut buf, &Default::default()).expect("encoded value should decode");
+        assert!(buf.is_empty());
+        assert_eq!(&decoded, value);
 
-        // let mut reencoded = vec![0; decoded.encoded_len() as usize];
-        // let mut output = &mut reencoded[..];
-        // decoded.encode(&mut output);
-        // assert!(output.is_empty());
-        // assert_eq!(reencoded, encoded);
+        let mut reencoded = BytesMut::with_capacity(decoded.encoded_len() as usize);
+        decoded.encode(&mut reencoded);
+        assert_eq!(reencoded, encoded);
     }
 
     #[test]
     fn repr_enums_encode_their_discriminants() {
-        todo!()
-        // let small = SmallCode::Value;
-        // assert_eq!(small.encoded_len(), 1);
-        // let mut buf = [0; 1];
-        // let mut output = &mut buf[..];
-        // small.encode(&mut output);
-        // assert_eq!(&buf[..], &[0xab]);
-        // assert!(matches!(
-        //     SmallCode::decode(&mut &buf[..], &Default::default()),
-        //     Ok(SmallCode::Value)
-        // ));
+        let small = SmallCode::Value;
+        assert_eq!(small.encoded_len(), 1);
+        let mut buf = BytesMut::with_capacity(1);
+        small.encode(&mut buf);
+        assert_eq!(&buf[..], &[0xab]);
+        let mut decoded_buf = buf.clone();
+        assert!(matches!(
+            SmallCode::decode(&mut decoded_buf, &Default::default()),
+            Ok(SmallCode::Value)
+        ));
 
-        // let medium = MediumCode::Value;
-        // assert_eq!(medium.encoded_len(), 2);
-        // let mut buf = [0; 2];
-        // let mut output = &mut buf[..];
-        // medium.encode(&mut output);
-        // assert_eq!(&buf[..], &[0xef, 0xcd]);
-        // assert!(matches!(
-        //     MediumCode::decode(&mut &buf[..], &Default::default()),
-        //     Ok(MediumCode::Value)
-        // ));
+        let medium = MediumCode::Value;
+        assert_eq!(medium.encoded_len(), 2);
+        let mut buf = BytesMut::with_capacity(2);
+        medium.encode(&mut buf);
+        assert_eq!(&buf[..], &[0xef, 0xcd]);
+        let mut decoded_buf = buf.clone();
+        assert!(matches!(
+            MediumCode::decode(&mut decoded_buf, &Default::default()),
+            Ok(MediumCode::Value)
+        ));
 
-        // let large = ua::StatusCode::BadTcpServerTooBusy;
-        // assert_eq!(large.encoded_len(), 4);
-        // let mut buf = [0; 4];
-        // let mut output = &mut buf[..];
-        // large.encode(&mut output);
-        // assert_eq!(&buf[..], &0x807d0000u32.to_le_bytes());
+        let large = ua::StatusCode::BadTcpServerTooBusy;
+        assert_eq!(large.encoded_len(), 4);
+        let mut buf = BytesMut::with_capacity(4);
+        large.encode(&mut buf);
+        assert_eq!(&buf[..], &0x807d0000u32.to_le_bytes());
     }
 
     #[test]
@@ -276,18 +268,17 @@ mod tests {
 
     #[test]
     fn repr_enum_decodes_through_try_from() {
-        todo!()
-        // let buf = BytesMut::from(&0x807d0000u32.to_le_bytes()[..]);
+        let mut buf = BytesMut::from(&0x807d0000u32.to_le_bytes()[..]);
 
-        // assert!(matches!(
-        //     ua::StatusCode::decode(&mut &buf[..], &Default::default()),
-        //     Ok(ua::StatusCode::BadTcpServerTooBusy)
-        // ));
+        assert!(matches!(
+            ua::StatusCode::decode(&mut buf, &Default::default()),
+            Ok(ua::StatusCode::BadTcpServerTooBusy)
+        ));
 
-        // let buf = BytesMut::from(&0x12345678u32.to_le_bytes()[..]);
-        // assert!(matches!(
-        //     ua::StatusCode::decode(&mut &buf[..], &Default::default()),
-        //     Err(ua::StatusCode::BadDecodingError)
-        // ));
+        let mut buf = BytesMut::from(&0x12345678u32.to_le_bytes()[..]);
+        assert!(matches!(
+            ua::StatusCode::decode(&mut buf, &Default::default()),
+            Err(ua::StatusCode::BadDecodingError)
+        ));
     }
 }

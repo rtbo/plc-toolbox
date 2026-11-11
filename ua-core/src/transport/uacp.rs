@@ -265,97 +265,89 @@ mod tests {
     where
         T: Encode + Decode + PartialEq + std::fmt::Debug,
     {
-        todo!("{:?}", value)
-        // let mut encoded = vec![0; value.encoded_len() as usize];
-        // let mut output = &mut encoded[..];
-        // value.encode(&mut output);
-        // assert!(output.is_empty());
+        use crate::encoding::binary::BytesMut;
+        
+        let mut encoded = BytesMut::with_capacity(value.encoded_len() as usize);
+        value.encode(&mut encoded);
 
-        // let mut remaining: &[u8] = &encoded;
-        // let decoded =
-        //     T::decode(&mut remaining, &Default::default()).expect("encoded value should decode");
-        // assert!(remaining.is_empty());
-        // assert_eq!(&decoded, value);
+        let mut buf = encoded.clone();
+        let decoded =
+            T::decode(&mut buf, &Default::default()).expect("encoded value should decode");
+        assert!(buf.is_empty());
+        assert_eq!(&decoded, value);
 
-        // let mut reencoded = vec![0; decoded.encoded_len() as usize];
-        // let mut output = &mut reencoded[..];
-        // decoded.encode(&mut output);
-        // assert!(output.is_empty());
-        // assert_eq!(reencoded, encoded);
+        let mut reencoded = BytesMut::with_capacity(decoded.encoded_len() as usize);
+        decoded.encode(&mut reencoded);
+        assert_eq!(reencoded, encoded);
     }
 
     fn assert_roundtrip_msg<T>(value: &T)
     where
         T: Msg + PartialEq + std::fmt::Debug,
     {
-        todo!("assert_roundtrip_msg for {:?}", value)
-        // let mut encoded = vec![0; value.msg_encoded_len() as usize];
-        // let mut output = &mut encoded[..];
-        // value.msg_encode(&mut output);
-        // assert!(output.is_empty());
+        use crate::encoding::binary::BytesMut;
+        
+        let mut encoded = BytesMut::with_capacity(value.msg_encoded_len() as usize);
+        value.msg_encode(&mut encoded);
 
-        // let mut remaining: &[u8] = &encoded;
-        // let decoded = T::msg_decode(&mut remaining, &Default::default())
-        //     .expect("encoded value should decode");
-        // assert!(remaining.is_empty());
-        // assert_eq!(&decoded, value);
+        let mut buf = encoded.clone();
+        let decoded = T::msg_decode(&mut buf, &Default::default())
+            .expect("encoded value should decode");
+        assert!(buf.is_empty());
+        assert_eq!(&decoded, value);
 
-        // let mut reencoded = vec![0; decoded.msg_encoded_len() as usize];
-        // let mut output = &mut reencoded[..];
-        // decoded.msg_encode(&mut output);
-        // assert!(output.is_empty());
-        // assert_eq!(reencoded, encoded);
+        let mut reencoded = BytesMut::with_capacity(decoded.msg_encoded_len() as usize);
+        decoded.msg_encode(&mut reencoded);
+        assert_eq!(reencoded, encoded);
     }
 
     #[test]
     fn hello_encodes_fields_in_declaration_order() {
-        todo!()
-        // let hello = Hello {
-        //     protocol_version: 1,
-        //     receive_buffer_size: 2,
-        //     send_buffer_size: 3,
-        //     max_message_size: 4,
-        //     max_chunk_count: 5,
-        //     endpoint_url: "x".to_owned(),
-        // };
-        // let mut buf = vec![0; hello.encoded_len() as usize];
-        // let mut output = &mut buf[..];
+        use crate::encoding::binary::BytesMut;
+        
+        let hello = Hello {
+            protocol_version: 1,
+            receive_buffer_size: 2,
+            send_buffer_size: 3,
+            max_message_size: 4,
+            max_chunk_count: 5,
+            endpoint_url: "x".to_owned(),
+        };
+        let mut buf = BytesMut::with_capacity(hello.encoded_len() as usize);
 
-        // assert_eq!(hello.encoded_len(), 25);
-        // hello.encode(&mut output);
-        // assert!(output.is_empty());
-        // assert_eq!(
-        //     &buf[..],
-        //     &[
-        //         1, 0, 0, 0, 2, 0, 0, 0, 3, 0, 0, 0, 4, 0, 0, 0, 5, 0, 0, 0, 1, 0, 0, 0, b'x',
-        //     ]
-        // );
+        assert_eq!(hello.encoded_len(), 25);
+        hello.encode(&mut buf);
+        assert_eq!(
+            &buf[..],
+            &[
+                1, 0, 0, 0, 2, 0, 0, 0, 3, 0, 0, 0, 4, 0, 0, 0, 5, 0, 0, 0, 1, 0, 0, 0, b'x',
+            ]
+        );
     }
 
     #[test]
     fn hello_msg_encodes_fields_in_declaration_order() {
-        todo!()
-        // let hello = Hello {
-        //     protocol_version: 1,
-        //     receive_buffer_size: 2,
-        //     send_buffer_size: 3,
-        //     max_message_size: 4,
-        //     max_chunk_count: 5,
-        //     endpoint_url: "x".to_owned(),
-        // };
-        // let mut buf = vec![0; hello.msg_encoded_len() as usize];
-        // let mut output = &mut buf[..];
+        use crate::encoding::binary::BytesMut;
+        
+        let hello = Hello {
+            protocol_version: 1,
+            receive_buffer_size: 2,
+            send_buffer_size: 3,
+            max_message_size: 4,
+            max_chunk_count: 5,
+            endpoint_url: "x".to_owned(),
+        };
+        let mut buf = BytesMut::with_capacity(hello.msg_encoded_len() as usize);
 
-        // assert_eq!(hello.msg_encoded_len(), 33);
-        // hello.msg_encode(&mut output);
-        // assert!(output.is_empty());
-        // assert_eq!(
-        //     &buf[..],
-        //     &[
-        //         b'H', b'E', b'L', b'F', 33, 0, 0, 0, 1, 0, 0, 0, 2, 0, 0, 0, 3, 0, 0, 0, 4, 0, 0,
-        //         0, 5, 0, 0, 0, 1, 0, 0, 0, b'x',
-        //     ]
-        // );
+        assert_eq!(hello.msg_encoded_len(), 33);
+        hello.msg_encode(&mut buf);
+        assert_eq!(
+            &buf[..],
+            &[
+                b'H', b'E', b'L', b'F', 33, 0, 0, 0, 1, 0, 0, 0, 2, 0, 0, 0, 3, 0, 0, 0, 4, 0, 0,
+                0, 5, 0, 0, 0, 1, 0, 0, 0, b'x',
+            ]
+        );
     }
 
     #[test]

@@ -353,30 +353,34 @@ mod tests {
 
     #[test]
     fn rejects_truncated_nodeids() {
-        todo!()
-        // let ids = [
-        //     NodeId::Numeric(0, 42),
-        //     NodeId::Numeric(1, 42),
-        //     NodeId::Numeric(256, 42),
-        //     NodeId::String(1, "hello".into()),
-        //     NodeId::Guid(1, ua::Guid::default()),
-        //     NodeId::Opaque(1, vec![1, 2, 3]),
-        // ];
-        // let ctx = binary::DecodingCtx::default();
-        // for id in ids {
-        //     let mut bytes = vec![0; id.encoded_len() as usize];
-        //     id.encode(&mut &mut bytes[..]);
-        //     for len in 0..bytes.len() {
-        //         assert!(
-        //             matches!(
-        //                 NodeId::decode(&mut &bytes[..len], &ctx),
-        //                 Err(ua::StatusCode::BadDecodingError)
-        //             ),
-        //             "truncated {id:?} at {len}"
-        //         );
-        //     }
-        //     assert_eq!(NodeId::decode(&mut &bytes[..], &ctx).unwrap(), id);
-        // }
+        use crate::encoding::binary::{BytesMut, Encode, Decode};
+        
+        let ids = [
+            NodeId::Numeric(0, 42),
+            NodeId::Numeric(1, 42),
+            NodeId::Numeric(256, 42),
+            NodeId::String(1, "hello".into()),
+            NodeId::Guid(1, ua::Guid::default()),
+            NodeId::Opaque(1, vec![1, 2, 3]),
+        ];
+        let ctx = binary::DecodingCtx::default();
+        for id in ids {
+            let mut buf = BytesMut::with_capacity(id.encoded_len() as usize);
+            id.encode(&mut buf);
+            for len in 0..buf.len() {
+                let mut truncated = buf.clone();
+                truncated.truncate(len);
+                assert!(
+                    matches!(
+                        NodeId::decode(&mut truncated, &ctx),
+                        Err(ua::StatusCode::BadDecodingError)
+                    ),
+                    "truncated {id:?} at {len}"
+                );
+            }
+            let mut full_buf = buf.clone();
+            assert_eq!(NodeId::decode(&mut full_buf, &ctx).unwrap(), id);
+        }
     }
 
     #[test]
