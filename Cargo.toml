@@ -8,7 +8,7 @@ members = [
   "ua-core",
   "ua-macros",
   "ua-nsc",
-  
+
   "ua-lab/json",
 ]
 
@@ -29,19 +29,15 @@ bytes = "1.12.1"
 chrono = "0.4.45"
 clap = { version = "4.6.7", features = ["derive"] }
 log = "0.4"
-open62541 = {
-  version = "0.12.0",
-  features = [
-    "serde",
-    "time",
-    "tokio",
-    "uuid",
-  ]
-}
+open62541 = { version = "0.12.0", features = [
+  "serde",
+  "time",
+  "tokio",
+  "uuid",
+] }
 open62541-sys = "0.6.2"
 quick-xml = "0.42.0"
 serde = { version = "1.0", features = ["derive"] }
-smallvec = "1.13.2"
 thiserror = "2.0.21"
 tokio = { version = "1", features = ["full"] }
 uuid = "1.28.0"

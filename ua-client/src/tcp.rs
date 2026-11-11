@@ -1,6 +1,5 @@
 use std::sync::Arc;
 
-use smallvec::SmallVec;
 use tokio::sync::{mpsc, oneshot};
 use ua_core::encoding::binary;
 use ua_core::encoding::binary::{Decode, Encode};
@@ -183,14 +182,12 @@ impl TcpClient {
     }
 }
 
-type ResponseCache = SmallVec<[Option<(u32, Result<bytes::BytesMut, ua::StatusCode>)>; 8]>;
-
 async fn run_secure_channel_recv<P: SecurityPolicy>(
     mut recv_half: secure_channel::RecvHalf<P>,
     recv_pool: Arc<BufferPool>,
     mut rx: mpsc::UnboundedReceiver<RecvCommand>,
 ) -> Result<(), ua::StatusCode> {
-    let mut cache: ResponseCache = SmallVec::new();
+    let mut response_cache: SmallMap<u32, Result<bytes::BytesMut, ua::StatusCode>> = SmallMap::with_capacity(8);
     let mut pending_requests: SmallMap<
         u32,
         oneshot::Sender<Result<bytes::BytesMut, ua::StatusCode>>,
@@ -201,12 +198,8 @@ async fn run_secure_channel_recv<P: SecurityPolicy>(
             cmd = rx.recv() => {
                 match cmd {
                     Some(RecvCommand::GetResponse(req_id, tx)) => {
-                        if let Some(idx) = cache.iter().position(|entry| {
-                            entry.as_ref().map_or(false, |(id, _)| *id == req_id)
-                        }) {
-                            if let Some((_, result)) = cache.swap_remove(idx) {
-                                let _ = tx.send(result);
-                            }
+                        if let Some(result) = response_cache.remove(&req_id) {
+                            let _ = tx.send(result);
                         } else {
                             pending_requests.insert(req_id, tx);
                         }
@@ -214,17 +207,17 @@ async fn run_secure_channel_recv<P: SecurityPolicy>(
                     None => break,
                 }
             }
-            result = async {
+            (recv_res, buf) = async {
                 let mut buf = recv_pool.acquire().await;
-                (recv_half.recv_msg(&mut buf).await, buf)
+                let recv_res = recv_half.recv_msg(&mut buf).await;
+                (recv_res, buf)
             } => {
-                let (msg_result, buf) = result;
-                match msg_result {
+                match recv_res {
                     Ok(req_id) => {
                         if let Some(tx) = pending_requests.remove(&req_id) {
                             let _ = tx.send(Ok(buf));
                         } else {
-                            cache.push(Some((req_id, Ok(buf))));
+                            response_cache.insert(req_id, Ok(buf));
                         }
                     }
                     Err(err) => {
