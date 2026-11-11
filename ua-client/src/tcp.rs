@@ -16,7 +16,7 @@ use ua_core::ua;
 use ua_core::{AnySecurityPolicy, BufferPool, SecurityPolicyNone};
 
 use crate::secure_channel;
-use crate::small_map::SmallMap;
+use crate::smallmap::SmallMap;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct BufferConfig {
