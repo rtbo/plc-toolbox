@@ -1,4 +1,13 @@
-Build on Windows require a Visual Studio environment and LIBCLANG_PATH defined where libclang.dll can be found.
-This environment is setup with vsenv.bat
+CODE FORMATTING
 
-From the workspace root, build ua-browser with `npm --prefix ua-browser run build`.
+    The code must be formatted with the nightly toolchain, using the rustfmt.toml config file.
+    To format the whole workspace: cargo +nightly fmt
+
+BUILD ON WINDOWS
+
+    Build on Windows require a Visual Studio environment and LIBCLANG_PATH defined where libclang.dll can be found.
+    This environment is setup with vsenv.bat
+
+UA-BROWSER BUILD
+
+    From the workspace root, build ua-browser with `npm --prefix ua-browser run build`.
