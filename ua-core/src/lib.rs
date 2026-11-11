@@ -9,4 +9,3 @@ pub mod ua;
 
 pub use buffer_pool::BufferPool;
 pub use security_policy::{AnySecurityPolicy, SecurityPolicy, SecurityPolicyNone};
-// pub use transport::Transport;

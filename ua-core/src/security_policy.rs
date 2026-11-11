@@ -1,5 +1,5 @@
 use crate::msg::uasc::{self, AsymmetricSecurityHeader, SymmetricSecurityHeader};
-use crate::transport::tcp;
+use crate::transport;
 use crate::ua;
 
 #[allow(async_fn_in_trait)]
@@ -10,15 +10,15 @@ pub trait SecurityPolicy: Sized {
 
     fn asymmetric_security_header(&self) -> AsymmetricSecurityHeader;
 
-    async fn send_msg_chunk(
+    async fn send_msg_chunk<T: transport::SendData>(
         &mut self,
-        stream: &mut tcp::SendHalf,
+        stream: &mut transport::SendChunk<T>,
         buf: &bytes::BytesMut,
     ) -> Result<(), ua::StatusCode>;
 
-    async fn recv_msg_chunk(
+    async fn recv_msg_chunk<T: transport::RecvData>(
         &mut self,
-        stream: &mut tcp::RecvHalf,
+        stream: &mut transport::RecvChunk<T>,
         buf: &mut bytes::BytesMut,
     ) -> Result<(), ua::StatusCode>;
 }
@@ -43,9 +43,9 @@ impl SecurityPolicy for SecurityPolicyNone {
         }
     }
 
-    async fn send_msg_chunk(
+    async fn send_msg_chunk<T: transport::SendData>(
         &mut self,
-        stream: &mut tcp::SendHalf,
+        stream: &mut transport::SendChunk<T>,
         buf: &bytes::BytesMut,
     ) -> Result<(), ua::StatusCode> {
         stream
@@ -55,9 +55,9 @@ impl SecurityPolicy for SecurityPolicyNone {
         Ok(())
     }
 
-    async fn recv_msg_chunk(
+    async fn recv_msg_chunk<T: transport::RecvData>(
         &mut self,
-        stream: &mut tcp::RecvHalf,
+        stream: &mut transport::RecvChunk<T>,
         buf: &mut bytes::BytesMut,
     ) -> Result<(), ua::StatusCode> {
         stream.recv_chunk(buf).await
@@ -85,9 +85,9 @@ impl SecurityPolicy for AnySecurityPolicy {
             AnySecurityPolicy::None(policy) => policy.asymmetric_security_header(),
         }
     }
-    async fn send_msg_chunk(
+    async fn send_msg_chunk<T: transport::SendData>(
         &mut self,
-        stream: &mut tcp::SendHalf,
+        stream: &mut transport::SendChunk<T>,
         buf: &bytes::BytesMut,
     ) -> Result<(), ua::StatusCode> {
         match self {
@@ -95,9 +95,9 @@ impl SecurityPolicy for AnySecurityPolicy {
         }
     }
 
-    async fn recv_msg_chunk(
+    async fn recv_msg_chunk<T: transport::RecvData>(
         &mut self,
-        stream: &mut tcp::RecvHalf,
+        stream: &mut transport::RecvChunk<T>,
         buf: &mut bytes::BytesMut,
     ) -> Result<(), ua::StatusCode> {
         match self {

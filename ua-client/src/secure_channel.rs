@@ -2,18 +2,23 @@ use std::sync::Arc;
 
 use ua_core::encoding::binary::{self, Decode, Encode};
 use ua_core::msg::{BinaryEncodingId, uasc};
-use ua_core::transport::tcp;
+use ua_core::transport::{self, SendChunk, RecvChunk};
 use ua_core::{BufferPool, SecurityPolicy, ua};
 
-pub async fn open<P: SecurityPolicy + Clone>(
-    send: tcp::SendHalf,
-    recv: tcp::RecvHalf,
+pub async fn open<P, S, R>(
+    send: SendChunk<S>,
+    recv: RecvChunk<R>,
     send_pool: Arc<BufferPool>,
     recv_pool: Arc<BufferPool>,
     security_policy: P,
     request_id: u32,
     msg: ua::OpenSecureChannelRequest,
-) -> Result<(SendHalf<P>, RecvHalf<P>), ua::StatusCode> {
+) -> Result<(SendHalf<P, S>, RecvHalf<P, R>), ua::StatusCode> 
+where
+    P: SecurityPolicy + Clone,
+    S: transport::SendData,
+    R: transport::RecvData,
+{
     let mut send_half = SendHalf::new(send, send_pool, security_policy.clone());
 
     let mut recv_half = RecvHalf::new(recv, recv_pool.clone(), security_policy);
@@ -31,8 +36,9 @@ pub async fn open<P: SecurityPolicy + Clone>(
     Ok((send_half, recv_half))
 }
 
-pub struct SendHalf<P> {
-    send: tcp::SendHalf,
+#[derive(Debug)]
+pub struct SendHalf<P, S> {
+    send: SendChunk<S>,
     pool: Arc<BufferPool>,
     security_policy: P,
     channel_id: u32,
@@ -40,8 +46,12 @@ pub struct SendHalf<P> {
     sequence_number: u32,
 }
 
-impl<P: SecurityPolicy> SendHalf<P> {
-    fn new(send: tcp::SendHalf, pool: Arc<BufferPool>, security_policy: P) -> Self {
+impl<P, S> SendHalf<P, S> 
+where 
+    P: SecurityPolicy,
+    S: transport::SendData,
+{
+    fn new(send: SendChunk<S>, pool: Arc<BufferPool>, security_policy: P) -> Self {
         Self {
             send,
             pool,
@@ -140,8 +150,9 @@ impl<P: SecurityPolicy> SendHalf<P> {
     }
 }
 
-pub struct RecvHalf<P> {
-    recv: tcp::RecvHalf,
+#[derive(Debug)]
+pub struct RecvHalf<P, R> {
+    recv: RecvChunk<R>,
     security_policy: P,
     _pool: Arc<BufferPool>,
     decoding_ctx: binary::DecodingCtx,
@@ -150,8 +161,12 @@ pub struct RecvHalf<P> {
     srv_seq_number: u32,
 }
 
-impl<P: SecurityPolicy> RecvHalf<P> {
-    fn new(recv: tcp::RecvHalf, pool: Arc<BufferPool>, security_policy: P) -> Self {
+impl<P, R> RecvHalf<P, R> 
+where
+    P: SecurityPolicy,
+    R: transport::RecvData,
+{
+    fn new(recv: RecvChunk<R>, pool: Arc<BufferPool>, security_policy: P) -> Self {
         Self {
             recv,
             _pool: pool,

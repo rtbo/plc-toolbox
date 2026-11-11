@@ -1,3 +1,6 @@
+//! Client implementation for the UA Secure Channel Binary protocols:
+//!  - UA-TCP UA-SC UA-Binary
+//!  - WSS UA-SC UA-Binary (TODO)
 use std::sync::Arc;
 
 use tokio::sync::{mpsc, oneshot};
@@ -5,35 +8,20 @@ use ua_core::encoding::binary;
 use ua_core::encoding::binary::{Decode, Encode};
 use ua_core::msg::BinaryEncodingId;
 use ua_core::transport::uacp::Msg;
-use ua_core::transport::{tcp, uacp};
+use ua_core::transport::{self, RecvChunk, SendChunk, uacp};
 use ua_core::{AnySecurityPolicy, BufferPool, SecurityPolicy, SecurityPolicyNone, msg, ua};
 
+use crate::Config;
 use crate::secure_channel;
 use crate::smallmap::SmallMap;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct BufferConfig {
-    pub send_size: usize,
-    pub recv_size: usize,
-    pub max_msg_chunks: Option<usize>,
-}
 
-impl Default for BufferConfig {
-    fn default() -> Self {
-        Self {
-            send_size: 65536,
-            recv_size: 65536,
-            max_msg_chunks: None,
-        }
-    }
-}
-
-impl BufferConfig {
-    async fn hello_ack(
+impl super::BufferConfig {
+    async fn hello_ack<S: transport::SendData, R: transport::RecvData>(
         self,
         endpoint_url: String,
-        send: &mut tcp::SendHalf,
-        recv: &mut tcp::RecvHalf,
+        send: &mut SendChunk<S>,
+        recv: &mut RecvChunk<R>,
         decoding_ctx: &binary::DecodingCtx,
     ) -> Result<Self, ua::StatusCode> {
         let mut buf = bytes::BytesMut::with_capacity(8192);
@@ -67,13 +55,9 @@ impl BufferConfig {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
-pub struct Config {
-    pub buffer: BufferConfig,
-}
-
-pub struct TcpClient {
-    sc_send: secure_channel::SendHalf<AnySecurityPolicy>,
+#[derive(Debug)]
+pub struct ScBinClient<S> {
+    sc_send: secure_channel::SendHalf<AnySecurityPolicy, S>,
     decoding_ctx: binary::DecodingCtx,
     req_id: u32,
     tx: mpsc::UnboundedSender<RecvCommand>,
@@ -87,15 +71,18 @@ enum RecvCommand {
     ),
 }
 
-impl TcpClient {
-    pub async fn connect(endpoint: &str, config: Config) -> Result<Self, ua::StatusCode> {
-        let (mut send, mut recv) = tcp::connect(endpoint, 8192, 8192).await?;
-
+impl<S: transport::SendData> ScBinClient<S> {
+    pub async fn connect<R>(config: Config, send: S, recv: R) -> Result<Self, ua::StatusCode> 
+    where
+        R: transport::RecvData + Send + 'static,
+    {
         let decoding_ctx = binary::DecodingCtx::default();
+        let mut send = SendChunk::new(send, 8192);
+        let mut recv = RecvChunk::new(recv, 8192);
 
         let buffer_config = config
             .buffer
-            .hello_ack(endpoint.to_string(), &mut send, &mut recv, &decoding_ctx)
+            .hello_ack(config.endpoint.clone(), &mut send, &mut recv, &decoding_ctx)
             .await?;
 
         send.adjust_max_chunk_size(buffer_config.send_size);
@@ -103,6 +90,7 @@ impl TcpClient {
 
         let _config = Config {
             buffer: buffer_config,
+            ..config
         };
 
         let send_pool = Arc::new(BufferPool::new(2, buffer_config.send_size));
@@ -182,11 +170,14 @@ impl TcpClient {
     }
 }
 
-async fn run_secure_channel_recv<P: SecurityPolicy>(
-    mut recv_half: secure_channel::RecvHalf<P>,
+async fn run_secure_channel_recv<P: SecurityPolicy, R>(
+    mut recv_half: secure_channel::RecvHalf<P, R>,
     recv_pool: Arc<BufferPool>,
     mut rx: mpsc::UnboundedReceiver<RecvCommand>,
-) -> Result<(), ua::StatusCode> {
+) -> Result<(), ua::StatusCode> 
+ where
+    R: transport::RecvData + Send,
+{
     let mut response_cache: SmallMap<u32, Result<bytes::BytesMut, ua::StatusCode>> = SmallMap::with_capacity(8);
     let mut pending_requests: SmallMap<
         u32,

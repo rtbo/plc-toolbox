@@ -2,6 +2,13 @@ use std::any::Any;
 
 pub mod binary;
 
+pub enum Encoding {
+    /// UA-Binary encoding
+    Binary,
+    /// UA-JSON encoding
+    Json,
+}
+
 pub trait Value: Any + std::fmt::Debug + binary::Encode {
     /// The URI of the datatype of this value, e.g. "http://opcfoundation.org/UA/" for NS0.
     fn datatype_uri(&self) -> &'static str;

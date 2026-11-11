@@ -12,8 +12,11 @@ async fn main() -> std::process::ExitCode {
 }
 
 async fn run() -> Result<(), ua::StatusCode> {
-    let mut client =
-        ua_client::tcp::TcpClient::connect("opc.tcp://localhost:4840", Default::default()).await?;
+    let config = ua_client::Config {
+        endpoint: "opc.tcp://localhost:4840".to_string(),
+        ..Default::default()
+    };
+    let mut client = ua_client::Client::connect(config).await?;
 
     let srvs = client
         .send_request(ua::FindServersRequest {
