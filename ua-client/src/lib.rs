@@ -1,6 +1,7 @@
 use sc_bin::ScBinClient;
 use tokio::net;
-use ua_core::{encoding::binary, msg, ua};
+use ua_core::encoding::binary;
+use ua_core::{msg, ua};
 
 mod sc_bin;
 pub mod secure_channel;

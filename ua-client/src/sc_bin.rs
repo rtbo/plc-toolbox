@@ -7,8 +7,8 @@ use tokio::sync::{Mutex, mpsc, oneshot, watch};
 use ua_core::encoding::binary;
 use ua_core::encoding::binary::{Decode, Encode};
 use ua_core::msg::BinaryEncodingId;
-use ua_core::uacp::{self, Msg};
 use ua_core::transport::{self, RecvChunk, SendChunk};
+use ua_core::uacp::{self, Msg};
 use ua_core::{AnySecurityPolicy, BufferPool, SecurityPolicy, SecurityPolicyNone, msg, ua};
 
 use crate::smallmap::SmallMap;
@@ -322,9 +322,8 @@ async fn run_secure_channel_recv<P, R>(
 mod tests {
     use std::time::Duration;
 
-    use ua_core::uasc;
     use ua_core::transport::RecvData;
-    use ua_core::SecurityPolicyNone;
+    use ua_core::{SecurityPolicyNone, uasc};
 
     use super::*;
 

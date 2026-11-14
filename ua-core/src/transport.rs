@@ -6,7 +6,10 @@ use crate::ua;
 pub mod tcp;
 
 pub trait SendData {
-    fn send_data(&mut self, data: &bytes::BytesMut) -> impl Future<Output = Result<(), io::Error>> + Send;
+    fn send_data(
+        &mut self,
+        data: &bytes::BytesMut,
+    ) -> impl Future<Output = Result<(), io::Error>> + Send;
 }
 
 pub trait RecvData {

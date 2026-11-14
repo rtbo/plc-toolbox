@@ -1,5 +1,4 @@
-use tokio::io;
-use tokio::net;
+use tokio::{io, net};
 
 use super::{RecvData, SendData};
 

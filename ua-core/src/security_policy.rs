@@ -1,6 +1,5 @@
 use crate::uasc::{self, AsymmetricSecurityHeader, SymmetricSecurityHeader};
-use crate::transport;
-use crate::ua;
+use crate::{transport, ua};
 
 pub trait SecurityPolicy: Sized {
     fn uri(&self) -> &'static str;

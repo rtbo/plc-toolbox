@@ -128,7 +128,6 @@ where
         self.sequence_number = 0;
         self.channel_id = 0;
 
-
         Ok(())
     }
 
