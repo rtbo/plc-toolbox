@@ -7,10 +7,18 @@ pub mod secure_channel;
 
 mod smallmap;
 
+/// Buffer configuration for the OPC UA client.
+/// 
+/// It is used for stack profiles based on UA Secure Conversation and Binary data encoding:
+///  - UA-TCP UA-SC UA-Binary (URLs starting with `"opc.tcp://"`)
+///  - WSS UA-SC UA-Binary (URLs starting with `"wss://"`)
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct BufferConfig {
+    /// The size of the send buffer.
     pub send_size: usize,
+    /// The size of the receive buffer.
     pub recv_size: usize,
+    /// The maximum number of message chunks.
     pub max_msg_chunks: Option<usize>,
 }
 
@@ -26,7 +34,9 @@ impl Default for BufferConfig {
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct Config {
+    /// The endpoint URL of the OPC UA server to connect to.
     pub endpoint: String,
+    /// The buffer configuration for the client.
     pub buffer: BufferConfig,
 }
 
