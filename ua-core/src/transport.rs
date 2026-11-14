@@ -5,9 +5,8 @@ use crate::ua;
 
 pub mod tcp;
 
-#[allow(async_fn_in_trait)]
 pub trait SendData {
-    async fn send_data(&mut self, data: &bytes::BytesMut) -> Result<(), io::Error>;
+    fn send_data(&mut self, data: &bytes::BytesMut) -> impl Future<Output = Result<(), io::Error>> + Send;
 }
 
 pub trait RecvData {

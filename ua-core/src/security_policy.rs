@@ -2,7 +2,6 @@ use crate::uasc::{self, AsymmetricSecurityHeader, SymmetricSecurityHeader};
 use crate::transport;
 use crate::ua;
 
-#[allow(async_fn_in_trait)]
 pub trait SecurityPolicy: Sized {
     fn uri(&self) -> &'static str;
 
@@ -10,17 +9,17 @@ pub trait SecurityPolicy: Sized {
 
     fn asymmetric_security_header(&self) -> AsymmetricSecurityHeader;
 
-    async fn send_msg_chunk<T: transport::SendData>(
+    fn send_msg_chunk<T: transport::SendData>(
         &mut self,
         stream: &mut transport::SendChunk<T>,
         buf: &bytes::BytesMut,
-    ) -> Result<(), ua::StatusCode>;
+    ) -> impl Future<Output = Result<(), ua::StatusCode>>;
 
-    async fn recv_msg_chunk<T: transport::RecvData>(
+    fn recv_msg_chunk<T: transport::RecvData>(
         &mut self,
         stream: &mut transport::RecvChunk<T>,
         buf: &mut bytes::BytesMut,
-    ) -> Result<(), ua::StatusCode>;
+    ) -> impl Future<Output = Result<(), ua::StatusCode>>;
 }
 
 #[derive(Debug, Clone)]
