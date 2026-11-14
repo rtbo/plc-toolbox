@@ -4,7 +4,6 @@ use tokio::io;
 use crate::ua;
 
 pub mod tcp;
-pub mod uacp;
 
 #[allow(async_fn_in_trait)]
 pub trait SendData {

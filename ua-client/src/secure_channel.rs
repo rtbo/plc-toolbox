@@ -1,9 +1,9 @@
 use std::sync::Arc;
 
 use ua_core::encoding::binary::{self, Decode, Encode};
-use ua_core::msg::{BinaryEncodingId, uasc};
+use ua_core::msg::BinaryEncodingId;
 use ua_core::transport::{self, RecvChunk, SendChunk};
-use ua_core::{BufferPool, SecurityPolicy, ua};
+use ua_core::{BufferPool, SecurityPolicy, ua, uasc};
 
 pub async fn open<P, S, R>(
     send: SendChunk<S>,

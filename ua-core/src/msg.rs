@@ -1,7 +1,5 @@
 use crate::ua;
 
-pub mod uasc;
-
 /// An OPC UA request and the response type associated with it.
 pub trait Request {
     type Response;

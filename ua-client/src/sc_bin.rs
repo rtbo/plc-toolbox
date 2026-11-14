@@ -1,4 +1,4 @@
-//! Client implementation for the UA Secure Channel Binary protocols:
+//! Client implementation for the stack profiles based on UA Secure Conversation and Binary data encoding.
 //!  - UA-TCP UA-SC UA-Binary
 //!  - WSS UA-SC UA-Binary (TODO)
 use std::sync::Arc;
@@ -7,8 +7,8 @@ use tokio::sync::{Mutex, mpsc, oneshot, watch};
 use ua_core::encoding::binary;
 use ua_core::encoding::binary::{Decode, Encode};
 use ua_core::msg::BinaryEncodingId;
-use ua_core::transport::uacp::Msg;
-use ua_core::transport::{self, RecvChunk, SendChunk, uacp};
+use ua_core::uacp::{self, Msg};
+use ua_core::transport::{self, RecvChunk, SendChunk};
 use ua_core::{AnySecurityPolicy, BufferPool, SecurityPolicy, SecurityPolicyNone, msg, ua};
 
 use crate::smallmap::SmallMap;
@@ -277,7 +277,7 @@ async fn run_secure_channel_recv<P: SecurityPolicy, R>(
 mod tests {
     use std::time::Duration;
 
-    use ua_core::msg::uasc;
+    use ua_core::uasc;
     use ua_core::transport::RecvData;
 
     use super::*;

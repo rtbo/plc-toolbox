@@ -1,4 +1,4 @@
-use crate::msg::uasc::{self, AsymmetricSecurityHeader, SymmetricSecurityHeader};
+use crate::uasc::{self, AsymmetricSecurityHeader, SymmetricSecurityHeader};
 use crate::transport;
 use crate::ua;
 
