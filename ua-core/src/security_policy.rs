@@ -4,7 +4,7 @@ use crate::{transport, ua};
 pub trait SecurityPolicy: Sized {
     fn uri(&self) -> &'static str;
 
-    fn max_body_size(&self, max_send_size: u32) -> u32;
+    fn max_body_size(&self, max_send_size: usize) -> usize;
 
     fn asymmetric_security_header(&self) -> AsymmetricSecurityHeader;
 
@@ -29,8 +29,8 @@ impl SecurityPolicy for SecurityPolicyNone {
         "http://opcfoundation.org/UA/SecurityPolicy#None"
     }
 
-    fn max_body_size(&self, max_send_size: u32) -> u32 {
-        max_send_size - uasc::Header::LEN - SymmetricSecurityHeader::LEN - uasc::SequenceHeader::LEN
+    fn max_body_size(&self, max_send_size: usize) -> usize {
+        max_send_size - uasc::Header::LEN as usize - SymmetricSecurityHeader::LEN as usize - uasc::SequenceHeader::LEN as usize
     }
 
     fn asymmetric_security_header(&self) -> AsymmetricSecurityHeader {
@@ -73,7 +73,7 @@ impl SecurityPolicy for AnySecurityPolicy {
             AnySecurityPolicy::None(policy) => policy.uri(),
         }
     }
-    fn max_body_size(&self, max_send_size: u32) -> u32 {
+    fn max_body_size(&self, max_send_size: usize) -> usize {
         match self {
             AnySecurityPolicy::None(policy) => policy.max_body_size(max_send_size),
         }

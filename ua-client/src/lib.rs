@@ -13,14 +13,47 @@ mod smallmap;
 /// It is used for stack profiles based on UA Secure Conversation and Binary data encoding:
 ///  - UA-TCP UA-SC UA-Binary (URLs starting with `"opc.tcp://"`)
 ///  - WSS UA-SC UA-Binary (URLs starting with `"wss://"`)
+/// 
+/// The buffer configuration is negotiated between the client and the server during the handshake.
+/// Therefore those values may be adjusted by the server during the connection process.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct BufferConfig {
     /// The size of the send buffer.
+    /// An initial size is set by the client, but it may be adjusted by the server during the handshake.
+    /// The default is 64 KiB.
     pub send_size: usize,
     /// The size of the receive buffer.
+    /// An initial size is set by the client, but it may be adjusted by the server during the handshake.
+    /// The default is 64 KiB
     pub recv_size: usize,
-    /// The maximum number of message chunks.
-    pub max_msg_chunks: Option<usize>,
+    /// The maximum size of a request message.
+    /// If `None`, there is no limit on the message size. (this is the default)
+    /// 
+    /// This field may be set by the server during the handshake if the server imposes a limit on request message size.
+    ///
+    /// This field can also be set by the client to impose a lower memory limit than the server for request messages.
+    /// In all cases, an error is returned when attempting to encode a request that exceeds the allowed size.
+    pub max_request_size: Option<usize>,
+    /// The maximum size of a response message.
+    /// This will determine the maximum number of chunks a response can be split into.
+    /// If `None`, there is no limit on the message size (this is the default).
+    /// 
+    /// This field can be set by the client to impose to the server a memory limit for response messages.
+    pub max_response_size: Option<usize>,
+}
+
+impl BufferConfig {
+    fn chunk_count(msg_size: usize, chunk_size: usize) -> usize {
+        (msg_size + chunk_size - 1) / chunk_size
+    }
+
+    pub fn max_send_chunks(&self) -> Option<usize> {
+        self.max_request_size.map(|size| BufferConfig::chunk_count(size, self.send_size))
+    }
+
+    pub fn max_recv_chunks(&self) -> Option<usize> {
+        self.max_response_size.map(|size| BufferConfig::chunk_count(size, self.recv_size))
+    }
 }
 
 impl Default for BufferConfig {
@@ -28,7 +61,8 @@ impl Default for BufferConfig {
         Self {
             send_size: 65536,
             recv_size: 65536,
-            max_msg_chunks: None,
+            max_request_size: None,
+            max_response_size: None,
         }
     }
 }
@@ -91,4 +125,24 @@ impl Client {
 #[derive(Debug)]
 enum ClientImpl {
     TcpScBin(ScBinClient<SecurityPolicyNone, net::tcp::OwnedWriteHalf>),
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_max_chunks() {
+        let tests = &[
+            (1024, 256, 4),
+            (1025, 256, 5),
+            (1024, 512, 2),
+            (1023, 512, 2),
+            (1024, 1024, 1),
+            (1024, 2048, 1),
+        ];
+        for &(msg_size, chunk_size, expected) in tests {
+            assert_eq!(BufferConfig::chunk_count(msg_size, chunk_size), expected);
+        }
+    }
 }

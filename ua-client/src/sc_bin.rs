@@ -9,7 +9,7 @@ use ua_core::encoding::binary::{Decode, Encode};
 use ua_core::msg::BinaryEncodingId;
 use ua_core::transport::{self, RecvChunk, SendChunk};
 use ua_core::uacp::{self, Msg};
-use ua_core::{BufferPool, SecurityPolicy, msg, ua};
+use ua_core::{BufferPool, SecurityPolicy, msg, ua, uasc};
 
 use crate::smallmap::SmallMap;
 use crate::{Config, secure_channel};
@@ -28,8 +28,8 @@ impl super::BufferConfig {
             protocol_version: 0,
             receive_buffer_size: self.recv_size as u32,
             send_buffer_size: self.send_size as u32,
-            max_message_size: (self.recv_size * self.max_msg_chunks.unwrap_or(0)) as u32,
-            max_chunk_count: self.max_msg_chunks.unwrap_or(0) as u32,
+            max_message_size: self.max_response_size.unwrap_or(0) as u32,
+            max_chunk_count: self.max_recv_chunks().unwrap_or(0) as u32,
             endpoint_url,
         };
         hello.msg_encode(&mut buf);
@@ -44,8 +44,9 @@ impl super::BufferConfig {
         Ok(Self {
             send_size: srv_ack.receive_buffer_size as usize,
             recv_size: srv_ack.send_buffer_size as usize,
-            max_msg_chunks: if srv_ack.max_chunk_count > 0 {
-                Some(srv_ack.max_chunk_count as usize)
+            max_response_size: self.max_response_size,
+            max_request_size: if srv_ack.max_message_size > 0 {
+                Some(srv_ack.max_message_size as usize)
             } else {
                 None
             },
@@ -63,11 +64,15 @@ pub struct ScBinClient<P, S> {
     recv_pool: Arc<BufferPool>,
 }
 
+#[derive(Debug, PartialEq)]
+pub struct RecvResponse {
+    buf: bytes::BytesMut,
+    is_ok: bool,
+}
+
+#[derive(Debug)]
 enum RecvCommand {
-    GetResponse(
-        u32,
-        oneshot::Sender<Result<bytes::BytesMut, ua::StatusCode>>,
-    ),
+    GetResponse(u32, oneshot::Sender<Result<RecvResponse, ua::StatusCode>>),
     Close(oneshot::Sender<()>),
 }
 
@@ -97,7 +102,7 @@ where
         send.adjust_max_chunk_size(buffer_config.send_size);
         recv.adjust_max_chunk_size(buffer_config.recv_size);
 
-        let _config = Config {
+        let config = Config {
             buffer: buffer_config,
             ..config
         };
@@ -112,23 +117,13 @@ where
         };
 
         let (sc_send, sc_recv) = secure_channel::open(
+            security_policy,
             send,
             recv,
+            config,
             send_pool,
             recv_pool.clone(),
-            security_policy,
             1,
-            ua::OpenSecureChannelRequest {
-                request_header: ua::RequestHeader {
-                    timestamp: ua::DateTime::now(),
-                    ..Default::default()
-                },
-                client_protocol_version: 0,
-                security_mode: ua::MessageSecurityMode::None,
-                request_type: ua::SecurityTokenRequestType::Issue,
-                client_nonce: vec![],
-                requested_lifetime: 60000,
-            },
         )
         .await?;
 
@@ -226,7 +221,7 @@ where
                 }
             })?;
 
-        let mut buf = resp_rx.await.map_err(|err| {
+        let resp = resp_rx.await.map_err(|err| {
             if let Some(status) = *self.recv_error.borrow() {
                 status
             } else {
@@ -235,17 +230,25 @@ where
             }
         })??;
 
-        let encoding = ua::NodeId::decode(&mut buf, &self.decoding_ctx)?;
+        if resp.is_ok {
+            let mut buf = resp.buf;
+            let encoding = ua::NodeId::decode(&mut buf, &self.decoding_ctx)?;
 
-        let result = if encoding == R::Response::binary_encoding_node_id(0) {
-            Ok(R::Response::decode(&mut buf, &self.decoding_ctx)?)
+            let result = if encoding == R::Response::binary_encoding_node_id(0) {
+                Ok(R::Response::decode(&mut buf, &self.decoding_ctx)?)
+            } else {
+                Err(ua::StatusCode::BadNodeIdInvalid)
+            };
+
+            self.recv_pool.release(buf).await;
+
+            result
         } else {
-            Err(ua::StatusCode::BadNodeIdInvalid)
-        };
-
-        self.recv_pool.release(buf).await;
-
-        result
+            let mut buf = resp.buf;
+            let error_msg = uasc::ErrorMsg::decode(&mut buf, &self.decoding_ctx)?;
+            self.recv_pool.release(buf).await;
+            Err(error_msg.error_code)
+        }
     }
 }
 
@@ -258,12 +261,11 @@ async fn run_secure_channel_recv<P, R>(
     P: SecurityPolicy,
     R: transport::RecvData + Send,
 {
-    let mut response_cache: SmallMap<u32, Result<bytes::BytesMut, ua::StatusCode>> =
+    let mut response_cache: SmallMap<u32, Result<RecvResponse, ua::StatusCode>> =
         SmallMap::with_capacity(8);
-    let mut pending_requests: SmallMap<
-        u32,
-        oneshot::Sender<Result<bytes::BytesMut, ua::StatusCode>>,
-    > = SmallMap::with_capacity(8);
+    let mut partial_responses: SmallMap<u32, bytes::BytesMut> = SmallMap::with_capacity(2);
+    let mut pending_requests: SmallMap<u32, oneshot::Sender<Result<RecvResponse, ua::StatusCode>>> =
+        SmallMap::with_capacity(8);
 
     loop {
         // Keep partial reads alive while processing response registrations.
@@ -274,7 +276,7 @@ async fn run_secure_channel_recv<P, R>(
         };
         tokio::pin!(recv);
 
-        let (recv_res, buf) = loop {
+        let (recv_res, mut buf) = loop {
             tokio::select! {
                 cmd = rx.recv() => {
                     match cmd {
@@ -299,11 +301,41 @@ async fn run_secure_channel_recv<P, R>(
         };
 
         match recv_res {
-            Ok(req_id) => {
-                if let Some(tx) = pending_requests.remove(&req_id) {
-                    let _ = tx.send(Ok(buf));
+            Ok(info) if info.is_final == uasc::IsFinal::Abort => {
+                if let Some(partial) = partial_responses.remove(&info.request_id) {
+                    // release to pool only if it is made of a single chunk
+                    if partial.capacity() == recv_pool.buf_capacity() {
+                        recv_pool.release(partial).await;
+                    }
+                }
+                let resp = RecvResponse { buf, is_ok: false };
+                if let Some(tx) = pending_requests.remove(&info.request_id) {
+                    let _ = tx.send(Ok(resp));
                 } else {
-                    response_cache.insert(req_id, Ok(buf));
+                    response_cache.insert(info.request_id, Ok(resp));
+                }
+            }
+            Ok(info) if info.is_final == uasc::IsFinal::Continue => {
+                if let Some(partial) = partial_responses.get_mut(&info.request_id) {
+                    partial.extend_from_slice(&buf);
+                    recv_pool.release(buf).await;
+                } else {
+                    partial_responses.insert(info.request_id, buf);
+                }
+            }
+            Ok(info) => {
+                debug_assert!(info.is_final == uasc::IsFinal::Final);
+                if let Some(mut partial) = partial_responses.remove(&info.request_id) {
+                    partial.extend_from_slice(&buf);
+                    recv_pool.release(buf).await;
+                    buf = partial;
+                }
+
+                let resp = RecvResponse { buf, is_ok: true };
+                if let Some(tx) = pending_requests.remove(&info.request_id) {
+                    let _ = tx.send(Ok(resp));
+                } else {
+                    response_cache.insert(info.request_id, Ok(resp));
                 }
             }
             Err(err) => {
@@ -367,7 +399,7 @@ mod tests {
         first_response: Option<bytes::BytesMut>,
         responses: Vec<(
             u32,
-            oneshot::Sender<Result<bytes::BytesMut, ua::StatusCode>>,
+            oneshot::Sender<Result<RecvResponse, ua::StatusCode>>,
         )>,
     }
 
@@ -441,12 +473,16 @@ mod tests {
 
             let (first_tx, first_rx) = oneshot::channel();
             cmd_tx.send(RecvCommand::GetResponse(1, first_tx)).unwrap();
-            assert_eq!(&first_rx.await.unwrap().unwrap()[..], b"first");
+            let resp = first_rx.await.unwrap().unwrap();
+            assert_eq!(&resp.buf[..], b"first");
+            assert!(resp.is_ok);
 
             let (second_tx, second_rx) = oneshot::channel();
             cmd_tx.send(RecvCommand::GetResponse(2, second_tx)).unwrap();
             data_tx.send(second).unwrap();
-            assert_eq!(&second_rx.await.unwrap().unwrap()[..], b"second");
+            let resp = second_rx.await.unwrap().unwrap();
+            assert_eq!(&resp.buf[..], b"second");
+            assert!(resp.is_ok);
 
             drop(cmd_tx);
             task.await.unwrap();
@@ -483,8 +519,12 @@ mod tests {
             let mut messages = response(2, 1, b"second");
             messages.extend_from_slice(&response(1, 2, b"first"));
             data_tx.send(messages).unwrap();
-            assert_eq!(&first_rx.await.unwrap().unwrap()[..], b"first");
-            assert_eq!(&second_rx.await.unwrap().unwrap()[..], b"second");
+            let resp = first_rx.await.unwrap().unwrap();
+            assert_eq!(&resp.buf[..], b"first");
+            assert!(resp.is_ok);
+            let resp = second_rx.await.unwrap().unwrap();
+            assert_eq!(&resp.buf[..], b"second");
+            assert!(resp.is_ok);
 
             drop(cmd_tx);
             task.await.unwrap();
@@ -522,7 +562,10 @@ mod tests {
                 .unwrap();
             let (first_tx, first_rx) = oneshot::channel();
             cmd_tx.send(RecvCommand::GetResponse(1, first_tx)).unwrap();
-            assert_eq!(&first_rx.await.unwrap().unwrap()[..], b"first");
+            
+            let resp = first_rx.await.unwrap().unwrap();
+            assert_eq!(&resp.buf[..], b"first");
+            assert!(resp.is_ok);
 
             drop(data_tx);
             assert_eq!(
@@ -561,7 +604,9 @@ mod tests {
         );
 
         run_secure_channel_recv(recv, pool, cmd_rx, error_tx).await;
-        assert_eq!(&response_rx1.await.unwrap().unwrap()[..], b"cached");
+        let resp = response_rx1.await.unwrap().unwrap();
+        assert_eq!(&resp.buf[..], b"cached");
+        assert!(resp.is_ok);
         assert_eq!(
             response_rx2.await.unwrap(),
             Err(ua::StatusCode::BadConnectionClosed)
@@ -575,6 +620,7 @@ mod tests {
         let pool = Arc::new(BufferPool::new(2, 128));
         let send = secure_channel::SendHalf::new(
             SendChunk::new(NeverSend, 128),
+            Default::default(),
             pool.clone(),
             SecurityPolicyNone,
         );

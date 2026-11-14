@@ -6,22 +6,33 @@ use ua_core::transport::{self, RecvChunk, SendChunk};
 use ua_core::{BufferPool, SecurityPolicy, ua, uasc};
 
 pub async fn open<P, S, R>(
+    security_policy: P,
     send: SendChunk<S>,
     recv: RecvChunk<R>,
+    config: crate::Config,
     send_pool: Arc<BufferPool>,
     recv_pool: Arc<BufferPool>,
-    security_policy: P,
     request_id: u32,
-    msg: ua::OpenSecureChannelRequest,
 ) -> Result<(SendHalf<P, S>, RecvHalf<P, R>), ua::StatusCode>
 where
     P: SecurityPolicy + Clone,
     S: transport::SendData + Send,
     R: transport::RecvData + Send,
 {
-    let mut send_half = SendHalf::new(send, send_pool, security_policy.clone());
-
+    let mut send_half = SendHalf::new(send, config, send_pool, security_policy.clone());
     let mut recv_half = RecvHalf::new(recv, recv_pool.clone(), security_policy);
+
+    let msg = ua::OpenSecureChannelRequest {
+        request_header: ua::RequestHeader {
+            timestamp: ua::DateTime::now(),
+            ..Default::default()
+        },
+        client_protocol_version: 0,
+        security_mode: ua::MessageSecurityMode::None,
+        request_type: ua::SecurityTokenRequestType::Issue,
+        client_nonce: vec![],
+        requested_lifetime: 60000,
+    };
 
     send_half.send_open(msg, request_id).await?;
 
@@ -40,6 +51,7 @@ where
 #[derive(Debug)]
 pub struct SendHalf<P, S> {
     send: SendChunk<S>,
+    config: crate::Config,
     pool: Arc<BufferPool>,
     security_policy: P,
     channel_id: u32,
@@ -52,9 +64,15 @@ where
     P: SecurityPolicy,
     S: transport::SendData + Send,
 {
-    pub(super) fn new(send: SendChunk<S>, pool: Arc<BufferPool>, security_policy: P) -> Self {
+    pub(super) fn new(
+        send: SendChunk<S>,
+        config: crate::Config,
+        pool: Arc<BufferPool>,
+        security_policy: P,
+    ) -> Self {
         Self {
             send,
+            config,
             pool,
             security_policy,
             channel_id: 0,
@@ -62,6 +80,7 @@ where
             sequence_number: 0,
         }
     }
+
     async fn send_open(
         &mut self,
         msg: ua::OpenSecureChannelRequest,
@@ -112,7 +131,7 @@ where
         let encoding_node_id = ua::CloseSecureChannelRequest::binary_encoding_node_id(0);
         let body_len = encoding_node_id.encoded_len() + msg.encoded_len();
 
-        self.send_msg_impl(
+        self.send_msg_chunk(
             uasc::MsgType::Close,
             uasc::IsFinal::Final,
             request_id,
@@ -140,21 +159,54 @@ where
     where
         F: FnOnce(&mut bytes::BytesMut),
     {
-        // TODO: implement chunking
+        let max_body_len = self
+            .security_policy
+            .max_body_size(self.config.buffer.send_size);
 
-        self.send_msg_impl(
-            uasc::MsgType::Msg,
-            uasc::IsFinal::Final,
-            request_id,
-            body_len,
-            encode_fn,
-        )
-        .await?;
+        if body_len as usize <= max_body_len {
+            // Single chunk message
+            self.send_msg_chunk(
+                uasc::MsgType::Msg,
+                uasc::IsFinal::Final,
+                request_id,
+                body_len,
+                encode_fn,
+            )
+            .await?;
+        } else {
+            // Message chunking logic
+            let body_len = body_len as usize;
+            let mut buf = bytes::BytesMut::with_capacity(body_len);
+            encode_fn(&mut buf);
+
+            let mut offset = 0;
+            while offset < buf.len() {
+                let chunk_size = max_body_len.min(buf.len() - offset);
+                let chunk = &buf[offset..offset + chunk_size];
+
+                let is_final = if offset + chunk_size == buf.len() {
+                    uasc::IsFinal::Final
+                } else {
+                    uasc::IsFinal::Continue
+                };
+
+                self.send_msg_chunk(
+                    uasc::MsgType::Msg,
+                    is_final,
+                    request_id,
+                    chunk_size as u32,
+                    |buf| buf.extend_from_slice(chunk),
+                )
+                .await?;
+
+                offset += chunk_size;
+            }
+        }
 
         Ok(())
     }
 
-    async fn send_msg_impl<F>(
+    async fn send_msg_chunk<F>(
         &mut self,
         msg_type: uasc::MsgType,
         is_final: uasc::IsFinal,
@@ -165,8 +217,6 @@ where
     where
         F: FnOnce(&mut bytes::BytesMut),
     {
-        // TODO: implement chunking
-
         let security_header = uasc::SymmetricSecurityHeader {
             token_id: self.token_id,
         };
@@ -212,6 +262,12 @@ pub struct RecvHalf<P, R> {
     channel_id: u32,
     token_id: u32,
     srv_seq_number: u32,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct RecvChunkInfo {
+    pub request_id: u32,
+    pub is_final: uasc::IsFinal,
 }
 
 impl<P, R> RecvHalf<P, R>
@@ -267,7 +323,7 @@ where
         Ok(rsp)
     }
 
-    pub async fn recv_msg(&mut self, buf: &mut bytes::BytesMut) -> Result<u32, ua::StatusCode> {
+    pub async fn recv_msg(&mut self, buf: &mut bytes::BytesMut) -> Result<RecvChunkInfo, ua::StatusCode> {
         self.security_policy
             .recv_msg_chunk(&mut self.recv, buf)
             .await?;
@@ -290,6 +346,9 @@ where
             return Err(ua::StatusCode::BadSequenceNumberInvalid);
         }
         self.srv_seq_number = seq_header.sequence_number;
-        Ok(seq_header.request_id)
+        Ok(RecvChunkInfo {
+            request_id: seq_header.request_id,
+            is_final: header.is_final,
+        })
     }
 }

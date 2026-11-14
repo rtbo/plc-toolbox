@@ -32,6 +32,16 @@ impl<K: PartialEq, V> SmallMap<K, V> {
         }
     }
 
+    /// Get a mutable reference to the value corresponding to the key.
+    pub fn get_mut(&mut self, key: &K) -> Option<&mut V> {
+        for (k, v) in &mut self.entries {
+            if k == key {
+                return Some(v);
+            }
+        }
+        None
+    }
+
     pub fn into_values(self) -> impl Iterator<Item = V> {
         self.entries.into_iter().map(|(_, value)| value)
     }

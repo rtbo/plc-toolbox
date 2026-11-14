@@ -19,6 +19,11 @@ impl BufferPool {
         }
     }
 
+    /// Returns the buffer capacity used by the pool.
+    pub fn buf_capacity(&self) -> usize {
+        self.buf_capacity
+    }
+
     /// Acquires a buffer from the pool. If the pool is empty, a new buffer with the specified capacity is created.
     pub async fn acquire(&self) -> bytes::BytesMut {
         let mut pool = self.pool.lock().await;
@@ -39,7 +44,9 @@ impl BufferPool {
             if buffer.capacity() < self.buf_capacity {
                 buffer.reserve(self.buf_capacity);
             }
-            pool.push(buffer);
+            if buffer.capacity() == self.buf_capacity {
+                pool.push(buffer);
+            }
         }
     }
 

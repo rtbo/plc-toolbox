@@ -110,3 +110,9 @@ pub struct SequenceHeader {
 impl SequenceHeader {
     pub const LEN: u32 = 8;
 }
+
+#[derive(Debug, Clone, PartialEq, Eq, EncodeBinary, DecodeBinary)]
+pub struct ErrorMsg {
+    pub error_code: ua::StatusCode,
+    pub reason: Option<String>,
+}
