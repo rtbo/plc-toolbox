@@ -1,7 +1,7 @@
 use sc_bin::ScBinClient;
 use tokio::net;
 use ua_core::encoding::binary;
-use ua_core::{msg, ua};
+use ua_core::{SecurityPolicyNone, msg, ua};
 
 mod sc_bin;
 pub mod secure_channel;
@@ -48,15 +48,18 @@ pub struct Client {
 
 impl Client {
     pub async fn connect(config: Config) -> Result<Self, ua::StatusCode> {
+        let security_policy = SecurityPolicyNone;
+
         if config.endpoint.starts_with("opc.tcp://") {
             let url = &config.endpoint["opc.tcp://".len()..];
             let stream = tokio::net::TcpStream::connect(url)
                 .await
                 .map_err(|_| ua::StatusCode::BadConnectionRejected)?;
             let (read_half, write_half) = stream.into_split();
-            let sc_bin_cl = sc_bin::ScBinClient::connect(config, write_half, read_half)
-                .await
-                .map_err(|_| ua::StatusCode::BadConnectionRejected)?;
+            let sc_bin_cl =
+                sc_bin::ScBinClient::connect(config, security_policy, write_half, read_half)
+                    .await
+                    .map_err(|_| ua::StatusCode::BadConnectionRejected)?;
             Ok(Self {
                 inner: ClientImpl::TcpScBin(sc_bin_cl),
             })
@@ -87,5 +90,5 @@ impl Client {
 
 #[derive(Debug)]
 enum ClientImpl {
-    TcpScBin(ScBinClient<net::tcp::OwnedWriteHalf>),
+    TcpScBin(ScBinClient<SecurityPolicyNone, net::tcp::OwnedWriteHalf>),
 }

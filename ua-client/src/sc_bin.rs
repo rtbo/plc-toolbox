@@ -9,7 +9,7 @@ use ua_core::encoding::binary::{Decode, Encode};
 use ua_core::msg::BinaryEncodingId;
 use ua_core::transport::{self, RecvChunk, SendChunk};
 use ua_core::uacp::{self, Msg};
-use ua_core::{AnySecurityPolicy, BufferPool, SecurityPolicy, SecurityPolicyNone, msg, ua};
+use ua_core::{BufferPool, SecurityPolicy, msg, ua};
 
 use crate::smallmap::SmallMap;
 use crate::{Config, secure_channel};
@@ -54,9 +54,9 @@ impl super::BufferConfig {
 }
 
 #[derive(Debug)]
-pub struct ScBinClient<S> {
+pub struct ScBinClient<P, S> {
     // mutex containing the current request id and secure channel send half
-    sc_send: Mutex<(u32, Option<secure_channel::SendHalf<AnySecurityPolicy, S>>)>,
+    sc_send: Mutex<(u32, Option<secure_channel::SendHalf<P, S>>)>,
     decoding_ctx: binary::DecodingCtx,
     tx: mpsc::UnboundedSender<RecvCommand>,
     recv_error: watch::Receiver<Option<ua::StatusCode>>,
@@ -71,11 +71,17 @@ enum RecvCommand {
     Close(oneshot::Sender<()>),
 }
 
-impl<S> ScBinClient<S>
+impl<P, S> ScBinClient<P, S>
 where
-    S: transport::SendData,
+    P: SecurityPolicy + Clone + Send + 'static,
+    S: transport::SendData + Send,
 {
-    pub async fn connect<R>(config: Config, send: S, recv: R) -> Result<Self, ua::StatusCode>
+    pub async fn connect<R>(
+        config: Config,
+        security_policy: P,
+        send: S,
+        recv: R,
+    ) -> Result<Self, ua::StatusCode>
     where
         R: transport::RecvData + Send + 'static,
     {
@@ -105,13 +111,12 @@ where
             (send_pool, recv_pool)
         };
 
-        let sp = AnySecurityPolicy::None(SecurityPolicyNone);
         let (sc_send, sc_recv) = secure_channel::open(
             send,
             recv,
             send_pool,
             recv_pool.clone(),
-            sp,
+            security_policy,
             1,
             ua::OpenSecureChannelRequest {
                 request_header: ua::RequestHeader {
@@ -571,7 +576,7 @@ mod tests {
         let send = secure_channel::SendHalf::new(
             SendChunk::new(NeverSend, 128),
             pool.clone(),
-            AnySecurityPolicy::None(SecurityPolicyNone),
+            SecurityPolicyNone,
         );
         let client = ScBinClient {
             sc_send: Mutex::new((2, Some(send))),

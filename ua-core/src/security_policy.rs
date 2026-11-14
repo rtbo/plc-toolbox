@@ -8,17 +8,17 @@ pub trait SecurityPolicy: Sized {
 
     fn asymmetric_security_header(&self) -> AsymmetricSecurityHeader;
 
-    fn send_msg_chunk<T: transport::SendData>(
+    fn send_msg_chunk<T: transport::SendData + Send>(
         &mut self,
         stream: &mut transport::SendChunk<T>,
         buf: &bytes::BytesMut,
-    ) -> impl Future<Output = Result<(), ua::StatusCode>>;
+    ) -> impl Future<Output = Result<(), ua::StatusCode>> + Send;
 
-    fn recv_msg_chunk<T: transport::RecvData>(
+    fn recv_msg_chunk<T: transport::RecvData + Send>(
         &mut self,
         stream: &mut transport::RecvChunk<T>,
         buf: &mut bytes::BytesMut,
-    ) -> impl Future<Output = Result<(), ua::StatusCode>>;
+    ) -> impl Future<Output = Result<(), ua::StatusCode>> + Send;
 }
 
 #[derive(Debug, Clone)]
@@ -41,7 +41,7 @@ impl SecurityPolicy for SecurityPolicyNone {
         }
     }
 
-    async fn send_msg_chunk<T: transport::SendData>(
+    async fn send_msg_chunk<T: transport::SendData + Send>(
         &mut self,
         stream: &mut transport::SendChunk<T>,
         buf: &bytes::BytesMut,
@@ -53,7 +53,7 @@ impl SecurityPolicy for SecurityPolicyNone {
         Ok(())
     }
 
-    async fn recv_msg_chunk<T: transport::RecvData>(
+    async fn recv_msg_chunk<T: transport::RecvData + Send>(
         &mut self,
         stream: &mut transport::RecvChunk<T>,
         buf: &mut bytes::BytesMut,
@@ -83,7 +83,7 @@ impl SecurityPolicy for AnySecurityPolicy {
             AnySecurityPolicy::None(policy) => policy.asymmetric_security_header(),
         }
     }
-    async fn send_msg_chunk<T: transport::SendData>(
+    async fn send_msg_chunk<T: transport::SendData + Send>(
         &mut self,
         stream: &mut transport::SendChunk<T>,
         buf: &bytes::BytesMut,
@@ -93,7 +93,7 @@ impl SecurityPolicy for AnySecurityPolicy {
         }
     }
 
-    async fn recv_msg_chunk<T: transport::RecvData>(
+    async fn recv_msg_chunk<T: transport::RecvData + Send>(
         &mut self,
         stream: &mut transport::RecvChunk<T>,
         buf: &mut bytes::BytesMut,

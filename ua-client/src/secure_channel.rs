@@ -16,8 +16,8 @@ pub async fn open<P, S, R>(
 ) -> Result<(SendHalf<P, S>, RecvHalf<P, R>), ua::StatusCode>
 where
     P: SecurityPolicy + Clone,
-    S: transport::SendData,
-    R: transport::RecvData,
+    S: transport::SendData + Send,
+    R: transport::RecvData + Send,
 {
     let mut send_half = SendHalf::new(send, send_pool, security_policy.clone());
 
@@ -50,7 +50,7 @@ pub struct SendHalf<P, S> {
 impl<P, S> SendHalf<P, S>
 where
     P: SecurityPolicy,
-    S: transport::SendData,
+    S: transport::SendData + Send,
 {
     pub(super) fn new(send: SendChunk<S>, pool: Arc<BufferPool>, security_policy: P) -> Self {
         Self {
@@ -217,7 +217,7 @@ pub struct RecvHalf<P, R> {
 impl<P, R> RecvHalf<P, R>
 where
     P: SecurityPolicy,
-    R: transport::RecvData,
+    R: transport::RecvData + Send,
 {
     pub(super) fn new(recv: RecvChunk<R>, pool: Arc<BufferPool>, security_policy: P) -> Self {
         Self {
