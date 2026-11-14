@@ -112,13 +112,18 @@ impl<S: RecvData> RecvChunk<S> {
         n: usize,
     ) -> Result<(), ua::StatusCode> {
         if self.buf.len() > 0 {
-            let copied_len = std::cmp::min(self.buf.len(), n - buf.len());
+            let copied_len = if n >= buf.len() {
+                std::cmp::min(self.buf.len(), n - buf.len())
+            } else {
+                n
+            };
             buf.extend_from_slice(&self.buf[..copied_len]);
             if n < self.buf.len() {
                 self.buf.copy_within(copied_len.., 0);
                 self.buf.truncate(self.buf.len() - copied_len);
             }
         }
+
         while buf.len() < n {
             let m = self
                 .inner

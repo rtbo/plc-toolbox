@@ -9,7 +9,7 @@ pub enum Encoding {
     Json,
 }
 
-pub trait Value: Any + std::fmt::Debug + binary::Encode {
+pub trait Value: Any + std::fmt::Debug + Send + Sync + binary::Encode {
     /// The URI of the datatype of this value, e.g. "http://opcfoundation.org/UA/" for NS0.
     fn datatype_uri(&self) -> &'static str;
 

@@ -54,12 +54,12 @@ impl Client {
         }
     }
 
-    pub async fn send_request<R>(&mut self, request: R) -> Result<R::Response, ua::StatusCode>
+    pub async fn send_request<R>(&self, request: R) -> Result<R::Response, ua::StatusCode>
     where
         R: msg::Request + binary::Encode + msg::BinaryEncodingId,
         R::Response: binary::Decode + msg::BinaryEncodingId,
     {
-        match &mut self.inner {
+        match &self.inner {
             ClientImpl::TcpScBin(sc_bin_cl) => {
                 sc_bin_cl.send_request(request).await
             }

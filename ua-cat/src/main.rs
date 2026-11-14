@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use ua_core::ua;
 
 #[tokio::main]
@@ -16,18 +18,53 @@ async fn run() -> Result<(), ua::StatusCode> {
         endpoint: "opc.tcp://localhost:4840".to_string(),
         ..Default::default()
     };
-    let mut client = ua_client::Client::connect(config).await?;
+    let client = Arc::new(ua_client::Client::connect(config).await?);
 
-    let srvs = client
-        .send_request(ua::FindServersRequest {
+    let cl1 = client.clone();
+    let cl2 = client.clone();
+    let cl3 = client.clone();
+
+    let srvs = tokio::spawn(async move { cl1.send_request(ua::FindServersRequest {
+        request_header: ua::RequestHeader {
+            timestamp: ua::DateTime::now(),
+            ..Default::default()
+        },
+        ..Default::default()
+    }).await });
+
+    let endpoints = tokio::spawn(async move { cl2
+        .send_request(ua::GetEndpointsRequest {
             request_header: ua::RequestHeader {
                 timestamp: ua::DateTime::now(),
                 ..Default::default()
             },
+            endpoint_url: "opc.tcp://localhost:4840".to_string(),
             ..Default::default()
-        })
-        .await?;
-    println!("Found servers: {:?}", srvs);
+        }).await });
+
+    let session = tokio::spawn(async move { cl3
+        .send_request(ua::CreateSessionRequest {
+            request_header: ua::RequestHeader {
+                timestamp: ua::DateTime::now(),
+                ..Default::default()
+            },
+            client_description: ua::ApplicationDescription {
+                application_uri: "urn:localhost:ua-cat".to_string(),
+                product_uri: "urn:localhost:ua-cat".to_string(),
+                application_name: ua::LocalizedText {
+                    locale: Some(ua::LocaleId("en".to_string())),
+                    text: "UA-CAT".to_string(),
+                },
+                application_type: ua::ApplicationType::Client,
+                ..Default::default()
+            },
+            requested_session_timeout: 60000.0, // 60 seconds
+            max_response_message_size: 65536,   // 64 KB
+            ..Default::default()
+        }).await });
+
+    let (srvs, endpoints, session) = tokio::join!(srvs, endpoints, session);
+
     // let root = "i=84";
     // client.browse(root.to_string()).await?;
     // browse(&client, &root, 0).await?;

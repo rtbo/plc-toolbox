@@ -3,7 +3,7 @@
 //!  - WSS UA-SC UA-Binary (TODO)
 use std::sync::Arc;
 
-use tokio::sync::{mpsc, oneshot};
+use tokio::sync::{Mutex, mpsc, oneshot};
 use ua_core::encoding::binary;
 use ua_core::encoding::binary::{Decode, Encode};
 use ua_core::msg::BinaryEncodingId;
@@ -14,7 +14,6 @@ use ua_core::{AnySecurityPolicy, BufferPool, SecurityPolicy, SecurityPolicyNone,
 use crate::Config;
 use crate::secure_channel;
 use crate::smallmap::SmallMap;
-
 
 impl super::BufferConfig {
     async fn hello_ack<S: transport::SendData, R: transport::RecvData>(
@@ -57,9 +56,9 @@ impl super::BufferConfig {
 
 #[derive(Debug)]
 pub struct ScBinClient<S> {
-    sc_send: secure_channel::SendHalf<AnySecurityPolicy, S>,
+    // mutex containing the current request id and secure channel send half
+    sc_send: Mutex<(u32, secure_channel::SendHalf<AnySecurityPolicy, S>)>,
     decoding_ctx: binary::DecodingCtx,
-    req_id: u32,
     tx: mpsc::UnboundedSender<RecvCommand>,
     recv_pool: Arc<BufferPool>,
 }
@@ -72,7 +71,7 @@ enum RecvCommand {
 }
 
 impl<S: transport::SendData> ScBinClient<S> {
-    pub async fn connect<R>(config: Config, send: S, recv: R) -> Result<Self, ua::StatusCode> 
+    pub async fn connect<R>(config: Config, send: S, recv: R) -> Result<Self, ua::StatusCode>
     where
         R: transport::RecvData + Send + 'static,
     {
@@ -118,6 +117,8 @@ impl<S: transport::SendData> ScBinClient<S> {
         )
         .await?;
 
+        let sc_send = Mutex::new((2, sc_send));
+
         let (tx, rx) = mpsc::unbounded_channel();
 
         tokio::spawn(run_secure_channel_recv(sc_recv, recv_pool.clone(), rx));
@@ -125,13 +126,12 @@ impl<S: transport::SendData> ScBinClient<S> {
         Ok(Self {
             sc_send,
             decoding_ctx,
-            req_id: 2,
             tx,
             recv_pool,
         })
     }
 
-    pub async fn send_request<R>(&mut self, request: R) -> Result<R::Response, ua::StatusCode>
+    pub async fn send_request<R>(&self, request: R) -> Result<R::Response, ua::StatusCode>
     where
         R: msg::Request + binary::Encode + msg::BinaryEncodingId,
         R::Response: binary::Decode + msg::BinaryEncodingId,
@@ -139,21 +139,39 @@ impl<S: transport::SendData> ScBinClient<S> {
         let encoding = R::binary_encoding_node_id(0);
         let body_len = encoding.encoded_len() + request.encoded_len();
 
-        self.sc_send
-            .send_msg(self.req_id, body_len, |buf| {
-                encoding.encode(buf);
-                request.encode(buf);
-            })
-            .await?;
+        let req_id = {
+            let mut sc_send = self.sc_send.lock().await;
+            let req_id = sc_send.0;
+            sc_send.0 += 1;
+            println!("sending request {} (length: {})", req_id, body_len);
+            sc_send
+                .1
+                .send_msg(req_id, body_len, |buf| {
+                    encoding.encode(buf);
+                    request.encode(buf);
+                })
+                .await?;
+            req_id
+        };
 
         let (resp_tx, resp_rx) = oneshot::channel();
         self.tx
-            .send(RecvCommand::GetResponse(self.req_id, resp_tx))
-            .map_err(|_| ua::StatusCode::BadInternalError)?;
+            .send(RecvCommand::GetResponse(req_id, resp_tx))
+            .map_err(|err| {
+                eprintln!("Failed to send request: {}", err);
+                ua::StatusCode::BadInternalError
+            })?;
 
-        let mut buf = resp_rx
-            .await
-            .map_err(|_| ua::StatusCode::BadInternalError)??;
+        let mut buf = resp_rx.await.map_err(|err| {
+            eprintln!("Failed to receive response: {}", err);
+            ua::StatusCode::BadInternalError
+        })??;
+
+        println!(
+            "received response for request {} (length: {})",
+            req_id,
+            buf.len()
+        );
 
         let encoding = ua::NodeId::decode(&mut buf, &self.decoding_ctx)?;
 
@@ -163,7 +181,6 @@ impl<S: transport::SendData> ScBinClient<S> {
             Err(ua::StatusCode::BadNodeIdInvalid)
         };
 
-        self.req_id += 1;
         self.recv_pool.release(buf).await;
 
         result
@@ -174,11 +191,12 @@ async fn run_secure_channel_recv<P: SecurityPolicy, R>(
     mut recv_half: secure_channel::RecvHalf<P, R>,
     recv_pool: Arc<BufferPool>,
     mut rx: mpsc::UnboundedReceiver<RecvCommand>,
-) -> Result<(), ua::StatusCode> 
- where
+) -> Result<(), ua::StatusCode>
+where
     R: transport::RecvData + Send,
 {
-    let mut response_cache: SmallMap<u32, Result<bytes::BytesMut, ua::StatusCode>> = SmallMap::with_capacity(8);
+    let mut response_cache: SmallMap<u32, Result<bytes::BytesMut, ua::StatusCode>> =
+        SmallMap::with_capacity(8);
     let mut pending_requests: SmallMap<
         u32,
         oneshot::Sender<Result<bytes::BytesMut, ua::StatusCode>>,
