@@ -34,6 +34,11 @@ impl BufferPool {
         let mut pool = self.pool.lock().await;
         if pool.len() < self.max_pool_size {
             buffer.clear();
+            // Decoding advances the buffer start, which shrinks its capacity.
+            // Reserving on an empty, uniquely owned buffer reclaims the consumed front space.
+            if buffer.capacity() < self.buf_capacity {
+                buffer.reserve(self.buf_capacity);
+            }
             pool.push(buffer);
         }
     }
