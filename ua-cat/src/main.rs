@@ -87,6 +87,8 @@ async fn run() -> Result<(), ua::StatusCode> {
 
     println!("all tasks completed successfully");
 
+    client.close().await?;
+
     // let root = "i=84";
     // client.browse(root.to_string()).await?;
     // browse(&client, &root, 0).await?;

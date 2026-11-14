@@ -104,8 +104,61 @@ where
         Ok(())
     }
 
+    pub async fn send_close(
+        &mut self,
+        request_id: u32,
+        msg: ua::CloseSecureChannelRequest,
+    ) -> Result<(), ua::StatusCode> {
+        let encoding_node_id = ua::CloseSecureChannelRequest::binary_encoding_node_id(0);
+        let body_len = encoding_node_id.encoded_len() + msg.encoded_len();
+
+        self.send_msg_impl(
+            uasc::MsgType::Close,
+            uasc::IsFinal::Final,
+            request_id,
+            body_len,
+            |buf| {
+                encoding_node_id.encode(buf);
+                msg.encode(buf);
+            },
+        )
+        .await?;
+
+        self.token_id = 0;
+        self.sequence_number = 0;
+        self.channel_id = 0;
+
+
+        Ok(())
+    }
+
     pub async fn send_msg<F>(
         &mut self,
+        request_id: u32,
+        body_len: u32,
+        encode_fn: F,
+    ) -> Result<(), ua::StatusCode>
+    where
+        F: FnOnce(&mut bytes::BytesMut),
+    {
+        // TODO: implement chunking
+
+        self.send_msg_impl(
+            uasc::MsgType::Msg,
+            uasc::IsFinal::Final,
+            request_id,
+            body_len,
+            encode_fn,
+        )
+        .await?;
+
+        Ok(())
+    }
+
+    async fn send_msg_impl<F>(
+        &mut self,
+        msg_type: uasc::MsgType,
+        is_final: uasc::IsFinal,
         request_id: u32,
         body_len: u32,
         encode_fn: F,
@@ -119,8 +172,8 @@ where
             token_id: self.token_id,
         };
         let header = uasc::Header {
-            msg_type: uasc::MsgType::Msg,
-            is_final: uasc::IsFinal::Final,
+            msg_type,
+            is_final,
             msg_size: uasc::Header::LEN
                 + uasc::SymmetricSecurityHeader::LEN
                 + uasc::SequenceHeader::LEN

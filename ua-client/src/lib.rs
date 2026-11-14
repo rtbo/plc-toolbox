@@ -8,7 +8,7 @@ pub mod secure_channel;
 mod smallmap;
 
 /// Buffer configuration for the OPC UA client.
-/// 
+///
 /// It is used for stack profiles based on UA Secure Conversation and Binary data encoding:
 ///  - UA-TCP UA-SC UA-Binary (URLs starting with `"opc.tcp://"`)
 ///  - WSS UA-SC UA-Binary (URLs starting with `"wss://"`)
@@ -70,10 +70,17 @@ impl Client {
         R::Response: binary::Decode + msg::BinaryEncodingId,
     {
         match &self.inner {
+            ClientImpl::TcpScBin(sc_bin_cl) => sc_bin_cl.send_request(request).await,
+        }
+    }
+
+    pub async fn close(&self) -> Result<(), ua::StatusCode> {
+        match &self.inner {
             ClientImpl::TcpScBin(sc_bin_cl) => {
-                sc_bin_cl.send_request(request).await
+                let _recv_half = sc_bin_cl.close().await?;
             }
         }
+        Ok(())
     }
 }
 

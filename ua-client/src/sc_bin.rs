@@ -56,7 +56,7 @@ impl super::BufferConfig {
 #[derive(Debug)]
 pub struct ScBinClient<S> {
     // mutex containing the current request id and secure channel send half
-    sc_send: Mutex<(u32, secure_channel::SendHalf<AnySecurityPolicy, S>)>,
+    sc_send: Mutex<(u32, Option<secure_channel::SendHalf<AnySecurityPolicy, S>>)>,
     decoding_ctx: binary::DecodingCtx,
     tx: mpsc::UnboundedSender<RecvCommand>,
     recv_error: watch::Receiver<Option<ua::StatusCode>>,
@@ -68,9 +68,13 @@ enum RecvCommand {
         u32,
         oneshot::Sender<Result<bytes::BytesMut, ua::StatusCode>>,
     ),
+    Close(oneshot::Sender<()>),
 }
 
-impl<S: transport::SendData> ScBinClient<S> {
+impl<S> ScBinClient<S>
+where
+    S: transport::SendData,
+{
     pub async fn connect<R>(config: Config, send: S, recv: R) -> Result<Self, ua::StatusCode>
     where
         R: transport::RecvData + Send + 'static,
@@ -123,7 +127,7 @@ impl<S: transport::SendData> ScBinClient<S> {
         )
         .await?;
 
-        let sc_send = Mutex::new((2, sc_send));
+        let sc_send = Mutex::new((2, Some(sc_send)));
 
         let (tx, rx) = mpsc::unbounded_channel();
         let (error_tx, recv_error) = watch::channel(None);
@@ -144,6 +148,38 @@ impl<S: transport::SendData> ScBinClient<S> {
         })
     }
 
+    /// Send the CloseSecureChannel request to the server,
+    /// and drop the two halves of the secure channel.
+    pub async fn close(&self) -> Result<(), ua::StatusCode> {
+        let mut sc_send = self.sc_send.lock().await;
+
+        if let Some(err) = *self.recv_error.borrow() {
+            return Err(err);
+        }
+
+        let request_id = sc_send.0;
+        let mut send = sc_send
+            .1
+            .take()
+            .ok_or(ua::StatusCode::BadConnectionClosed)?;
+        send.send_close(
+            request_id,
+            ua::CloseSecureChannelRequest {
+                request_header: ua::RequestHeader {
+                    timestamp: ua::DateTime::now(),
+                    ..Default::default()
+                },
+            },
+        )
+        .await?;
+
+        let (close_tx, close_rx) = oneshot::channel();
+        let _ = self.tx.send(RecvCommand::Close(close_tx));
+        let _ = close_rx.await;
+
+        Ok(())
+    }
+
     pub async fn send_request<R>(&self, request: R) -> Result<R::Response, ua::StatusCode>
     where
         R: msg::Request + binary::Encode + msg::BinaryEncodingId,
@@ -154,13 +190,17 @@ impl<S: transport::SendData> ScBinClient<S> {
 
         let req_id = {
             let mut sc_send = self.sc_send.lock().await;
+
             if let Some(err) = *self.recv_error.borrow() {
                 return Err(err);
             }
+
             let req_id = sc_send.0;
             sc_send.0 += 1;
             sc_send
                 .1
+                .as_mut()
+                .ok_or(ua::StatusCode::BadConnectionClosed)?
                 .send_msg(req_id, body_len, |buf| {
                     encoding.encode(buf);
                     request.encode(buf);
@@ -204,12 +244,13 @@ impl<S: transport::SendData> ScBinClient<S> {
     }
 }
 
-async fn run_secure_channel_recv<P: SecurityPolicy, R>(
+async fn run_secure_channel_recv<P, R>(
     mut recv_half: secure_channel::RecvHalf<P, R>,
     recv_pool: Arc<BufferPool>,
     mut rx: mpsc::UnboundedReceiver<RecvCommand>,
     error_tx: watch::Sender<Option<ua::StatusCode>>,
 ) where
+    P: SecurityPolicy,
     R: transport::RecvData + Send,
 {
     let mut response_cache: SmallMap<u32, Result<bytes::BytesMut, ua::StatusCode>> =
@@ -238,6 +279,10 @@ async fn run_secure_channel_recv<P: SecurityPolicy, R>(
                             } else {
                                 pending_requests.insert(req_id, tx);
                             }
+                        }
+                        Some(RecvCommand::Close(tx)) => {
+                            let _ = tx.send(());
+                            return;
                         }
                         None => {
                             return;
@@ -279,6 +324,7 @@ mod tests {
 
     use ua_core::uasc;
     use ua_core::transport::RecvData;
+    use ua_core::SecurityPolicyNone;
 
     use super::*;
 
@@ -529,7 +575,7 @@ mod tests {
             AnySecurityPolicy::None(SecurityPolicyNone),
         );
         let client = ScBinClient {
-            sc_send: Mutex::new((2, send)),
+            sc_send: Mutex::new((2, Some(send))),
             decoding_ctx: binary::DecodingCtx::default(),
             tx,
             recv_error,
