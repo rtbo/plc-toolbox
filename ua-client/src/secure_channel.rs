@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use ua_core::encoding::binary::{self, Decode, Encode};
 use ua_core::msg::{BinaryEncodingId, uasc};
-use ua_core::transport::{self, SendChunk, RecvChunk};
+use ua_core::transport::{self, RecvChunk, SendChunk};
 use ua_core::{BufferPool, SecurityPolicy, ua};
 
 pub async fn open<P, S, R>(
@@ -13,7 +13,7 @@ pub async fn open<P, S, R>(
     security_policy: P,
     request_id: u32,
     msg: ua::OpenSecureChannelRequest,
-) -> Result<(SendHalf<P, S>, RecvHalf<P, R>), ua::StatusCode> 
+) -> Result<(SendHalf<P, S>, RecvHalf<P, R>), ua::StatusCode>
 where
     P: SecurityPolicy + Clone,
     S: transport::SendData,
@@ -27,6 +27,7 @@ where
 
     let mut recv_buf = recv_pool.acquire().await;
     let rsp = recv_half.recv_open(&mut recv_buf, request_id).await?;
+    recv_pool.release(recv_buf).await;
 
     send_half.channel_id = rsp.security_token.channel_id;
     send_half.token_id = rsp.security_token.token_id;
@@ -46,12 +47,12 @@ pub struct SendHalf<P, S> {
     sequence_number: u32,
 }
 
-impl<P, S> SendHalf<P, S> 
-where 
+impl<P, S> SendHalf<P, S>
+where
     P: SecurityPolicy,
     S: transport::SendData,
 {
-    fn new(send: SendChunk<S>, pool: Arc<BufferPool>, security_policy: P) -> Self {
+    pub(super) fn new(send: SendChunk<S>, pool: Arc<BufferPool>, security_policy: P) -> Self {
         Self {
             send,
             pool,
@@ -161,12 +162,12 @@ pub struct RecvHalf<P, R> {
     srv_seq_number: u32,
 }
 
-impl<P, R> RecvHalf<P, R> 
+impl<P, R> RecvHalf<P, R>
 where
     P: SecurityPolicy,
     R: transport::RecvData,
 {
-    fn new(recv: RecvChunk<R>, pool: Arc<BufferPool>, security_policy: P) -> Self {
+    pub(super) fn new(recv: RecvChunk<R>, pool: Arc<BufferPool>, security_policy: P) -> Self {
         Self {
             recv,
             _pool: pool,

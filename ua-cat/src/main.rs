@@ -24,26 +24,31 @@ async fn run() -> Result<(), ua::StatusCode> {
     let cl2 = client.clone();
     let cl3 = client.clone();
 
-    let srvs = tokio::spawn(async move { cl1.send_request(ua::FindServersRequest {
-        request_header: ua::RequestHeader {
-            timestamp: ua::DateTime::now(),
+    let srvs = tokio::spawn(async move {
+        cl1.send_request(ua::FindServersRequest {
+            request_header: ua::RequestHeader {
+                timestamp: ua::DateTime::now(),
+                ..Default::default()
+            },
             ..Default::default()
-        },
-        ..Default::default()
-    }).await });
+        })
+        .await
+    });
 
-    let endpoints = tokio::spawn(async move { cl2
-        .send_request(ua::GetEndpointsRequest {
+    let endpoints = tokio::spawn(async move {
+        cl2.send_request(ua::GetEndpointsRequest {
             request_header: ua::RequestHeader {
                 timestamp: ua::DateTime::now(),
                 ..Default::default()
             },
             endpoint_url: "opc.tcp://localhost:4840".to_string(),
             ..Default::default()
-        }).await });
+        })
+        .await
+    });
 
-    let session = tokio::spawn(async move { cl3
-        .send_request(ua::CreateSessionRequest {
+    let session = tokio::spawn(async move {
+        cl3.send_request(ua::CreateSessionRequest {
             request_header: ua::RequestHeader {
                 timestamp: ua::DateTime::now(),
                 ..Default::default()
@@ -61,9 +66,26 @@ async fn run() -> Result<(), ua::StatusCode> {
             requested_session_timeout: 60000.0, // 60 seconds
             max_response_message_size: 65536,   // 64 KB
             ..Default::default()
-        }).await });
+        })
+        .await
+    });
 
     let (srvs, endpoints, session) = tokio::join!(srvs, endpoints, session);
+
+    srvs.map_err(|err| {
+        eprintln!("FindServers task failed: {err}");
+        ua::StatusCode::BadInternalError
+    })??;
+    endpoints.map_err(|err| {
+        eprintln!("GetEndpoints task failed: {err}");
+        ua::StatusCode::BadInternalError
+    })??;
+    session.map_err(|err| {
+        eprintln!("CreateSession task failed: {err}");
+        ua::StatusCode::BadInternalError
+    })??;
+
+    println!("all tasks completed successfully");
 
     // let root = "i=84";
     // client.browse(root.to_string()).await?;

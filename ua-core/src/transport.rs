@@ -12,14 +12,16 @@ pub trait SendData {
 }
 
 pub trait RecvData {
-    fn recv_data(&mut self, data: &mut bytes::BytesMut) -> impl Future<Output = Result<usize, io::Error>> + Send;
+    fn recv_data(
+        &mut self,
+        data: &mut bytes::BytesMut,
+    ) -> impl Future<Output = Result<usize, io::Error>> + Send;
 }
 
 pub trait SplitTransport {
     type Send: SendData;
     type Recv: RecvData;
 }
-
 
 #[derive(Debug)]
 pub struct SendChunk<S> {
@@ -111,17 +113,10 @@ impl<S: RecvData> RecvChunk<S> {
         buf: &mut bytes::BytesMut,
         n: usize,
     ) -> Result<(), ua::StatusCode> {
-        if self.buf.len() > 0 {
-            let copied_len = if n >= buf.len() {
-                std::cmp::min(self.buf.len(), n - buf.len())
-            } else {
-                n
-            };
+        if !self.buf.is_empty() {
+            let copied_len = self.buf.len().min(n.saturating_sub(buf.len()));
             buf.extend_from_slice(&self.buf[..copied_len]);
-            if n < self.buf.len() {
-                self.buf.copy_within(copied_len.., 0);
-                self.buf.truncate(self.buf.len() - copied_len);
-            }
+            self.buf.advance(copied_len);
         }
 
         while buf.len() < n {
@@ -135,5 +130,55 @@ impl<S: RecvData> RecvChunk<S> {
             }
         }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::VecDeque;
+
+    use super::*;
+
+    struct ScriptedRecv(VecDeque<bytes::BytesMut>);
+
+    impl RecvData for ScriptedRecv {
+        async fn recv_data(&mut self, buf: &mut bytes::BytesMut) -> Result<usize, io::Error> {
+            let data = self.0.pop_front().unwrap_or_default();
+            buf.extend_from_slice(&data);
+            Ok(data.len())
+        }
+    }
+
+    fn chunk(body: &[u8]) -> bytes::BytesMut {
+        let mut buf = bytes::BytesMut::from(&b"MSGF"[..]);
+        buf.extend_from_slice(&(8 + body.len() as u32).to_le_bytes());
+        buf.extend_from_slice(body);
+        buf
+    }
+
+    #[tokio::test]
+    async fn receives_coalesced_chunks_without_reusing_buffered_bytes() {
+        let chunks = [
+            chunk(b"one!"),
+            chunk(b"two!"),
+            chunk(b"three"),
+            chunk(b"four"),
+        ];
+        let mut combined = bytes::BytesMut::new();
+        for chunk in &chunks[..3] {
+            combined.extend_from_slice(chunk);
+        }
+        let mut recv = RecvChunk::new(
+            ScriptedRecv(VecDeque::from([combined, chunks[3].clone()])),
+            128,
+        );
+        let mut buf = bytes::BytesMut::with_capacity(128);
+
+        for expected in chunks {
+            recv.recv_chunk(&mut buf).await.unwrap();
+            assert_eq!(buf, expected);
+            buf.clear();
+        }
+        assert!(recv.buf.is_empty());
     }
 }

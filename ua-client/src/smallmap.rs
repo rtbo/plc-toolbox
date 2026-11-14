@@ -31,4 +31,8 @@ impl<K: PartialEq, V> SmallMap<K, V> {
             None
         }
     }
+
+    pub fn into_values(self) -> impl Iterator<Item = V> {
+        self.entries.into_iter().map(|(_, value)| value)
+    }
 }
