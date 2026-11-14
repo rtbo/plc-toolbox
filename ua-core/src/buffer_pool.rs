@@ -42,4 +42,14 @@ impl BufferPool {
             pool.push(buffer);
         }
     }
+
+    pub async fn with_buffer<F, R>(&self, f: F) -> R
+    where
+        F: AsyncFnOnce(&mut bytes::BytesMut) -> R,
+    {
+        let mut buffer = self.acquire().await;
+        let result = f(&mut buffer).await;
+        self.release(buffer).await;
+        result
+    }
 }

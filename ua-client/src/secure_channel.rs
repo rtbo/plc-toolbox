@@ -25,9 +25,9 @@ where
 
     send_half.send_open(msg, request_id).await?;
 
-    let mut recv_buf = recv_pool.acquire().await;
-    let rsp = recv_half.recv_open(&mut recv_buf, request_id).await?;
-    recv_pool.release(recv_buf).await;
+    let rsp = recv_pool
+        .with_buffer(async |recv_buf| recv_half.recv_open(recv_buf, request_id).await)
+        .await?;
 
     send_half.channel_id = rsp.security_token.channel_id;
     send_half.token_id = rsp.security_token.token_id;
@@ -86,18 +86,18 @@ where
             request_id,
         };
 
-        let mut buf = self.pool.acquire().await;
-
-        header.encode(&mut buf);
-        security_header.encode(&mut buf);
-        seq_header.encode(&mut buf);
-        encoding_node_id.encode(&mut buf);
-        msg.encode(&mut buf);
-        self.security_policy
-            .send_msg_chunk(&mut self.send, &mut buf)
+        self.pool
+            .with_buffer(async |buf| {
+                header.encode(buf);
+                security_header.encode(buf);
+                seq_header.encode(buf);
+                encoding_node_id.encode(buf);
+                msg.encode(buf);
+                self.security_policy
+                    .send_msg_chunk(&mut self.send, buf)
+                    .await
+            })
             .await?;
-
-        self.pool.release(buf).await;
 
         self.sequence_number += 1;
 
@@ -133,17 +133,17 @@ where
             request_id,
         };
 
-        let mut buf = self.pool.acquire().await;
-
-        header.encode(&mut buf);
-        security_header.encode(&mut buf);
-        seq_header.encode(&mut buf);
-        encode_fn(&mut buf);
-        self.security_policy
-            .send_msg_chunk(&mut self.send, &mut buf)
+        self.pool
+            .with_buffer(async |buf| {
+                header.encode(buf);
+                security_header.encode(buf);
+                seq_header.encode(buf);
+                encode_fn(buf);
+                self.security_policy
+                    .send_msg_chunk(&mut self.send, buf)
+                    .await
+            })
             .await?;
-
-        self.pool.release(buf).await;
 
         self.sequence_number += 1;
 
