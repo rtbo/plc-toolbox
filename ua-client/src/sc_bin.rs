@@ -423,10 +423,19 @@ mod tests {
     }
 
     fn response(request_id: u32, sequence_number: u32, body: &[u8]) -> bytes::BytesMut {
+        response_chunk(request_id, sequence_number, uasc::IsFinal::Final, body)
+    }
+
+    fn response_chunk(
+        request_id: u32,
+        sequence_number: u32,
+        is_final: uasc::IsFinal,
+        body: &[u8],
+    ) -> bytes::BytesMut {
         let mut buf = bytes::BytesMut::new();
         uasc::Header {
             msg_type: uasc::MsgType::Msg,
-            is_final: uasc::IsFinal::Final,
+            is_final,
             msg_size: uasc::Header::LEN
                 + uasc::SymmetricSecurityHeader::LEN
                 + uasc::SequenceHeader::LEN
@@ -442,6 +451,177 @@ mod tests {
         .encode(&mut buf);
         buf.extend_from_slice(body);
         buf
+    }
+
+    #[tokio::test]
+    async fn reassembles_interleaved_responses_only_after_final_chunks() {
+        tokio::time::timeout(Duration::from_secs(2), async {
+            let (data_tx, data_rx) = mpsc::unbounded_channel();
+            let (consumed_tx, _consumed_rx) = mpsc::unbounded_channel();
+            let (cmd_tx, cmd_rx) = mpsc::unbounded_channel();
+            let (error_tx, _error_rx) = watch::channel(None);
+            let pool = Arc::new(BufferPool::new(2, 128));
+            let recv = secure_channel::RecvHalf::new(
+                RecvChunk::new(
+                    ControlledRecv {
+                        data: data_rx,
+                        consumed: consumed_tx,
+                    },
+                    128,
+                ),
+                pool.clone(),
+                SecurityPolicyNone,
+            );
+            let task = tokio::spawn(run_secure_channel_recv(recv, pool, cmd_rx, error_tx));
+            let (first_tx, mut first_rx) = oneshot::channel();
+            let (second_tx, mut second_rx) = oneshot::channel();
+            let (barrier_tx, barrier_rx) = oneshot::channel();
+            cmd_tx.send(RecvCommand::GetResponse(1, first_tx)).unwrap();
+            cmd_tx.send(RecvCommand::GetResponse(2, second_tx)).unwrap();
+            cmd_tx
+                .send(RecvCommand::GetResponse(3, barrier_tx))
+                .unwrap();
+
+            let mut chunks = response_chunk(1, 1, uasc::IsFinal::Continue, b"first ");
+            chunks.extend_from_slice(&response_chunk(2, 2, uasc::IsFinal::Continue, b"other "));
+            chunks.extend_from_slice(&response_chunk(1, 3, uasc::IsFinal::Continue, b"middle "));
+            chunks.extend_from_slice(&response(3, 4, b"barrier"));
+            data_tx.send(chunks).unwrap();
+            assert_eq!(&barrier_rx.await.unwrap().unwrap().buf[..], b"barrier");
+            assert!(matches!(
+                first_rx.try_recv(),
+                Err(oneshot::error::TryRecvError::Empty)
+            ));
+            assert!(matches!(
+                second_rx.try_recv(),
+                Err(oneshot::error::TryRecvError::Empty)
+            ));
+
+            let mut chunks = response(2, 5, b"end");
+            chunks.extend_from_slice(&response(1, 6, b"end"));
+            data_tx.send(chunks).unwrap();
+            let first = first_rx.await.unwrap().unwrap();
+            let second = second_rx.await.unwrap().unwrap();
+            assert!(first.is_ok);
+            assert_eq!(&first.buf[..], b"first middle end");
+            assert!(second.is_ok);
+            assert_eq!(&second.buf[..], b"other end");
+
+            let (barrier_tx, barrier_rx) = oneshot::channel();
+            cmd_tx
+                .send(RecvCommand::GetResponse(3, barrier_tx))
+                .unwrap();
+            let mut chunks = response_chunk(4, 7, uasc::IsFinal::Continue, b"cached ");
+            chunks.extend_from_slice(&response(4, 8, b"response"));
+            chunks.extend_from_slice(&response(3, 9, b"barrier"));
+            data_tx.send(chunks).unwrap();
+            barrier_rx.await.unwrap().unwrap();
+            let (tx, rx) = oneshot::channel();
+            cmd_tx.send(RecvCommand::GetResponse(4, tx)).unwrap();
+            let cached = rx.await.unwrap().unwrap();
+            assert!(cached.is_ok);
+            assert_eq!(&cached.buf[..], b"cached response");
+
+            drop(cmd_tx);
+            task.await.unwrap();
+        })
+        .await
+        .expect("chunked responses were not reassembled");
+    }
+
+    #[tokio::test]
+    async fn abort_discards_partial_chunks_and_preserves_other_responses() {
+        tokio::time::timeout(Duration::from_secs(2), async {
+            let (data_tx, data_rx) = mpsc::unbounded_channel();
+            let (consumed_tx, _consumed_rx) = mpsc::unbounded_channel();
+            let (cmd_tx, cmd_rx) = mpsc::unbounded_channel();
+            let (error_tx, _error_rx) = watch::channel(None);
+            let pool = Arc::new(BufferPool::new(2, 128));
+            let recv = secure_channel::RecvHalf::new(
+                RecvChunk::new(
+                    ControlledRecv {
+                        data: data_rx,
+                        consumed: consumed_tx,
+                    },
+                    128,
+                ),
+                pool.clone(),
+                SecurityPolicyNone,
+            );
+            let task = tokio::spawn(run_secure_channel_recv(recv, pool, cmd_rx, error_tx));
+
+            let error = uasc::ErrorMsg {
+                error_code: ua::StatusCode::BadInternalError,
+                reason: Some("aborted".to_owned()),
+            };
+            let mut error_body = bytes::BytesMut::new();
+            error.encode(&mut error_body);
+
+            let (other_tx, other_rx) = oneshot::channel();
+            let (barrier_tx, barrier_rx) = oneshot::channel();
+            cmd_tx.send(RecvCommand::GetResponse(2, other_tx)).unwrap();
+            cmd_tx
+                .send(RecvCommand::GetResponse(3, barrier_tx))
+                .unwrap();
+            let mut chunks = response_chunk(1, 1, uasc::IsFinal::Continue, b"discard ");
+            chunks.extend_from_slice(&response_chunk(2, 2, uasc::IsFinal::Continue, b"keep "));
+            chunks.extend_from_slice(&response_chunk(1, 3, uasc::IsFinal::Continue, b"this"));
+            chunks.extend_from_slice(&response_chunk(1, 4, uasc::IsFinal::Abort, &error_body));
+            chunks.extend_from_slice(&response_chunk(4, 5, uasc::IsFinal::Abort, &error_body));
+            chunks.extend_from_slice(&response(2, 6, b"this"));
+            chunks.extend_from_slice(&response(3, 7, b"barrier"));
+            data_tx.send(chunks).unwrap();
+            assert_eq!(&barrier_rx.await.unwrap().unwrap().buf[..], b"barrier");
+
+            for id in [1, 4] {
+                let (tx, rx) = oneshot::channel();
+                cmd_tx.send(RecvCommand::GetResponse(id, tx)).unwrap();
+                let mut aborted = rx.await.unwrap().unwrap();
+                assert!(!aborted.is_ok);
+                assert_eq!(&aborted.buf[..], &error_body[..]);
+                assert_eq!(
+                    uasc::ErrorMsg::decode(&mut aborted.buf, &binary::DecodingCtx::new()).unwrap(),
+                    error
+                );
+                assert!(aborted.buf.is_empty());
+            }
+            let other = other_rx.await.unwrap().unwrap();
+            assert!(other.is_ok);
+            assert_eq!(&other.buf[..], b"keep this");
+
+            let (tx, rx) = oneshot::channel();
+            cmd_tx.send(RecvCommand::GetResponse(1, tx)).unwrap();
+            data_tx.send(response(1, 8, b"fresh")).unwrap();
+            let fresh = rx.await.unwrap().unwrap();
+            assert!(fresh.is_ok);
+            assert_eq!(&fresh.buf[..], b"fresh");
+
+            let (pending_tx, pending_rx) = oneshot::channel();
+            let (barrier_tx, barrier_rx) = oneshot::channel();
+            cmd_tx
+                .send(RecvCommand::GetResponse(5, pending_tx))
+                .unwrap();
+            cmd_tx
+                .send(RecvCommand::GetResponse(6, barrier_tx))
+                .unwrap();
+            data_tx.send(response(6, 9, b"barrier")).unwrap();
+            assert_eq!(&barrier_rx.await.unwrap().unwrap().buf[..], b"barrier");
+            let mut chunks = response_chunk(5, 10, uasc::IsFinal::Continue, b"discard");
+            chunks.extend_from_slice(&response_chunk(5, 11, uasc::IsFinal::Abort, &error_body));
+            data_tx.send(chunks).unwrap();
+            let mut aborted = pending_rx.await.unwrap().unwrap();
+            assert!(!aborted.is_ok);
+            assert_eq!(&aborted.buf[..], &error_body[..]);
+            assert_eq!(
+                uasc::ErrorMsg::decode(&mut aborted.buf, &binary::DecodingCtx::new()).unwrap(),
+                error
+            );
+
+            drop(cmd_tx);
+            task.await.unwrap();
+        })
+        .await
+        .expect("abort responses were not handled");
     }
 
     #[tokio::test]

@@ -330,7 +330,7 @@ where
 
         let header = uasc::Header::decode(buf, &self.decoding_ctx)?;
 
-        if header.msg_type != uasc::MsgType::Msg || header.is_final != uasc::IsFinal::Final {
+        if header.msg_type != uasc::MsgType::Msg {
             return Err(ua::StatusCode::BadTcpMessageTypeInvalid);
         }
         if header.secure_channel_id != self.channel_id {
