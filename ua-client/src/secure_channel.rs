@@ -9,7 +9,7 @@ pub async fn open<P, S, R>(
     security_policy: P,
     send: SendChunk<S>,
     recv: RecvChunk<R>,
-    config: crate::Config,
+    config: Arc<crate::Config>,
     send_pool: Arc<BufferPool>,
     recv_pool: Arc<BufferPool>,
     request_id: u32,
@@ -51,7 +51,7 @@ where
 #[derive(Debug)]
 pub struct SendHalf<P, S> {
     send: SendChunk<S>,
-    config: crate::Config,
+    config: Arc<crate::Config>,
     pool: Arc<BufferPool>,
     security_policy: P,
     channel_id: u32,
@@ -66,7 +66,7 @@ where
 {
     pub(super) fn new(
         send: SendChunk<S>,
-        config: crate::Config,
+        config: Arc<crate::Config>,
         pool: Arc<BufferPool>,
         security_policy: P,
     ) -> Self {
@@ -323,7 +323,10 @@ where
         Ok(rsp)
     }
 
-    pub async fn recv_msg(&mut self, buf: &mut bytes::BytesMut) -> Result<RecvChunkInfo, ua::StatusCode> {
+    pub async fn recv_msg(
+        &mut self,
+        buf: &mut bytes::BytesMut,
+    ) -> Result<RecvChunkInfo, ua::StatusCode> {
         self.security_policy
             .recv_msg_chunk(&mut self.recv, buf)
             .await?;
@@ -364,9 +367,7 @@ mod tests {
 
     impl MockSendData {
         fn new() -> Self {
-            Self {
-                chunks: Vec::new(),
-            }
+            Self { chunks: Vec::new() }
         }
     }
 
@@ -421,14 +422,17 @@ mod tests {
         }
     }
 
-    #[test]
-    fn test_send_half_initialization() {
+    fn send_half() -> SendHalf<MockSecurityPolicy, MockSendData> {
         let pool = Arc::new(BufferPool::new(65536, 10));
         let send = SendChunk::new(MockSendData::new(), 65536);
-        let config = crate::Config::default();
+        let config = Arc::new(crate::Config::default());
         let policy = MockSecurityPolicy;
+        SendHalf::new(send, config, pool, policy)
+    }
 
-        let send_half = SendHalf::new(send, config, pool, policy);
+    #[test]
+    fn test_send_half_initialization() {
+        let send_half = send_half();
 
         assert_eq!(send_half.channel_id, 0);
         assert_eq!(send_half.token_id, 0);
@@ -437,12 +441,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_message_fits_in_single_chunk() {
-        let pool = Arc::new(BufferPool::new(65536, 10));
-        let send = SendChunk::new(MockSendData::new(), 65536);
-        let config = crate::Config::default();
-        let policy = MockSecurityPolicy;
-
-        let mut send_half = SendHalf::new(send, config, pool, policy);
+        let mut send_half = send_half();
         send_half.channel_id = 1;
         send_half.token_id = 1;
 
@@ -461,12 +460,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_message_requires_multiple_chunks() {
-        let pool = Arc::new(BufferPool::new(65536, 10));
-        let send = SendChunk::new(MockSendData::new(), 65536);
-        let config = crate::Config::default();
-        let policy = MockSecurityPolicy;
-
-        let mut send_half = SendHalf::new(send, config, pool, policy);
+        let mut send_half = send_half();
         send_half.channel_id = 1;
         send_half.token_id = 1;
 
@@ -489,12 +483,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_sequence_number_increments_per_chunk() {
-        let pool = Arc::new(BufferPool::new(65536, 10));
-        let send = SendChunk::new(MockSendData::new(), 65536);
-        let config = crate::Config::default();
-        let policy = MockSecurityPolicy;
-
-        let mut send_half = SendHalf::new(send, config, pool, policy);
+        let mut send_half = send_half();
         send_half.channel_id = 1;
         send_half.token_id = 1;
 
@@ -522,12 +511,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_chunking_with_boundary_size() {
-        let pool = Arc::new(BufferPool::new(65536, 10));
-        let send = SendChunk::new(MockSendData::new(), 65536);
-        let config = crate::Config::default();
-        let policy = MockSecurityPolicy;
-
-        let mut send_half = SendHalf::new(send, config, pool, policy);
+        let mut send_half = send_half();
         send_half.channel_id = 1;
         send_half.token_id = 1;
 
@@ -547,12 +531,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_zero_length_message() {
-        let pool = Arc::new(BufferPool::new(65536, 10));
-        let send = SendChunk::new(MockSendData::new(), 65536);
-        let config = crate::Config::default();
-        let policy = MockSecurityPolicy;
-
-        let mut send_half = SendHalf::new(send, config, pool, policy);
+        let mut send_half = send_half();
         send_half.channel_id = 1;
         send_half.token_id = 1;
 
@@ -570,12 +549,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_multiple_small_messages() {
-        let pool = Arc::new(BufferPool::new(65536, 10));
-        let send = SendChunk::new(MockSendData::new(), 65536);
-        let config = crate::Config::default();
-        let policy = MockSecurityPolicy;
-
-        let mut send_half = SendHalf::new(send, config, pool, policy);
+        let mut send_half = send_half();
         send_half.channel_id = 1;
         send_half.token_id = 1;
 
@@ -598,12 +572,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_chunking_consistency() {
-        let pool = Arc::new(BufferPool::new(65536, 10));
-        let send = SendChunk::new(MockSendData::new(), 65536);
-        let config = crate::Config::default();
-        let policy = MockSecurityPolicy;
-
-        let mut send_half = SendHalf::new(send, config, pool, policy);
+        let mut send_half = send_half();
         send_half.channel_id = 1;
         send_half.token_id = 1;
 

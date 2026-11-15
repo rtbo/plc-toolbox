@@ -3,7 +3,7 @@
 //!  - WSS UA-SC UA-Binary (TODO)
 use std::sync::Arc;
 
-use tokio::sync::{Mutex, mpsc, oneshot, watch};
+use tokio::sync::{Mutex, RwLock, mpsc, oneshot, watch};
 use ua_core::encoding::binary;
 use ua_core::encoding::binary::{Decode, Encode};
 use ua_core::msg::BinaryEncodingId;
@@ -58,7 +58,8 @@ impl super::BufferConfig {
 pub struct ScBinClient<P, S> {
     // mutex containing the current request id and secure channel send half
     sc_send: Mutex<(u32, Option<secure_channel::SendHalf<P, S>>)>,
-    decoding_ctx: binary::DecodingCtx,
+    config: Arc<Config>,
+    decoding_ctx: RwLock<binary::DecodingCtx>,
     tx: mpsc::UnboundedSender<RecvCommand>,
     recv_error: watch::Receiver<Option<ua::StatusCode>>,
     recv_pool: Arc<BufferPool>,
@@ -103,10 +104,10 @@ where
         send.adjust_max_chunk_size(buffer_config.send_size);
         recv.adjust_max_chunk_size(buffer_config.recv_size);
 
-        let config = Config {
+        let config = Arc::new(Config {
             buffer: buffer_config,
             ..config
-        };
+        });
 
         let (send_pool, recv_pool) = if buffer_config.send_size == buffer_config.recv_size {
             let pool = Arc::new(BufferPool::new(10, buffer_config.send_size));
@@ -121,7 +122,7 @@ where
             security_policy,
             send,
             recv,
-            config,
+            config.clone(),
             send_pool,
             recv_pool.clone(),
             1,
@@ -142,7 +143,8 @@ where
 
         Ok(Self {
             sc_send,
-            decoding_ctx,
+            config,
+            decoding_ctx: RwLock::new(decoding_ctx),
             tx,
             recv_error,
             recv_pool,
@@ -179,6 +181,10 @@ where
         let _ = close_rx.await;
 
         Ok(())
+    }
+
+    pub fn config(&self) -> &Config {
+        &self.config
     }
 
     pub async fn send_request<R>(&self, request: R) -> Result<R::Response, ua::StatusCode>
@@ -231,13 +237,15 @@ where
             }
         })??;
 
+        let decoding_ctx = self.decoding_ctx.read().await;
+
         if resp.is_ok {
             let mut buf = resp.buf;
 
-            let encoding = ua::NodeId::decode(&mut buf, &self.decoding_ctx)?;
+            let encoding = ua::NodeId::decode(&mut buf, &decoding_ctx)?;
 
             let result = if encoding == R::Response::binary_encoding_node_id(0) {
-                Ok(R::Response::decode(&mut buf, &self.decoding_ctx)?)
+                Ok(R::Response::decode(&mut buf, &decoding_ctx)?)
             } else {
                 Err(ua::StatusCode::BadNodeIdInvalid)
             };
@@ -251,7 +259,7 @@ where
             result
         } else {
             let mut buf = resp.buf;
-            let error_msg = uasc::ErrorMsg::decode(&mut buf, &self.decoding_ctx)?;
+            let error_msg = uasc::ErrorMsg::decode(&mut buf, &decoding_ctx)?;
             self.recv_pool.release(buf).await;
             Err(error_msg.error_code)
         }
@@ -806,15 +814,19 @@ mod tests {
         let (tx, _rx) = mpsc::unbounded_channel();
         let (error_tx, recv_error) = watch::channel(Some(ua::StatusCode::BadConnectionClosed));
         let pool = Arc::new(BufferPool::new(2, 128));
+        let config = Arc::new(crate::Config::default());
         let send = secure_channel::SendHalf::new(
             SendChunk::new(NeverSend, 128),
-            Default::default(),
+            config.clone(),
             pool.clone(),
             SecurityPolicyNone,
         );
+        let decoding_ctx = RwLock::new(binary::DecodingCtx::default());
+
         let client = ScBinClient {
             sc_send: Mutex::new((2, Some(send))),
-            decoding_ctx: binary::DecodingCtx::default(),
+            config,
+            decoding_ctx,
             tx,
             recv_error,
             recv_pool: pool,

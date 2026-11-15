@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use sc_bin::ScBinClient;
@@ -76,6 +77,13 @@ pub struct Config {
     pub endpoint: String,
     /// The buffer configuration for the client.
     pub buffer: BufferConfig,
+
+    /// A map containing external nodeset URIs and the corresponding decoding function
+    /// This can be built by the user by using the `ua_nsc` crate in a build script to generate 
+    /// the necessary decoding functions for external nodeset.
+    /// 
+    /// By default, this map is empty and the client only decodes the NS0 nodeset.
+    pub external_ns: HashMap<String, ua_core::encoding::binary::DecodingFn>,
 }
 
 /// An OPC/UA client.
@@ -93,7 +101,7 @@ impl Client {
     pub async fn connect(config: Config) -> Result<Self, ua::StatusCode> {
         let security_policy = SecurityPolicyNone;
 
-        if config.endpoint.starts_with("opc.tcp://") {
+        let client = if config.endpoint.starts_with("opc.tcp://") {
             let url = &config.endpoint["opc.tcp://".len()..];
             let stream = tokio::net::TcpStream::connect(url)
                 .await
@@ -103,11 +111,19 @@ impl Client {
                 sc_bin::ScBinClient::connect(config, security_policy, write_half, read_half)
                     .await
                     .map_err(|_| ua::StatusCode::BadConnectionRejected)?;
-            Ok(Self {
+            Self {
                 inner: Arc::new(ClientImpl::TcpScBin(sc_bin_cl)),
-            })
+            }
         } else {
             return Err(ua::StatusCode::BadInvalidArgument);
+        };
+
+        Ok(client)
+    }
+
+    pub fn config(&self) -> &Config {
+        match &*self.inner {
+            ClientImpl::TcpScBin(sc_bin_cl) => sc_bin_cl.config(),
         }
     }
 
