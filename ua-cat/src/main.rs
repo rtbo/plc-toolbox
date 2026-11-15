@@ -1,5 +1,3 @@
-use std::sync::Arc;
-
 use ua_core::ua;
 
 #[tokio::main]
@@ -18,7 +16,7 @@ async fn run() -> Result<(), ua::StatusCode> {
         endpoint: "opc.tcp://localhost:4840".to_string(),
         ..Default::default()
     };
-    let client = Arc::new(ua_client::Client::connect(config).await?);
+    let client = ua_client::Client::connect(config).await?;
 
     let cl1 = client.clone();
     let cl2 = client.clone();

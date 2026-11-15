@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use sc_bin::ScBinClient;
 use tokio::net;
 use ua_core::encoding::binary;
@@ -70,14 +72,21 @@ impl Default for BufferConfig {
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct Config {
     /// The endpoint URL of the OPC UA server to connect to.
+    /// The URL scheme will determine the stack profile to use for the connection
     pub endpoint: String,
     /// The buffer configuration for the client.
     pub buffer: BufferConfig,
 }
 
-#[derive(Debug)]
+/// An OPC/UA client.
+/// 
+/// This client supports connecting to an OPC UA server over TCP using the binary protocol.
+/// 
+/// This client manages interior mutability and is cheap to clone, so no need to put it into an `Arc` manually.
+/// It can be sent across threads or tasks safely and be used concurrently "as-is".
+#[derive(Debug, Clone)]
 pub struct Client {
-    inner: ClientImpl,
+    inner: Arc<ClientImpl>,
 }
 
 impl Client {
@@ -95,7 +104,7 @@ impl Client {
                     .await
                     .map_err(|_| ua::StatusCode::BadConnectionRejected)?;
             Ok(Self {
-                inner: ClientImpl::TcpScBin(sc_bin_cl),
+                inner: Arc::new(ClientImpl::TcpScBin(sc_bin_cl)),
             })
         } else {
             return Err(ua::StatusCode::BadInvalidArgument);
@@ -107,13 +116,13 @@ impl Client {
         R: msg::Request + binary::Encode + msg::BinaryEncodingId,
         R::Response: binary::Decode + msg::BinaryEncodingId,
     {
-        match &self.inner {
+        match &*self.inner {
             ClientImpl::TcpScBin(sc_bin_cl) => sc_bin_cl.send_request(request).await,
         }
     }
 
     pub async fn close(&self) -> Result<(), ua::StatusCode> {
-        match &self.inner {
+        match &*self.inner {
             ClientImpl::TcpScBin(sc_bin_cl) => {
                 let _recv_half = sc_bin_cl.close().await?;
             }
