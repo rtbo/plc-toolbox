@@ -12,9 +12,9 @@ use ua_core::uacp::{self, Msg};
 use ua_core::{BufferPool, SecurityPolicy, msg, ua, uasc};
 
 use crate::smallmap::SmallMap;
-use crate::{Config, secure_channel};
+use crate::{Config, config, secure_channel};
 
-impl super::BufferConfig {
+impl config::Buffer {
     async fn hello_ack<S: transport::SendData, R: transport::RecvData>(
         self,
         endpoint_url: String,
@@ -55,7 +55,7 @@ impl super::BufferConfig {
 }
 
 #[derive(Debug)]
-pub struct ScBinClient<P, S> {
+pub struct Client<P, S> {
     // mutex containing the current request id and secure channel send half
     sc_send: Mutex<(u32, Option<secure_channel::SendHalf<P, S>>)>,
     config: Arc<Config>,
@@ -78,7 +78,7 @@ enum RecvCommand {
     Close(oneshot::Sender<()>),
 }
 
-impl<P, S> ScBinClient<P, S>
+impl<P, S> Client<P, S>
 where
     P: SecurityPolicy + Clone + Send + 'static,
     S: transport::SendData + Send,
@@ -829,7 +829,7 @@ mod tests {
         );
         let decoding_ctx = RwLock::new(binary::DecodingCtx::default());
 
-        let client = ScBinClient {
+        let client = Client {
             sc_send: Mutex::new((2, Some(send))),
             config,
             decoding_ctx,
