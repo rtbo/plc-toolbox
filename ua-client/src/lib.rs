@@ -16,7 +16,7 @@ mod smallmap;
 /// It is used for stack profiles based on UA Secure Conversation and Binary data encoding:
 ///  - UA-TCP UA-SC UA-Binary (URLs starting with `"opc.tcp://"`)
 ///  - WSS UA-SC UA-Binary (URLs starting with `"wss://"`)
-/// 
+///
 /// The buffer configuration is negotiated between the client and the server during the handshake.
 /// Therefore those values may be adjusted by the server during the connection process.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -31,7 +31,7 @@ pub struct BufferConfig {
     pub recv_size: usize,
     /// The maximum size of a request message.
     /// If `None`, there is no limit on the message size. (this is the default)
-    /// 
+    ///
     /// This field may be set by the server during the handshake if the server imposes a limit on request message size.
     ///
     /// This field can also be set by the client to impose a lower memory limit than the server for request messages.
@@ -40,7 +40,7 @@ pub struct BufferConfig {
     /// The maximum size of a response message.
     /// This will determine the maximum number of chunks a response can be split into.
     /// If `None`, there is no limit on the message size (this is the default).
-    /// 
+    ///
     /// This field can be set by the client to impose to the server a memory limit for response messages.
     pub max_response_size: Option<usize>,
 }
@@ -51,11 +51,13 @@ impl BufferConfig {
     }
 
     pub fn max_send_chunks(&self) -> Option<usize> {
-        self.max_request_size.map(|size| BufferConfig::chunk_count(size, self.send_size))
+        self.max_request_size
+            .map(|size| BufferConfig::chunk_count(size, self.send_size))
     }
 
     pub fn max_recv_chunks(&self) -> Option<usize> {
-        self.max_response_size.map(|size| BufferConfig::chunk_count(size, self.recv_size))
+        self.max_response_size
+            .map(|size| BufferConfig::chunk_count(size, self.recv_size))
     }
 }
 
@@ -79,17 +81,17 @@ pub struct Config {
     pub buffer: BufferConfig,
 
     /// A map containing external nodeset URIs and the corresponding decoding function
-    /// This can be built by the user by using the `ua_nsc` crate in a build script to generate 
+    /// This can be built by the user by using the `ua_nsc` crate in a build script to generate
     /// the necessary decoding functions for external nodeset.
-    /// 
+    ///
     /// By default, this map is empty and the client only decodes the NS0 nodeset.
     pub external_ns: HashMap<String, ua_core::encoding::binary::DecodingFn>,
 }
 
 /// An OPC/UA client.
-/// 
+///
 /// This client supports connecting to an OPC UA server over TCP using the binary protocol.
-/// 
+///
 /// This client manages interior mutability and is cheap to clone, so no need to put it into an `Arc` manually.
 /// It can be sent across threads or tasks safely and be used concurrently "as-is".
 #[derive(Debug, Clone)]

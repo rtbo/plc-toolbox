@@ -30,7 +30,10 @@ impl SecurityPolicy for SecurityPolicyNone {
     }
 
     fn max_body_size(&self, max_send_size: usize) -> usize {
-        max_send_size - uasc::Header::LEN as usize - SymmetricSecurityHeader::LEN as usize - uasc::SequenceHeader::LEN as usize
+        max_send_size
+            - uasc::Header::LEN as usize
+            - SymmetricSecurityHeader::LEN as usize
+            - uasc::SequenceHeader::LEN as usize
     }
 
     fn asymmetric_security_header(&self) -> AsymmetricSecurityHeader {

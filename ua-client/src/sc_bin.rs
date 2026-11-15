@@ -321,7 +321,11 @@ async fn run_secure_channel_recv<P, R>(
                         recv_pool.release(partial).await;
                     }
                 }
-                let resp = RecvResponse { buf, multi_chunks: false, is_ok: false };
+                let resp = RecvResponse {
+                    buf,
+                    multi_chunks: false,
+                    is_ok: false,
+                };
                 if let Some(tx) = pending_requests.remove(&info.request_id) {
                     let _ = tx.send(Ok(resp));
                 } else {
@@ -338,16 +342,21 @@ async fn run_secure_channel_recv<P, R>(
             }
             Ok(info) => {
                 debug_assert!(info.is_final == uasc::IsFinal::Final);
-                let multi_chunks = if let Some(mut partial) = partial_responses.remove(&info.request_id) {
-                    partial.extend_from_slice(&buf);
-                    recv_pool.release(buf).await;
-                    buf = partial;
-                    true
-                } else {
-                    false
-                };
+                let multi_chunks =
+                    if let Some(mut partial) = partial_responses.remove(&info.request_id) {
+                        partial.extend_from_slice(&buf);
+                        recv_pool.release(buf).await;
+                        buf = partial;
+                        true
+                    } else {
+                        false
+                    };
 
-                let resp = RecvResponse { buf, multi_chunks, is_ok: true };
+                let resp = RecvResponse {
+                    buf,
+                    multi_chunks,
+                    is_ok: true,
+                };
                 if let Some(tx) = pending_requests.remove(&info.request_id) {
                     let _ = tx.send(Ok(resp));
                 } else {
@@ -413,10 +422,7 @@ mod tests {
     struct FailWithQueuedRequests {
         commands: mpsc::UnboundedSender<RecvCommand>,
         first_response: Option<bytes::BytesMut>,
-        responses: Vec<(
-            u32,
-            oneshot::Sender<Result<RecvResponse, ua::StatusCode>>,
-        )>,
+        responses: Vec<(u32, oneshot::Sender<Result<RecvResponse, ua::StatusCode>>)>,
     }
 
     impl RecvData for FailWithQueuedRequests {
@@ -758,7 +764,7 @@ mod tests {
                 .unwrap();
             let (first_tx, first_rx) = oneshot::channel();
             cmd_tx.send(RecvCommand::GetResponse(1, first_tx)).unwrap();
-            
+
             let resp = first_rx.await.unwrap().unwrap();
             assert_eq!(&resp.buf[..], b"first");
             assert!(resp.is_ok);

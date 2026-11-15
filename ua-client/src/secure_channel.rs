@@ -358,8 +358,9 @@ where
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use std::io;
+
+    use super::*;
 
     struct MockSendData {
         chunks: Vec<bytes::BytesMut>,
