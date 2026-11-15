@@ -352,3 +352,275 @@ where
         })
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io;
+
+    struct MockSendData {
+        chunks: Vec<bytes::BytesMut>,
+    }
+
+    impl MockSendData {
+        fn new() -> Self {
+            Self {
+                chunks: Vec::new(),
+            }
+        }
+    }
+
+    impl transport::SendData for MockSendData {
+        async fn send_data(&mut self, data: &bytes::BytesMut) -> Result<(), io::Error> {
+            self.chunks.push(data.clone());
+            Ok(())
+        }
+    }
+
+    struct MockSecurityPolicy;
+
+    impl SecurityPolicy for MockSecurityPolicy {
+        fn uri(&self) -> &'static str {
+            "http://opcfoundation.org/UA/SecurityPolicy#None"
+        }
+
+        fn max_body_size(&self, max_send_size: usize) -> usize {
+            // Similar to SecurityPolicyNone: buffer size minus headers
+            max_send_size
+                - uasc::Header::LEN as usize
+                - uasc::SymmetricSecurityHeader::LEN as usize
+                - uasc::SequenceHeader::LEN as usize
+        }
+
+        fn asymmetric_security_header(&self) -> uasc::AsymmetricSecurityHeader {
+            uasc::AsymmetricSecurityHeader {
+                security_policy_uri: Some(self.uri().to_string()),
+                sender_certificate: None,
+                receiver_certificate_thumbprint: None,
+            }
+        }
+
+        async fn send_msg_chunk<T: transport::SendData + Send>(
+            &mut self,
+            stream: &mut transport::SendChunk<T>,
+            buf: &bytes::BytesMut,
+        ) -> Result<(), ua::StatusCode> {
+            stream
+                .send_chunk(buf)
+                .await
+                .map_err(|_| ua::StatusCode::BadCommunicationError)?;
+            Ok(())
+        }
+
+        async fn recv_msg_chunk<T: transport::RecvData + Send>(
+            &mut self,
+            stream: &mut transport::RecvChunk<T>,
+            buf: &mut bytes::BytesMut,
+        ) -> Result<(), ua::StatusCode> {
+            stream.recv_chunk(buf).await
+        }
+    }
+
+    #[test]
+    fn test_send_half_initialization() {
+        let pool = Arc::new(BufferPool::new(65536, 10));
+        let send = SendChunk::new(MockSendData::new(), 65536);
+        let config = crate::Config::default();
+        let policy = MockSecurityPolicy;
+
+        let send_half = SendHalf::new(send, config, pool, policy);
+
+        assert_eq!(send_half.channel_id, 0);
+        assert_eq!(send_half.token_id, 0);
+        assert_eq!(send_half.sequence_number, 0);
+    }
+
+    #[tokio::test]
+    async fn test_message_fits_in_single_chunk() {
+        let pool = Arc::new(BufferPool::new(65536, 10));
+        let send = SendChunk::new(MockSendData::new(), 65536);
+        let config = crate::Config::default();
+        let policy = MockSecurityPolicy;
+
+        let mut send_half = SendHalf::new(send, config, pool, policy);
+        send_half.channel_id = 1;
+        send_half.token_id = 1;
+
+        let seq_before = send_half.sequence_number;
+        let body_len = 100_u32;
+
+        let result = send_half
+            .send_msg(1, body_len, |buf| {
+                buf.extend_from_slice(&vec![0xAB; 100]);
+            })
+            .await;
+
+        assert!(result.is_ok());
+        assert_eq!(send_half.sequence_number, seq_before + 1);
+    }
+
+    #[tokio::test]
+    async fn test_message_requires_multiple_chunks() {
+        let pool = Arc::new(BufferPool::new(65536, 10));
+        let send = SendChunk::new(MockSendData::new(), 65536);
+        let config = crate::Config::default();
+        let policy = MockSecurityPolicy;
+
+        let mut send_half = SendHalf::new(send, config, pool, policy);
+        send_half.channel_id = 1;
+        send_half.token_id = 1;
+
+        let seq_before = send_half.sequence_number;
+        let body_len = 120000_u32;
+
+        let result = send_half
+            .send_msg(1, body_len, |buf| {
+                buf.extend_from_slice(&vec![0xCD; 120000]);
+            })
+            .await;
+
+        if let Err(e) = &result {
+            eprintln!("Error: {:?}", e);
+        }
+        assert!(result.is_ok());
+        // Multiple chunks should result in multiple sequence increments
+        assert!(send_half.sequence_number > seq_before + 1);
+    }
+
+    #[tokio::test]
+    async fn test_sequence_number_increments_per_chunk() {
+        let pool = Arc::new(BufferPool::new(65536, 10));
+        let send = SendChunk::new(MockSendData::new(), 65536);
+        let config = crate::Config::default();
+        let policy = MockSecurityPolicy;
+
+        let mut send_half = SendHalf::new(send, config, pool, policy);
+        send_half.channel_id = 1;
+        send_half.token_id = 1;
+
+        assert_eq!(send_half.sequence_number, 0);
+
+        let result1 = send_half
+            .send_msg(1, 100000, |buf| {
+                buf.extend_from_slice(&vec![0xFF; 100000]);
+            })
+            .await;
+
+        assert!(result1.is_ok(), "First message failed: {:?}", result1.err());
+        let seq_after_first = send_half.sequence_number;
+        assert!(seq_after_first > 0);
+
+        let result2 = send_half
+            .send_msg(2, 100, |buf| {
+                buf.extend_from_slice(&vec![0x00; 100]);
+            })
+            .await;
+
+        assert!(result2.is_ok());
+        assert!(send_half.sequence_number > seq_after_first);
+    }
+
+    #[tokio::test]
+    async fn test_chunking_with_boundary_size() {
+        let pool = Arc::new(BufferPool::new(65536, 10));
+        let send = SendChunk::new(MockSendData::new(), 65536);
+        let config = crate::Config::default();
+        let policy = MockSecurityPolicy;
+
+        let mut send_half = SendHalf::new(send, config, pool, policy);
+        send_half.channel_id = 1;
+        send_half.token_id = 1;
+
+        let seq_before = send_half.sequence_number;
+        let body_len = 2048_u32;
+
+        let result = send_half
+            .send_msg(1, body_len, |buf| {
+                buf.extend_from_slice(&vec![0x55; 2048]);
+            })
+            .await;
+
+        assert!(result.is_ok());
+        let seq_after = send_half.sequence_number;
+        assert!(seq_after >= seq_before);
+    }
+
+    #[tokio::test]
+    async fn test_zero_length_message() {
+        let pool = Arc::new(BufferPool::new(65536, 10));
+        let send = SendChunk::new(MockSendData::new(), 65536);
+        let config = crate::Config::default();
+        let policy = MockSecurityPolicy;
+
+        let mut send_half = SendHalf::new(send, config, pool, policy);
+        send_half.channel_id = 1;
+        send_half.token_id = 1;
+
+        let seq_before = send_half.sequence_number;
+
+        let result = send_half
+            .send_msg(1, 0, |_buf| {
+                // Empty message
+            })
+            .await;
+
+        assert!(result.is_ok());
+        assert_eq!(send_half.sequence_number, seq_before + 1);
+    }
+
+    #[tokio::test]
+    async fn test_multiple_small_messages() {
+        let pool = Arc::new(BufferPool::new(65536, 10));
+        let send = SendChunk::new(MockSendData::new(), 65536);
+        let config = crate::Config::default();
+        let policy = MockSecurityPolicy;
+
+        let mut send_half = SendHalf::new(send, config, pool, policy);
+        send_half.channel_id = 1;
+        send_half.token_id = 1;
+
+        // Send three small messages
+        for i in 0..3 {
+            let seq_before = send_half.sequence_number;
+            let result = send_half
+                .send_msg(i, 50, |buf| {
+                    buf.extend_from_slice(&vec![i as u8; 50]);
+                })
+                .await;
+
+            assert!(result.is_ok());
+            assert_eq!(send_half.sequence_number, seq_before + 1);
+        }
+
+        // Should have incremented by 3
+        assert_eq!(send_half.sequence_number, 3);
+    }
+
+    #[tokio::test]
+    async fn test_chunking_consistency() {
+        let pool = Arc::new(BufferPool::new(65536, 10));
+        let send = SendChunk::new(MockSendData::new(), 65536);
+        let config = crate::Config::default();
+        let policy = MockSecurityPolicy;
+
+        let mut send_half = SendHalf::new(send, config, pool, policy);
+        send_half.channel_id = 1;
+        send_half.token_id = 1;
+
+        // Send a large message
+        let test_data = vec![0x42; 200000];
+        let seq_before = send_half.sequence_number;
+
+        let result = send_half
+            .send_msg(1, 200000, |buf| {
+                buf.extend_from_slice(&test_data);
+            })
+            .await;
+
+        assert!(result.is_ok());
+        // Verify that we got multiple chunks
+        // With 65536 buffer and headers, we should have about 3-4 chunks
+        let chunks_sent = send_half.sequence_number - seq_before;
+        assert!(chunks_sent >= 2);
+    }
+}
