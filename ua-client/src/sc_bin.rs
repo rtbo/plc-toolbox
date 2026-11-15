@@ -67,6 +67,7 @@ pub struct ScBinClient<P, S> {
 #[derive(Debug, PartialEq)]
 pub struct RecvResponse {
     buf: bytes::BytesMut,
+    multi_chunks: bool,
     is_ok: bool,
 }
 
@@ -232,6 +233,7 @@ where
 
         if resp.is_ok {
             let mut buf = resp.buf;
+
             let encoding = ua::NodeId::decode(&mut buf, &self.decoding_ctx)?;
 
             let result = if encoding == R::Response::binary_encoding_node_id(0) {
@@ -240,7 +242,11 @@ where
                 Err(ua::StatusCode::BadNodeIdInvalid)
             };
 
-            self.recv_pool.release(buf).await;
+            // We don't recycle buffers for multi-chunk responses because they are quite rare
+            // and will eat potentially large amounts of memory permanently if recycled.
+            if !resp.multi_chunks {
+                self.recv_pool.release(buf).await;
+            }
 
             result
         } else {
@@ -303,12 +309,11 @@ async fn run_secure_channel_recv<P, R>(
         match recv_res {
             Ok(info) if info.is_final == uasc::IsFinal::Abort => {
                 if let Some(partial) = partial_responses.remove(&info.request_id) {
-                    // release to pool only if it is made of a single chunk
                     if partial.capacity() == recv_pool.buf_capacity() {
                         recv_pool.release(partial).await;
                     }
                 }
-                let resp = RecvResponse { buf, is_ok: false };
+                let resp = RecvResponse { buf, multi_chunks: false, is_ok: false };
                 if let Some(tx) = pending_requests.remove(&info.request_id) {
                     let _ = tx.send(Ok(resp));
                 } else {
@@ -325,13 +330,16 @@ async fn run_secure_channel_recv<P, R>(
             }
             Ok(info) => {
                 debug_assert!(info.is_final == uasc::IsFinal::Final);
-                if let Some(mut partial) = partial_responses.remove(&info.request_id) {
+                let multi_chunks = if let Some(mut partial) = partial_responses.remove(&info.request_id) {
                     partial.extend_from_slice(&buf);
                     recv_pool.release(buf).await;
                     buf = partial;
-                }
+                    true
+                } else {
+                    false
+                };
 
-                let resp = RecvResponse { buf, is_ok: true };
+                let resp = RecvResponse { buf, multi_chunks, is_ok: true };
                 if let Some(tx) = pending_requests.remove(&info.request_id) {
                     let _ = tx.send(Ok(resp));
                 } else {

@@ -34,17 +34,15 @@ impl BufferPool {
         }
     }
 
-    /// Releases a buffer back to the pool. If the pool has reached its maximum size, the buffer is dropped.
+    /// Releases a buffer back to the pool.
+    /// The buffer is dropped if the pool has reached its maximum size or if it does not have the desired capacity.
     pub async fn release(&self, mut buffer: bytes::BytesMut) {
-        let mut pool = self.pool.lock().await;
-        if pool.len() < self.max_pool_size {
-            buffer.clear();
-            // Decoding advances the buffer start, which shrinks its capacity.
-            // Reserving on an empty, uniquely owned buffer reclaims the consumed front space.
-            if buffer.capacity() < self.buf_capacity {
-                buffer.reserve(self.buf_capacity);
-            }
-            if buffer.capacity() == self.buf_capacity {
+        buffer.clear();
+        if buffer.try_reclaim(self.buf_capacity) {
+            let mut pool = self.pool.lock().await;
+            if pool.len() < self.max_pool_size {
+                // Only push the buffer back to the pool if it has the desired capacity.
+                // Buffers from long messages are dropped
                 pool.push(buffer);
             }
         }
