@@ -136,7 +136,7 @@ where
             if names.contains(name) && names.contains(response.as_str()) {
                 self.cg.define_block(
                     &format!(
-                        "impl {}::msg::Request for {} ",
+                        "impl {}::encoding::Request for {} ",
                         self.options.ua_core_module, name
                     ),
                     |cg| cg.write_line(&format!("type Response = {response};")),
@@ -313,7 +313,7 @@ where
         let core = self.options.ua_core_module.clone();
         let is_ua_namespace = self.types.target_namespace == UA_NS;
         self.cg.define_block(
-            &format!("impl {}::msg::DataTypeId for {} ", core, type_def.name()),
+            &format!("impl {}::encoding::DataTypeId for {} ", core, type_def.name()),
             |cg| {
                 cg.write_line("const NS_URI: &'static str = NS_URI;")?;
                 cg.write_line(&format!("const DATATYPE_ID: u32 = {};", type_id.numeric_id))?;
@@ -325,19 +325,12 @@ where
         )?;
         self.cg.write_line("")?;
 
-        if let Some(xml_type_id) = self
-            .ua_type_ids
-            .get(&format!("{}_Encoding_DefaultXml", type_def.name()))
-        {
-            self.cg.define_block(
-                &format!("impl {}::msg::XmlEncodingId for {} ", core, type_def.name()),
-                |cg| {
-                    cg.write_line(&format!(
-                        "const XML_ENCODING_ID: u32 = {};",
-                        xml_type_id.numeric_id
-                    ))
-                },
-            )?;
+        if is_ua_namespace{
+            self.cg.write_line(&format!(
+                "impl {}::encoding::Ns0DataTypeId for {} {{}}",
+                core,
+                type_def.name()
+            ))?;
             self.cg.write_line("")?;
         }
 
@@ -347,7 +340,7 @@ where
         {
             self.cg.define_block(
                 &format!(
-                    "impl {}::msg::BinaryEncodingId for {} ",
+                    "impl {}::encoding::BinaryEncodingId for {} ",
                     core,
                     type_def.name()
                 ),
@@ -359,6 +352,15 @@ where
                 },
             )?;
             self.cg.write_line("")?;
+
+            if is_ua_namespace {
+                self.cg.write_line(&format!(
+                    "impl {}::encoding::Ns0BinaryEncodingId for {} {{}}",
+                    core,
+                    type_def.name()
+                ))?;
+                self.cg.write_line("")?;
+            }
         }
         Ok(())
     }
@@ -668,9 +670,9 @@ mod tests {
         )
         .unwrap();
         let output = String::from_utf8(output).unwrap();
-        assert!(output.contains("impl my_core::msg::Request for ReadRequest {"));
+        assert!(output.contains("impl my_core::encoding::Request for ReadRequest {"));
         assert!(output.contains("type Response = ReadResponse;"));
-        assert!(!output.contains("impl my_core::msg::Request for MissingRequest"));
-        assert!(!output.contains("impl my_core::msg::Request for EmptyRequest"));
+        assert!(!output.contains("impl my_core::encoding::Request for MissingRequest"));
+        assert!(!output.contains("impl my_core::encoding::Request for EmptyRequest"));
     }
 }

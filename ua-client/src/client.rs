@@ -2,7 +2,8 @@ use std::sync::Arc;
 
 use tokio::net;
 use ua_core::encoding::binary;
-use ua_core::{SecurityPolicyNone, msg, ua};
+use ua_core::encoding::{self, BinaryEncodingId, DataTypeId};
+use ua_core::{SecurityPolicyNone, ua};
 
 use crate::{Config, uasc_binary};
 
@@ -49,8 +50,8 @@ impl Client {
 
     pub async fn send_request<R>(&self, request: R) -> Result<R::Response, ua::StatusCode>
     where
-        R: msg::Request + binary::Encode + msg::BinaryEncodingId,
-        R::Response: binary::Decode + msg::BinaryEncodingId,
+        R: encoding::Request + binary::Encode + BinaryEncodingId + DataTypeId,
+        R::Response: binary::Decode + BinaryEncodingId,
     {
         match &*self.inner {
             ClientImpl::TcpUascBinary(inner) => inner.send_request(request).await,

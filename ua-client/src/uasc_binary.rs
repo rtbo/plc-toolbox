@@ -4,12 +4,11 @@
 use std::sync::Arc;
 
 use tokio::sync::{Mutex, RwLock, mpsc, oneshot, watch};
-use ua_core::encoding::binary;
-use ua_core::encoding::binary::{Decode, Encode};
-use ua_core::msg::BinaryEncodingId;
+use ua_core::encoding::binary::{self, Decode, Encode};
+use ua_core::encoding::{self, BinaryEncodingId, Ns0BinaryEncodingId};
 use ua_core::transport::{self, RecvChunk, SendChunk};
 use ua_core::uacp::{self, Msg};
-use ua_core::{BufferPool, SecurityPolicy, msg, ua, uasc};
+use ua_core::{BufferPool, SecurityPolicy, ua, uasc};
 
 use crate::smallmap::SmallMap;
 use crate::{Config, config, secure_channel};
@@ -60,6 +59,7 @@ pub struct Client<P, S> {
     sc_send: Mutex<(u32, Option<secure_channel::SendHalf<P, S>>)>,
     config: Arc<Config>,
     decoding_ctx: RwLock<binary::DecodingCtx>,
+    ns_array: RwLock<Vec<String>>,
     tx: mpsc::UnboundedSender<RecvCommand>,
     recv_error: watch::Receiver<Option<ua::StatusCode>>,
     recv_pool: Arc<BufferPool>,
@@ -145,6 +145,7 @@ where
             sc_send,
             config,
             decoding_ctx: RwLock::new(decoding_ctx),
+            ns_array: RwLock::new(Vec::new()),
             tx,
             recv_error,
             recv_pool,
@@ -189,10 +190,14 @@ where
 
     pub async fn send_request<R>(&self, request: R) -> Result<R::Response, ua::StatusCode>
     where
-        R: msg::Request + binary::Encode + msg::BinaryEncodingId,
-        R::Response: binary::Decode + msg::BinaryEncodingId,
+        R: encoding::Request + binary::Encode + encoding::BinaryEncodingId + encoding::DataTypeId,
+        R::Response: binary::Decode + encoding::BinaryEncodingId,
     {
-        let encoding = R::binary_encoding_node_id(0);
+        let ns_index = self
+            .ns_index::<R>()
+            .await
+            .expect("Namespace index not found for the request type");
+        let encoding = R::binary_encoding_node_id(ns_index);
         let body_len = encoding.encoded_len() + request.encoded_len();
 
         let req_id = {
@@ -244,14 +249,19 @@ where
 
             let encoding = ua::NodeId::decode(&mut buf, &decoding_ctx)?;
 
-            let result = if encoding == R::Response::binary_encoding_node_id(0) {
-                Ok(R::Response::decode(&mut buf, &decoding_ctx)?)
-            } else {
-                Err(ua::StatusCode::BadNodeIdInvalid)
+            let result = match encoding {
+                ua::ServiceFault::BINARY_ENCODING_NODE_ID => {
+                    let resp = ua::ServiceFault::decode(&mut buf, &decoding_ctx)?;
+                    Err(resp.response_header.service_result)
+                }
+                _ if encoding == R::Response::binary_encoding_node_id(ns_index) => {
+                    Ok(R::Response::decode(&mut buf, &decoding_ctx)?)
+                }
+                _ => Err(ua::StatusCode::BadNodeIdInvalid),
             };
 
             // We don't recycle buffers for multi-chunk responses because they are quite rare
-            // and will eat potentially large amounts of memory permanently if recycled.
+            // and will potentially permanently consume large amount of memory if recycled.
             if !resp.multi_chunks {
                 self.recv_pool.release(buf).await;
             }
@@ -263,6 +273,19 @@ where
             self.recv_pool.release(buf).await;
             Err(error_msg.error_code)
         }
+    }
+
+    async fn ns_index<R: encoding::DataTypeId>(&self) -> Option<u16> {
+        if R::NS_INDEX.is_some() {
+            return R::NS_INDEX;
+        }
+        self.ns_array
+            .read()
+            .await
+            .iter()
+            .skip(1) // NS0 has always NS_INDEX set
+            .position(|s| s == R::NS_URI)
+            .map(|i| (i + 1) as u16)
     }
 }
 
@@ -828,11 +851,13 @@ mod tests {
             SecurityPolicyNone,
         );
         let decoding_ctx = RwLock::new(binary::DecodingCtx::default());
+        let ns_array = RwLock::new(Vec::new());
 
         let client = Client {
             sc_send: Mutex::new((2, Some(send))),
             config,
             decoding_ctx,
+            ns_array,
             tx,
             recv_error,
             recv_pool: pool,

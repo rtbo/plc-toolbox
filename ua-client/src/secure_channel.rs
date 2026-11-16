@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use ua_core::encoding::binary::{self, Decode, Encode};
-use ua_core::msg::BinaryEncodingId;
+use ua_core::encoding::Ns0BinaryEncodingId;
 use ua_core::transport::{self, RecvChunk, SendChunk};
 use ua_core::{BufferPool, SecurityPolicy, ua, uasc};
 
@@ -86,7 +86,7 @@ where
         msg: ua::OpenSecureChannelRequest,
         request_id: u32,
     ) -> Result<(), ua::StatusCode> {
-        let encoding_node_id = ua::OpenSecureChannelRequest::binary_encoding_node_id(0);
+        let encoding_node_id = ua::OpenSecureChannelRequest::BINARY_ENCODING_NODE_ID;
         let body_len = encoding_node_id.encoded_len() + msg.encoded_len();
 
         let security_header = self.security_policy.asymmetric_security_header();
@@ -128,7 +128,7 @@ where
         request_id: u32,
         msg: ua::CloseSecureChannelRequest,
     ) -> Result<(), ua::StatusCode> {
-        let encoding_node_id = ua::CloseSecureChannelRequest::binary_encoding_node_id(0);
+        let encoding_node_id = ua::CloseSecureChannelRequest::BINARY_ENCODING_NODE_ID;
         let body_len = encoding_node_id.encoded_len() + msg.encoded_len();
 
         self.send_msg_chunk(
@@ -312,11 +312,20 @@ where
         if seq_header.request_id != request_id {
             return Err(ua::StatusCode::BadDecodingError);
         }
+
         let encoding_node_id = ua::NodeId::decode(buf, &self.decoding_ctx)?;
-        if encoding_node_id != ua::OpenSecureChannelResponse::binary_encoding_node_id(0) {
-            return Err(ua::StatusCode::BadDecodingError);
-        }
-        let rsp = ua::OpenSecureChannelResponse::decode(buf, &self.decoding_ctx)?;
+        let rsp = match encoding_node_id {
+            ua::ServiceFault::BINARY_ENCODING_NODE_ID => {
+                let resp = ua::ServiceFault::decode(buf, &self.decoding_ctx)?;
+                return Err(resp.response_header.service_result);
+            }
+            ua::OpenSecureChannelResponse::BINARY_ENCODING_NODE_ID => {
+                ua::OpenSecureChannelResponse::decode(buf, &self.decoding_ctx)?
+            }
+            _ => {
+                return Err(ua::StatusCode::BadNodeIdInvalid);
+            }
+        };
 
         self.srv_seq_number = seq_header.sequence_number;
 
