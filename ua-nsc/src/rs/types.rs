@@ -2,6 +2,7 @@ use std::collections::{HashMap, HashSet};
 use std::io;
 
 use crate::codegen::CodeGen;
+use crate::parse::types::QualName;
 use crate::parse::{NodeId, types};
 
 const UA_NS: &str = "http://opcfoundation.org/UA/";
@@ -23,6 +24,8 @@ where
     let mut ctx = Ctx {
         types,
         ua_type_ids,
+        has_extension_object: HashMap::new(),
+        checking_extension_object: HashSet::new(),
         options,
         cg: super::RsCodeGen::new(out),
     };
@@ -104,6 +107,9 @@ where
 {
     types: &'a types::TypeDictionary,
     ua_type_ids: &'a HashMap<String, NodeId>,
+    has_extension_object: HashMap<String, bool>,
+    // used to detect recursive types
+    checking_extension_object: HashSet<String>,
     options: &'a Options,
     cg: super::RsCodeGen<W>,
 }
@@ -479,7 +485,20 @@ where
         if let Some(doc) = desc.doc.as_deref() {
             self.cg.write_doc_comment(doc)?;
         }
-        self.cg.write_line("#[derive(Debug, Default)]")?;
+        let impl_clone_partial_eq = !fields.iter().any(|f| {
+            f.type_name
+                .as_ref()
+                .map_or(false, |tn| self.has_extension_object(tn))
+        });
+
+        self.cg.write_line(&format!(
+            "#[derive(Debug{}, Default)]",
+            if impl_clone_partial_eq {
+                ", Clone, PartialEq"
+            } else {
+                ""
+            }
+        ))?;
         self.cg
             .write_line("#[derive(DecodeBinary, EncodeBinary)]")?;
         let mut members = Vec::new();
@@ -519,6 +538,70 @@ where
             })?;
         self.cg.write_line("")?;
         Ok(())
+    }
+
+    fn has_extension_object(&mut self, type_name: &QualName) -> bool {
+        if let Some(&cached) = self.has_extension_object.get(&type_name.to_string()) {
+            return cached;
+        }
+
+        let has_extension_object = self.find_has_extension_object(type_name);
+
+        self.has_extension_object
+            .insert(type_name.to_string(), has_extension_object);
+
+        has_extension_object
+    }
+
+    fn find_has_extension_object(&mut self, type_name: &QualName) -> bool {
+        let type_key = type_name.to_string();
+
+        // Detect cycle: if we're already checking this type, it's recursive
+        if self.checking_extension_object.contains(&type_key) {
+            return false;
+        }
+
+        let is_opc = type_name.namespace.as_deref() == Some(BINARYSCHEMA_NS);
+        if is_opc {
+            return false;
+        }
+
+        let is_ns0 = type_name.namespace.as_deref() == Some(UA_NS);
+        if is_ns0 && type_name.name == "ExtensionObject" {
+            return true;
+        }
+
+        if type_name.namespace.as_deref() != Some(self.types.target_namespace.as_str()) {
+            // no support yet to import foreign definitions
+            // in doubt, assume that the type has an extension object
+            assert!(
+                false,
+                "Foreign type encountered: {} (namespace: {:?})",
+                type_name, type_name.namespace
+            );
+            return true;
+        }
+
+        self.checking_extension_object.insert(type_key.clone());
+
+        let fields = self.types.types.iter().find_map(|t| match t {
+            types::Type::Structured { desc, fields, .. } if &desc.name == &type_name.name => {
+                Some(fields)
+            }
+            _ => None,
+        });
+
+        let result = match fields {
+            Some(fields) => fields.iter().any(|f| {
+                f.type_name
+                    .as_ref()
+                    .map_or(false, |tn| self.has_extension_object(tn))
+            }),
+            None => false,
+        };
+
+        self.checking_extension_object.remove(&type_key);
+        result
     }
 }
 
