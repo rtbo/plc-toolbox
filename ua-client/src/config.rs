@@ -5,12 +5,12 @@ use std::collections::HashMap;
 pub struct Timeout {
     /// The connection timeout duration in milliseconds.
     /// Set to zero to disable the connection timeout.
-    /// Defaults to 5000 milliseconds.
+    /// The default is 5 seconds.
     pub connection: u32,
 
     /// The request timeout duration in milliseconds.
     /// Set to zero to disable the request timeout.
-    /// Defaults to 5000 milliseconds.
+    /// The default is 5 seconds.
     pub request: u32,
 }
 
@@ -31,7 +31,7 @@ impl Default for Timeout {
 ///
 /// The buffer configuration is negotiated between the client and the server during the handshake.
 /// Therefore those values may be adjusted by the server during the connection process.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Buffer {
     /// The size of the send buffer.
     /// An initial size is set by the client, but it may be adjusted by the server during the handshake.
@@ -84,7 +84,30 @@ impl Default for Buffer {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, PartialEq)]
+pub struct Session {
+    /// The name of the session
+    pub name: Option<String>,
+
+    /// The URI of the client application.
+    pub application_uri: String,
+
+    /// The requested session timeout in milliseconds.
+    /// The default is 5 minutes.
+    pub timeout: u32,
+}
+
+impl Default for Session {
+    fn default() -> Self {
+        Self {
+            name: None,
+            application_uri: "urn:unconfigured-client".to_string(),
+            timeout: 300000,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub struct Config {
     /// The endpoint URL of the OPC UA server to connect to.
     /// The URL scheme will determine the stack profile to use for the connection
@@ -96,12 +119,29 @@ pub struct Config {
     /// The buffer configuration for the client.
     pub buffer: Buffer,
 
+    /// The session configuration for the client.
+    /// If `None`, the client will not attempt to create a session automatically.
+    /// The default is Some(Session::default())
+    pub session: Option<Session>,
+
     /// A map containing external nodeset URIs and the corresponding decoding function
     /// This can be built by the user by using the `ua_nsc` crate in a build script to generate
     /// the necessary decoding functions for external nodeset.
     ///
     /// By default, this map is empty and the client only decodes the NS0 nodeset.
     pub external_ns: HashMap<String, ua_core::encoding::binary::DecodingFn>,
+}
+
+impl Default for Config {
+    fn default() -> Self {
+        Self {
+            endpoint: String::new(),
+            timeout: Timeout::default(),
+            buffer: Buffer::default(),
+            session: Some(Session::default()),
+            external_ns: HashMap::new(),
+        }
+    }
 }
 
 #[cfg(test)]

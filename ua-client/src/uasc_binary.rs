@@ -184,8 +184,8 @@ where
         Ok(())
     }
 
-    pub fn config(&self) -> &Config {
-        &self.config
+    pub fn config(&self) -> Arc<Config> {
+        self.config.clone()
     }
 
     pub async fn send_request<R>(&self, request: R) -> Result<R::Response, ua::StatusCode>
