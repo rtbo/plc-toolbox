@@ -20,26 +20,20 @@ pub struct Client {
 
 impl Client {
     pub async fn connect(config: Config) -> Result<Self, ua::StatusCode> {
-        let security_policy = SecurityPolicyNone;
+        let timeout = config.timeout.connection;
 
-        let client = if config.endpoint.starts_with("opc.tcp://") {
-            let url = &config.endpoint["opc.tcp://".len()..];
-            let stream = tokio::net::TcpStream::connect(url)
-                .await
-                .map_err(|_| ua::StatusCode::BadConnectionRejected)?;
-            let (read_half, write_half) = stream.into_split();
-            let inner =
-                uasc_binary::Client::connect(config, security_policy, write_half, read_half)
-                    .await
-                    .map_err(|_| ua::StatusCode::BadConnectionRejected)?;
-            Self {
-                inner: Arc::new(ClientImpl::TcpUascBinary(inner)),
-            }
+        let connect_fut = Self::connect_inner(config);
+
+        if timeout != 0 {
+            tokio::time::timeout(
+                std::time::Duration::from_millis(timeout as u64),
+                connect_fut,
+            )
+            .await
+            .map_err(|_| ua::StatusCode::BadTimeout)?
         } else {
-            return Err(ua::StatusCode::BadInvalidArgument);
-        };
-
-        Ok(client)
+            connect_fut.await
+        }
     }
 
     pub fn config(&self) -> &Config {
@@ -53,8 +47,23 @@ impl Client {
         R: encoding::Request + binary::Encode + BinaryEncodingId + DataTypeId,
         R::Response: binary::Decode + BinaryEncodingId,
     {
-        match &*self.inner {
-            ClientImpl::TcpUascBinary(inner) => inner.send_request(request).await,
+        let timeout = self.config().timeout.request;
+
+        let request_fut = async {
+            match &*self.inner {
+                ClientImpl::TcpUascBinary(inner) => inner.send_request(request).await,
+            }
+        };
+
+        if timeout != 0 {
+            tokio::time::timeout(
+                std::time::Duration::from_millis(timeout as u64),
+                request_fut,
+            )
+            .await
+            .map_err(|_| ua::StatusCode::BadTimeout)?
+        } else {
+            request_fut.await
         }
     }
 
@@ -62,6 +71,30 @@ impl Client {
         match &*self.inner {
             ClientImpl::TcpUascBinary(inner) => inner.close().await,
         }
+    }
+}
+
+impl Client {
+    async fn connect_inner(config: Config) -> Result<Self, ua::StatusCode> {
+        // Implementation for connecting internally can be added here.
+        let security_policy = SecurityPolicyNone;
+
+        if !config.endpoint.starts_with("opc.tcp://") {
+            return Err(ua::StatusCode::BadInvalidArgument);
+        }
+
+        let url = &config.endpoint["opc.tcp://".len()..];
+        let stream = tokio::net::TcpStream::connect(url)
+            .await
+            .map_err(|_| ua::StatusCode::BadConnectionRejected)?;
+        let (read_half, write_half) = stream.into_split();
+        let inner = uasc_binary::Client::connect(config, security_policy, write_half, read_half)
+            .await
+            .map_err(|_| ua::StatusCode::BadConnectionRejected)?;
+
+        Ok(Self {
+            inner: Arc::new(ClientImpl::TcpUascBinary(inner)),
+        })
     }
 }
 

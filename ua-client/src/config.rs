@@ -1,5 +1,28 @@
 use std::collections::HashMap;
 
+/// Timeout configuration for the OPC UA client.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Timeout {
+    /// The connection timeout duration in milliseconds.
+    /// Set to zero to disable the connection timeout.
+    /// Defaults to 5000 milliseconds.
+    pub connection: u32,
+
+    /// The request timeout duration in milliseconds.
+    /// Set to zero to disable the request timeout.
+    /// Defaults to 5000 milliseconds.
+    pub request: u32,
+}
+
+impl Default for Timeout {
+    fn default() -> Self {
+        Self {
+            connection: 5000,
+            request: 5000,
+        }
+    }
+}
+
 /// Buffer configuration for the OPC UA client.
 ///
 /// It is used for stack profiles based on UA Secure Conversation and Binary data encoding:
@@ -66,6 +89,10 @@ pub struct Config {
     /// The endpoint URL of the OPC UA server to connect to.
     /// The URL scheme will determine the stack profile to use for the connection
     pub endpoint: String,
+
+    /// The timeout configuration for the client.
+    pub timeout: Timeout,
+
     /// The buffer configuration for the client.
     pub buffer: Buffer,
 
