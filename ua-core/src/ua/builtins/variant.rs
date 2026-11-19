@@ -137,8 +137,8 @@ impl binary::Decode for Variant {
     ) -> Result<Self, ua::StatusCode> {
         let encoded_mask = buf.get_u8();
         let builtin_typeid = encoded_mask & 0x3F;
-        let is_array = (encoded_mask & 0x40) != 0;
-        let has_multidim = (encoded_mask & 0x80) != 0;
+        let is_array = (encoded_mask & 0x80) != 0;
+        let has_multidim = (encoded_mask & 0x40) != 0;
         match builtin_typeid {
             0 => Ok(Variant::Null),
             1 => Ok(Variant::Boolean(decode_value(
@@ -308,7 +308,7 @@ where
     let encoding_mask = builtin_typeid
         | match value {
             Value::Scalar(_) => 0x00,
-            Value::Array(_) => 0x40,
+            Value::Array(_) => 0x80,
             Value::MultiDimArray(_, _) => 0xC0,
         };
     buf.put_u8(encoding_mask);
