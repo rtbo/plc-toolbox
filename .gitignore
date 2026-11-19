@@ -4,6 +4,7 @@ target/
 # Editor directories and files
 .vscode/
 .zed/
+.helix/
 
 # Environment files
 env.*
