@@ -188,6 +188,10 @@ where
         self.config.clone()
     }
 
+    pub async fn get_ns_array(&self) -> Result<Vec<String>, ua::StatusCode> {
+        Ok(self.ns_array.read().await.clone())
+    }
+
     pub async fn set_ns_array(&self, ns_array: Vec<String>) {
         *self.ns_array.write().await = ns_array;
     }

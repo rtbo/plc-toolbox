@@ -80,6 +80,28 @@ impl Client {
         }
     }
 
+    /// Get the server's namespace array.
+    /// 
+    /// The namespace array is cached in the client and a deep copy is returned. 
+    /// If the cache is empty, it will be read from the server.
+    /// 
+    /// Note: When the client is configured with external namespace decoding function,
+    /// the namespace array is cached during the connection establishment.
+    pub async fn server_namespace_array(&self) -> Result<Vec<String>, ua::StatusCode> {
+        let ns_array = match self.stack() {
+            ClientStack::TcpUascBinary(inner) => inner.get_ns_array().await?,
+        };
+        if !ns_array.is_empty() {
+            return Ok(ns_array);
+        }
+
+        let ns_array = self.read_ns_array().await?;
+        match self.stack() {
+            ClientStack::TcpUascBinary(inner) => inner.set_ns_array(ns_array.clone()).await,
+        }
+        Ok(ns_array)
+    }
+
     pub async fn close(&self) -> Result<(), ua::StatusCode> {
         match self.stack() {
             ClientStack::TcpUascBinary(inner) => inner.close().await,
