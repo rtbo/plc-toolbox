@@ -19,6 +19,12 @@ pub struct Client {
 }
 
 impl Client {
+    /// Connect to an OPC UA server using the provided configuration.
+    /// 
+    /// The transport stack is determined at runtime based on the configuration and the server's capabilities.
+    /// 
+    /// This function will also open a session if requested by the configuration,
+    /// and read the server's namespace array if external namespace decoding is configured.
     pub async fn connect(config: Config) -> Result<Self, ua::StatusCode> {
         let timeout = config.timeout.connection;
 
@@ -55,6 +61,20 @@ impl Client {
         &*self.inner.config
     }
 
+    /// Generate an authenticated request header for the current session.
+    async fn auth_req_header(&self) -> Result<ua::RequestHeader, ua::StatusCode> {
+        let session = self.inner.session.read().await;
+        let Some(session) = session.as_ref() else {
+            return Err(ua::StatusCode::BadSessionNotActivated);
+        };
+
+        let timeout = self.config().timeout.request;
+
+        Ok(auth_req_header(session.auth_token.clone(), timeout))
+    }
+
+    /// Send a generic request to the server and await the response.
+    /// The request header mut be set appropriately, typically using `auth_req_header`.
     pub async fn send_request<R>(&self, request: R) -> Result<R::Response, ua::StatusCode>
     where
         R: encoding::Request + binary::Encode + BinaryEncodingId + DataTypeId,
@@ -85,7 +105,7 @@ impl Client {
     /// The namespace array is cached in the client and a deep copy is returned. 
     /// If the cache is empty, it will be read from the server.
     /// 
-    /// Note: When the client is configured with external namespace decoding function,
+    /// Note: When the client is configured with external namespace decoding function (see [`Config::external_ns`](crate::Config::external_ns)),
     /// the namespace array is cached during the connection establishment.
     pub async fn server_namespace_array(&self) -> Result<Vec<String>, ua::StatusCode> {
         let ns_array = match self.stack() {
@@ -102,6 +122,10 @@ impl Client {
         Ok(ns_array)
     }
 
+    /// Close the connection to the server.
+    /// 
+    /// This will terminate the connection and release any associated resources.
+    /// For transport stacks relying on UA Secure Conversation, this will send a CloseSecureChannelRequest to the server before closing the connection.
     pub async fn close(&self) -> Result<(), ua::StatusCode> {
         match self.stack() {
             ClientStack::TcpUascBinary(inner) => inner.close().await,
@@ -171,17 +195,6 @@ impl Client {
         };
         *self.inner.session.write().await = Some(session_state);
         Ok(())
-    }
-
-    async fn auth_req_header(&self) -> Result<ua::RequestHeader, ua::StatusCode> {
-        let session = self.inner.session.read().await;
-        let Some(session) = session.as_ref() else {
-            return Err(ua::StatusCode::BadSessionNotActivated);
-        };
-
-        let timeout = self.config().timeout.request;
-
-        Ok(auth_req_header(session.auth_token.clone(), timeout))
     }
 
     async fn read_ns_array(&self) -> Result<Vec<String>, ua::StatusCode> {
