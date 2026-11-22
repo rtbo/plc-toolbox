@@ -158,6 +158,65 @@ impl Client {
         Ok(resp.results)
     }
 
+    /// Write a single attribute to the server.
+    /// 
+    /// Ok(()) is returned if the attribute was successfully written.
+    /// The status code of the write operation is checked to be good.
+    pub async fn write_attribute(&self, value: ua::WriteValue) -> Result<(), ua::StatusCode> {
+        let req = ua::WriteRequest {
+            request_header: self.auth_req_header().await?,
+            nodes_to_write: vec![value],
+            ..Default::default()
+        };
+
+        let resp = self.send_request(req).await?;
+        if let Some(result) = resp.results.into_iter().next() {
+            result.check_good()?;
+            Ok(())
+        } else {
+            Err(ua::StatusCode::BadUnexpectedError)
+        }
+    }
+
+    /// Write multiple attributes to the server.
+    /// 
+    /// Ok(()) is returned if all attributes were successfully written.
+    /// Each write operation's status code is checked to be good.
+    pub async fn write_multiple_attributes(&self, values: Vec<ua::WriteValue>) -> Result<(), ua::StatusCode> {
+        let req = ua::WriteRequest {
+            request_header: self.auth_req_header().await?,
+            nodes_to_write: values,
+            ..Default::default()
+        };
+
+        let resp = self.send_request(req).await?;
+        for result in &resp.results {
+            result.check_good()?;
+        }
+        Ok(())
+    }
+
+    /// Browse the server's address space.
+    /// 
+    /// This function allows the client to browse the nodes in the server's address space.
+    /// The returned results contain references to the child nodes of the specified node.
+    pub async fn browse(&self, node_id: ua::NodeId) -> Result<Vec<ua::ReferenceDescription>, ua::StatusCode> {
+        let req = ua::BrowseRequest {
+            request_header: self.auth_req_header().await?,
+            nodes_to_browse: vec![ua::BrowseDescription {
+                node_id,
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+
+        let resp = self.send_request(req).await?;
+        for result in &resp.results {
+            result.status_code.check_good()?;
+        }
+        Ok(resp.results.into_iter().flat_map(|r| r.references).collect())
+    }
+
     /// Close the connection to the server.
     /// 
     /// This will terminate the connection and release any associated resources.
