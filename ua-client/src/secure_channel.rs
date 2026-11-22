@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
-use ua_core::encoding::binary::{self, Decode, Encode};
 use ua_core::encoding::Ns0BinaryEncodingId;
+use ua_core::encoding::binary::{self, Decode, Encode};
 use ua_core::transport::{self, RecvChunk, SendChunk};
 use ua_core::{BufferPool, SecurityPolicy, ua, uasc};
 

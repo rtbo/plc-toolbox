@@ -78,7 +78,8 @@ fn node_ids(schema_path: &Path, out_dir: &Path) {
 
     println!("cargo:rerun-if-changed={}", csv_path.display());
 
-    let node_ids = ua_nsc::parse::node_ids::parse_csv(&csv_path).expect("Failed to parse NodeIds.csv");
+    let node_ids =
+        ua_nsc::parse::node_ids::parse_csv(&csv_path).expect("Failed to parse NodeIds.csv");
 
     // Generate ns0.rs
     let rs_path = out_dir.join("ns0.rs");

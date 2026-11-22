@@ -313,7 +313,11 @@ where
         let core = self.options.ua_core_module.clone();
         let is_ua_namespace = self.types.target_namespace == UA_NS;
         self.cg.define_block(
-            &format!("impl {}::encoding::DataTypeId for {} ", core, type_def.name()),
+            &format!(
+                "impl {}::encoding::DataTypeId for {} ",
+                core,
+                type_def.name()
+            ),
             |cg| {
                 cg.write_line("const NS_URI: &'static str = NS_URI;")?;
                 cg.write_line(&format!("const DATATYPE_ID: u32 = {};", type_id.numeric_id))?;
@@ -325,7 +329,7 @@ where
         )?;
         self.cg.write_line("")?;
 
-        if is_ua_namespace{
+        if is_ua_namespace {
             self.cg.write_line(&format!(
                 "impl {}::encoding::Ns0DataTypeId for {} {{}}",
                 core,

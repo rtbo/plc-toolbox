@@ -27,19 +27,11 @@ impl StatusCode {
     }
 
     pub fn check_good(&self) -> Result<(), StatusCode> {
-        if self.is_good() {
-            Ok(())
-        } else {
-            Err(*self)
-        }
+        if self.is_good() { Ok(()) } else { Err(*self) }
     }
 
     pub fn check_not_bad(&self) -> Result<(), StatusCode> {
-        if !self.is_bad() {
-            Ok(())
-        } else {
-            Err(*self)
-        }
+        if !self.is_bad() { Ok(()) } else { Err(*self) }
     }
 }
 

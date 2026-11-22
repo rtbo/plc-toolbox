@@ -2,8 +2,7 @@ use std::sync::Arc;
 
 use tokio::net;
 use tokio::sync::RwLock;
-use ua_core::encoding::binary;
-use ua_core::encoding::{self, BinaryEncodingId, DataTypeId};
+use ua_core::encoding::{self, BinaryEncodingId, DataTypeId, binary};
 use ua_core::{SecurityPolicyNone, ns0, ua};
 
 use crate::{Config, config, uasc_binary};
@@ -35,7 +34,6 @@ impl Client {
         } else {
             connect_fut.await
         };
-
 
         let client = connect_res?;
 
@@ -160,32 +158,32 @@ impl Client {
         };
 
         let timeout = self.config().timeout.request;
-        
+
         Ok(auth_req_header(session.auth_token.clone(), timeout))
     }
 
     async fn read_ns_array(&self) -> Result<Vec<String>, ua::StatusCode> {
-         let req = ua::ReadRequest {
+        let req = ua::ReadRequest {
             request_header: self.auth_req_header().await?,
-            nodes_to_read: vec![
-                ua::ReadValueId {
-                    node_id: ns0::var::SERVER_NAMESPACE_ARRAY,
-                    attribute_id: ua::AttributeId::Value as _,
-                    ..Default::default()
-                },
-            ],
+            nodes_to_read: vec![ua::ReadValueId {
+                node_id: ns0::var::SERVER_NAMESPACE_ARRAY,
+                attribute_id: ua::AttributeId::Value as _,
+                ..Default::default()
+            }],
             ..Default::default()
         };
 
         let resp = self.send_request(req).await?;
         let ns_array = match resp.results.into_iter().next() {
-            Some(ua::DataValue { status_code, value: ua::Variant::String(ua::variant::Value::Array(ns_array)), .. }) => {
+            Some(ua::DataValue {
+                status_code,
+                value: ua::Variant::String(ua::variant::Value::Array(ns_array)),
+                ..
+            }) => {
                 status_code.check_good()?;
                 ns_array
             }
-            Some(_) => {
-                return Err(ua::StatusCode::BadNoMatch)
-            },
+            Some(_) => return Err(ua::StatusCode::BadNoMatch),
             None => return Err(ua::StatusCode::BadNoData),
         };
 

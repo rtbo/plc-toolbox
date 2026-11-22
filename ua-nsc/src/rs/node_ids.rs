@@ -36,7 +36,6 @@ fn upper_snake_case(s: &str) -> String {
         result.push(c.to_ascii_uppercase());
     }
     result.replace("__", "_").trim_matches('_').to_string()
-    
 }
 
 pub fn generate<W>(node_ids: &[NodeId], ns0: bool, out: &mut W) -> std::io::Result<()>
@@ -69,13 +68,17 @@ where
             let name = upper_snake_case(&node_id.name);
             if ns0 {
                 out.write_all(
-                    format!("    pub const {}: ua::NodeId = ua::NodeId::Numeric(0, {});\n", name, node_id.numeric_id).as_bytes(),
+                    format!(
+                        "    pub const {}: ua::NodeId = ua::NodeId::Numeric(0, {});\n",
+                        name, node_id.numeric_id
+                    )
+                    .as_bytes(),
                 )?;
             } else {
                 out.write_all(
-                    format!("    pub const {}_ID: u32 = {};\n", name, node_id.numeric_id).as_bytes(),
+                    format!("    pub const {}_ID: u32 = {};\n", name, node_id.numeric_id)
+                        .as_bytes(),
                 )?;
-
             }
         }
 
@@ -84,4 +87,3 @@ where
 
     out.flush()
 }
-
