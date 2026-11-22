@@ -4,7 +4,7 @@ use tokio::net;
 use tokio::sync::RwLock;
 use ua_core::encoding::binary;
 use ua_core::encoding::{self, BinaryEncodingId, DataTypeId};
-use ua_core::{SecurityPolicyNone, ua};
+use ua_core::{SecurityPolicyNone, ns0, ua};
 
 use crate::{Config, config, uasc_binary};
 
@@ -36,10 +36,18 @@ impl Client {
             connect_fut.await
         };
 
+
         let client = connect_res?;
 
         if let Some(session) = &client.config().session {
             client.open_session(session).await?;
+        }
+
+        if !client.config().external_ns.is_empty() {
+            let ns_array = client.read_ns_array().await?;
+            match client.stack() {
+                ClientStack::TcpUascBinary(stack) => stack.set_ns_array(ns_array).await,
+            }
         }
 
         Ok(client)
@@ -106,7 +114,7 @@ impl Client {
         Ok(Self {
             inner: Arc::new(ClientInner {
                 config: stack.config(),
-                session: RwLock::new(SessionState::default()),
+                session: RwLock::new(None),
                 stack: ClientStack::TcpUascBinary(stack),
             }),
         })
@@ -137,18 +145,57 @@ impl Client {
         let resp = self.send_request(req).await?;
 
         let session_state = SessionState {
-            _auth_token: auth_token,
+            auth_token,
             _timeout: session.timeout,
             _server_nonce: resp.server_nonce,
         };
-        *self.inner.session.write().await = session_state;
+        *self.inner.session.write().await = Some(session_state);
         Ok(())
+    }
+
+    async fn auth_req_header(&self) -> Result<ua::RequestHeader, ua::StatusCode> {
+        let session = self.inner.session.read().await;
+        let Some(session) = session.as_ref() else {
+            return Err(ua::StatusCode::BadSessionNotActivated);
+        };
+
+        let timeout = self.config().timeout.request;
+        
+        Ok(auth_req_header(session.auth_token.clone(), timeout))
+    }
+
+    async fn read_ns_array(&self) -> Result<Vec<String>, ua::StatusCode> {
+         let req = ua::ReadRequest {
+            request_header: self.auth_req_header().await?,
+            nodes_to_read: vec![
+                ua::ReadValueId {
+                    node_id: ns0::var::SERVER_NAMESPACE_ARRAY,
+                    attribute_id: ua::AttributeId::Value as _,
+                    ..Default::default()
+                },
+            ],
+            ..Default::default()
+        };
+
+        let resp = self.send_request(req).await?;
+        let ns_array = match resp.results.into_iter().next() {
+            Some(ua::DataValue { status_code, value: ua::Variant::String(ua::variant::Value::Array(ns_array)), .. }) => {
+                status_code.check_good()?;
+                ns_array
+            }
+            Some(_) => {
+                return Err(ua::StatusCode::BadNoMatch)
+            },
+            None => return Err(ua::StatusCode::BadNoData),
+        };
+
+        Ok(ns_array)
     }
 }
 
 #[derive(Debug, Default)]
 struct SessionState {
-    _auth_token: ua::NodeId,
+    auth_token: ua::NodeId,
     _timeout: u32,
     _server_nonce: Vec<u8>,
 }
@@ -156,7 +203,7 @@ struct SessionState {
 #[derive(Debug)]
 struct ClientInner {
     config: Arc<Config>,
-    session: RwLock<SessionState>,
+    session: RwLock<Option<SessionState>>,
     stack: ClientStack,
 }
 

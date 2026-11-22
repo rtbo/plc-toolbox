@@ -188,6 +188,10 @@ where
         self.config.clone()
     }
 
+    pub async fn set_ns_array(&self, ns_array: Vec<String>) {
+        *self.ns_array.write().await = ns_array;
+    }
+
     pub async fn send_request<R>(&self, request: R) -> Result<R::Response, ua::StatusCode>
     where
         R: encoding::Request + binary::Encode + encoding::BinaryEncodingId + encoding::DataTypeId,
