@@ -23,7 +23,7 @@ mod string;
 mod uint16;
 mod uint32;
 mod uint64;
-mod variant;
+pub mod variant;
 mod xmlelement;
 
 pub use boolean::Boolean;
