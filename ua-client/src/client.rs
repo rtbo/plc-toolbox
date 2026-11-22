@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use tokio::net;
 use tokio::sync::RwLock;
-use ua_core::encoding::{self, BinaryEncodingId, DataTypeId, binary};
+use ua_core::encoding::{self, BinaryEncodingId, DataTypeId, Response, binary};
 use ua_core::{SecurityPolicyNone, ns0, ua};
 
 use crate::{Config, config, uasc_binary};
@@ -61,20 +61,10 @@ impl Client {
         &*self.inner.config
     }
 
-    /// Generate an authenticated request header for the current session.
-    async fn auth_req_header(&self) -> Result<ua::RequestHeader, ua::StatusCode> {
-        let session = self.inner.session.read().await;
-        let Some(session) = session.as_ref() else {
-            return Err(ua::StatusCode::BadSessionNotActivated);
-        };
-
-        let timeout = self.config().timeout.request;
-
-        Ok(auth_req_header(session.auth_token.clone(), timeout))
-    }
-
     /// Send a generic request to the server and await the response.
-    /// The request header mut be set appropriately, typically using `auth_req_header`.
+    /// The request header is set automatically and does not need to be provided by the caller.
+    /// 
+    /// The response's service result is automatically checked for non-bad status before returning.
     pub async fn send_request<R>(&self, request: R) -> Result<R::Response, ua::StatusCode>
     where
         R: encoding::Request + binary::Encode + BinaryEncodingId + DataTypeId,
@@ -82,13 +72,15 @@ impl Client {
     {
         let timeout = self.config().timeout.request;
 
+        let request = request.with_header(self.auth_req_header().await?);
+
         let request_fut = async {
             match self.stack() {
                 ClientStack::TcpUascBinary(inner) => inner.send_request(request).await,
             }
         };
 
-        if timeout != 0 {
+        let resp = if timeout != 0 {
             tokio::time::timeout(
                 std::time::Duration::from_millis(timeout as u64),
                 request_fut,
@@ -97,7 +89,13 @@ impl Client {
             .map_err(|_| ua::StatusCode::BadTimeout)?
         } else {
             request_fut.await
+        };
+
+        if let Ok(resp) = &resp {
+            resp.header().service_result.check_not_bad()?;
         }
+
+        resp
     }
 
     /// Get the server's namespace array.
@@ -233,6 +231,18 @@ impl Client {
         };
         *self.inner.session.write().await = Some(session_state);
         Ok(())
+    }
+
+    /// Generate an authenticated request header for the current session.
+    async fn auth_req_header(&self) -> Result<ua::RequestHeader, ua::StatusCode> {
+        let session = self.inner.session.read().await;
+        let Some(session) = session.as_ref() else {
+            return Err(ua::StatusCode::BadSessionNotActivated);
+        };
+
+        let timeout = self.config().timeout.request;
+
+        Ok(auth_req_header(session.auth_token.clone(), timeout))
     }
 
     async fn read_ns_array(&self) -> Result<Vec<String>, ua::StatusCode> {
