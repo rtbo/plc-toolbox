@@ -25,6 +25,22 @@ impl StatusCode {
         let code = *self as u32;
         code & 0xC000_0000 == 0x8000_0000
     }
+
+    pub fn check_good(&self) -> Result<(), StatusCode> {
+        if self.is_good() {
+            Ok(())
+        } else {
+            Err(*self)
+        }
+    }
+
+    pub fn check_not_bad(&self) -> Result<(), StatusCode> {
+        if !self.is_bad() {
+            Ok(())
+        } else {
+            Err(*self)
+        }
+    }
 }
 
 impl std::fmt::Display for StatusCode {
