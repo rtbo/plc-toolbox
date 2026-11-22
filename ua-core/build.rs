@@ -73,6 +73,19 @@ fn types(schema_path: &Path, out_dir: &Path) {
     .unwrap();
 }
 
+fn node_ids(schema_path: &Path, out_dir: &Path) {
+    let csv_path = schema_path.join("NodeIds.csv");
+
+    println!("cargo:rerun-if-changed={}", csv_path.display());
+
+    let node_ids = ua_nsc::parse::node_ids::parse_csv(&csv_path).expect("Failed to parse NodeIds.csv");
+
+    // Generate ns0.rs
+    let rs_path = out_dir.join("ns0.rs");
+    let mut rs_file = create_new_file(&rs_path).unwrap();
+    ua_nsc::rs::node_ids::generate(&node_ids, true, &mut rs_file).unwrap();
+}
+
 fn main() {
     let manifest_dir = env_dir("CARGO_MANIFEST_DIR");
     let out_dir = env_dir("OUT_DIR");
@@ -81,4 +94,5 @@ fn main() {
     status_codes(&schema_path, &out_dir);
     attribute_ids(&schema_path, &out_dir);
     types(&schema_path, &out_dir);
+    node_ids(&schema_path, &out_dir);
 }

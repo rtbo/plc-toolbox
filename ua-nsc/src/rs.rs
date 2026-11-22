@@ -3,6 +3,7 @@ use std::io;
 use crate::codegen::CodeGen;
 
 pub mod attribute_id;
+pub mod node_ids;
 pub mod status_code;
 pub mod types;
 

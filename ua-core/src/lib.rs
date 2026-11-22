@@ -2,6 +2,7 @@ extern crate self as ua_core;
 
 pub mod buffer_pool;
 pub mod encoding;
+pub mod ns0;
 pub mod security_policy;
 pub mod transport;
 pub mod ua;
