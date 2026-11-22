@@ -139,7 +139,38 @@ where
                         "impl {}::encoding::Request for {} ",
                         self.options.ua_core_module, name
                     ),
-                    |cg| cg.write_line(&format!("type Response = {response};")),
+                    |cg| {
+                        cg.write_line(&format!("type Response = {response};"))?;
+                        cg.write_line("")?;
+                        cg.write_line("fn header(&self) -> &ua::RequestHeader {")?;
+                        cg.write_line("    &self.request_header")?;
+                        cg.write_line("}")?;
+                        cg.write_line("")?;
+                        cg.write_line("fn with_header(mut self, header: ua::RequestHeader) -> Self {")?;
+                        cg.write_line("    self.request_header = header;")?;
+                        cg.write_line("    self")?;
+                        cg.write_line("}")?;
+                        Ok(())
+                    },
+                )?;
+                self.cg.write_line("")?;
+                
+                self.cg.define_block(
+                    &format!(
+                        "impl {}::encoding::Response for {} ",
+                        self.options.ua_core_module, response
+                    ),
+                    |cg| {
+                        cg.write_line("fn header(&self) -> &ua::ResponseHeader {")?;
+                        cg.write_line("    &self.response_header")?;
+                        cg.write_line("}")?;
+                        cg.write_line("")?;
+                        cg.write_line("fn with_header(mut self, header: ua::ResponseHeader) -> Self {")?;
+                        cg.write_line("    self.response_header = header;")?;
+                        cg.write_line("    self")?;
+                        cg.write_line("}")?;
+                        Ok(())
+                    },
                 )?;
                 self.cg.write_line("")?;
             }

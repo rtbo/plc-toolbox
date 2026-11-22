@@ -13,8 +13,23 @@ pub enum Encoding {
 
 /// An OPC UA request and the response type associated with it.
 pub trait Request {
-    type Response;
+    type Response: Response;
+    
+    /// Get the request header of this request.
+    fn header(&self) -> &ua::RequestHeader;
+    /// Set the request header of this request.
+    fn with_header(self, header: ua::RequestHeader) -> Self;
 }
+
+/// An OPC UA response 
+pub trait Response {
+    /// Get the response header of this response.
+    fn header(&self) -> &ua::ResponseHeader;
+    /// Set the response header of this response.
+    fn with_header(self, header: ua::ResponseHeader) -> Self;
+}
+
+
 
 /// A trait that provides the namespace and ID for a DataType.
 /// The namespace index (except for NS0) cannot be known in advance and is therefore not included in this trait.,
