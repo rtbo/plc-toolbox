@@ -122,6 +122,44 @@ impl Client {
         Ok(ns_array)
     }
 
+    /// Read a single attribute from the server.
+    /// 
+    /// Ok(ua::DataValue) is returned if the attribute was successfully read and the status code of the value is good.
+    /// It means that the returned [ua::DataValue::status_code] field is always good.
+    pub async fn read_attribute(&self, value_id: ua::ReadValueId) -> Result<ua::DataValue, ua::StatusCode> {
+        let req = ua::ReadRequest {
+            request_header: self.auth_req_header().await?,
+            nodes_to_read: vec![value_id],
+            ..Default::default()
+        };
+
+        let resp = self.send_request(req).await?;
+        if let Some(value) = resp.results.into_iter().next() {
+            value.status_code.check_good()?;
+            Ok(value)
+        } else {
+            Err(ua::StatusCode::BadUnexpectedError)
+        }
+    }
+
+    /// Read multiple attributes from the server.
+    /// 
+    /// Returns a vector of [ua::DataValue] corresponding to the requested nodes.
+    /// Each value's status code is checked to be good.
+    pub async fn read_multiple_attributes(&self, value_ids: Vec<ua::ReadValueId>) -> Result<Vec<ua::DataValue>, ua::StatusCode> {
+        let req = ua::ReadRequest {
+            request_header: self.auth_req_header().await?,
+            nodes_to_read: value_ids,
+            ..Default::default()
+        };
+
+        let resp = self.send_request(req).await?;
+        for value in &resp.results {
+            value.status_code.check_good()?;
+        }
+        Ok(resp.results)
+    }
+
     /// Close the connection to the server.
     /// 
     /// This will terminate the connection and release any associated resources.
